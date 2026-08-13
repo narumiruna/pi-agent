@@ -21,7 +21,7 @@ Web terminal、channel、workflow、cron 與多使用者不在第一版範圍。
 ## Security decisions
 
 - 正式模式使用標準 OIDC Authorization Code + PKCE，並以 Pocket ID 為相容目標。
-- 必須設定 owner subject、verified owner email，或兩者。
+- 第一次完成已驗證 OIDC 登入的 identity 會原子綁定為唯一 administrator；Pocket ID client 必須先限制允許登入的使用者或群組。
 - 缺少 OIDC 設定時 fail closed；只有明確的 `AUTH_MODE=disabled` 才可無驗證啟動。
 - 應用只儲存 24 小時 session token 的 SHA-256 hash，不保留 OIDC token。
 - session cookie 使用 HttpOnly、SameSite=Lax，非 localhost OIDC 部署強制 HTTPS。
@@ -82,7 +82,7 @@ Web terminal、channel、workflow、cron 與多使用者不在第一版範圍。
 
 - [x] 建立 server、web、shared TypeScript 結構與 build/test/check scripts。
 - [x] 實作 SQLite、PostgreSQL storage contracts、migrations 與 runtime lock。
-- [x] 實作 Pocket ID-compatible OIDC、PKCE、owner allowlist、server-side sessions、logout、expiry、Origin protection 與 fail-closed config。
+- [x] 實作 Pocket ID-compatible OIDC、PKCE、first-login administrator claim、server-side sessions、logout、expiry、Origin protection 與 fail-closed config。
 - [x] 實作 Pi `AgentSessionRuntime`、native session discovery、transcript projection、global run coordinator、SSE、abort、model/thinking 與 provider interaction broker。
 - [x] 實作 ExtensionUIContext Web bridge 與 TUI-only graceful degradation。
 - [x] 實作 System/Append/Templates editor、Pi PackageManager 操作、diagnostics、safe paths、atomic writes 與 idle reload。

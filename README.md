@@ -51,13 +51,19 @@ Set `APP_ORIGIN` to the public HTTPS origin without a path.
 
 Set `OIDC_ISSUER_URL`, `OIDC_CLIENT_ID`, and `OIDC_CLIENT_SECRET` from the Pocket ID client.
 
-Authorize the single owner with `OIDC_OWNER_SUB`, `OIDC_OWNER_EMAIL`, or both.
+Restrict the Pocket ID client to the intended user or administrator group before exposing a new Pi Agent instance.
 
-When both owner values are configured, both claims must match.
+The first identity that completes a cryptographically verified OIDC login becomes the permanent Pi Agent administrator.
 
-Email authorization also requires Pocket ID to return `email_verified: true`.
+Later logins must have the same OIDC issuer and `sub` claim, so username and email changes do not affect ownership.
 
-The application stores a hash of its own 24-hour session token and does not retain OIDC tokens.
+The application stores ownership and a hash of each 24-hour application session token, and it does not retain OIDC tokens.
+
+To deliberately reset ownership, stop Pi Agent, delete the singleton row from `app_owner` and all rows from `web_sessions`, then restart and sign in with the new administrator.
+
+For SQLite, run this against the mounted `/app/data/app.db` with a SQLite client.
+
+For PostgreSQL, run `TRUNCATE web_sessions, app_owner;` during a maintenance window.
 
 Run behind an HTTPS reverse proxy because secure authentication cookies require HTTPS outside localhost.
 

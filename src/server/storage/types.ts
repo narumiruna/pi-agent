@@ -1,3 +1,10 @@
+export interface OwnerRecord {
+  issuer: string;
+  subject: string;
+  email?: string;
+  claimedAt: number;
+}
+
 export interface WebSessionRecord {
   tokenHash: string;
   subject: string;
@@ -31,6 +38,8 @@ export type HeartbeatRunUpdate = Omit<
 
 export interface AppStore {
   migrate(): Promise<void>;
+  claimOwner(owner: OwnerRecord): Promise<OwnerRecord>;
+  getOwner(): Promise<OwnerRecord | undefined>;
   createWebSession(session: WebSessionRecord): Promise<void>;
   findWebSession(tokenHash: string): Promise<WebSessionRecord | undefined>;
   deleteWebSession(tokenHash: string): Promise<void>;

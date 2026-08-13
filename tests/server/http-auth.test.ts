@@ -7,8 +7,21 @@ import type {
 } from "../../src/server/storage/types.js";
 
 class Store implements AppStore {
+  owner?: {
+    issuer: string;
+    subject: string;
+    email?: string;
+    claimedAt: number;
+  };
   sessions = new Map<string, WebSessionRecord>();
   async migrate() {}
+  async claimOwner(owner: NonNullable<Store["owner"]>) {
+    this.owner ??= owner;
+    return this.owner;
+  }
+  async getOwner() {
+    return this.owner;
+  }
   async createWebSession(session: WebSessionRecord) {
     this.sessions.set(session.tokenHash, session);
   }

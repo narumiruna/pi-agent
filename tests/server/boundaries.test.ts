@@ -1,5 +1,4 @@
 import { describe, expect, test } from "vitest";
-import { assertOwner } from "../../src/server/auth/owner.js";
 import { parseDuration } from "../../src/server/heartbeat/duration.js";
 import { safeMarkdownPath } from "../../src/server/resources/paths.js";
 import { apiError } from "../../src/shared/contracts.js";
@@ -35,33 +34,6 @@ describe("safeMarkdownPath", () => {
       expect(() => safeMarkdownPath("/agent/prompts", name)).toThrow(/name/i);
     },
   );
-});
-
-describe("assertOwner", () => {
-  test("requires every configured owner claim to match", () => {
-    expect(() =>
-      assertOwner(
-        { sub: "owner-1", email: "owner@example.com", email_verified: true },
-        { ownerSub: "owner-1", ownerEmail: "owner@example.com" },
-      ),
-    ).not.toThrow();
-
-    expect(() =>
-      assertOwner(
-        { sub: "owner-1", email: "other@example.com", email_verified: true },
-        { ownerSub: "owner-1", ownerEmail: "owner@example.com" },
-      ),
-    ).toThrow(/owner/i);
-  });
-
-  test("requires a verified email when email authorization is configured", () => {
-    expect(() =>
-      assertOwner(
-        { sub: "owner-1", email: "owner@example.com", email_verified: false },
-        { ownerEmail: "owner@example.com" },
-      ),
-    ).toThrow(/verified/i);
-  });
 });
 
 describe("API errors", () => {

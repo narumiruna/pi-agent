@@ -6,8 +6,12 @@ import {
   jwtVerify,
 } from "jose";
 import type { OidcAuthConfig } from "../config.js";
-import type { AppStore, WebSessionRecord } from "../storage/types.js";
-import { assertOwner, type OwnerClaims } from "./owner.js";
+import type {
+  AppStore,
+  OwnerRecord,
+  WebSessionRecord,
+} from "../storage/types.js";
+import type { OwnerClaims } from "./owner.js";
 
 const SESSION_LIFETIME_MS = 24 * 60 * 60 * 1_000;
 
@@ -35,6 +39,7 @@ export interface CompleteLoginInput {
 
 type SessionStore = Pick<
   AppStore,
+  | "claimOwner"
   | "createWebSession"
   | "deleteExpiredWebSessions"
   | "deleteWebSession"
@@ -142,12 +147,24 @@ export function createAuthService(options: AuthServiceOptions) {
   }
 
   async function createSession(claims: OwnerClaims): Promise<string> {
-    assertOwner(claims, options.config);
     if (typeof claims.sub !== "string" || claims.sub.length === 0) {
       throw new Error("OIDC token is missing a subject");
     }
-    const token = randomToken();
     const createdAt = now();
+    const candidate: OwnerRecord = {
+      issuer: options.config.issuerUrl,
+      subject: claims.sub,
+      ...(typeof claims.email === "string" ? { email: claims.email } : {}),
+      claimedAt: createdAt,
+    };
+    const owner = await options.store.claimOwner(candidate);
+    if (
+      owner.issuer !== candidate.issuer ||
+      owner.subject !== candidate.subject
+    ) {
+      throw new Error("OIDC identity is not the Pi Agent administrator");
+    }
+    const token = randomToken();
     await options.store.deleteExpiredWebSessions(createdAt);
     const record: WebSessionRecord = {
       tokenHash: hash(token),

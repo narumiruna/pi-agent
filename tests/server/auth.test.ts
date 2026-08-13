@@ -12,6 +12,7 @@ class MemorySessionStore
   implements
     Pick<
       AppStore,
+      | "claimOwner"
       | "createWebSession"
       | "deleteExpiredWebSessions"
       | "deleteWebSession"
@@ -19,6 +20,22 @@ class MemorySessionStore
     >
 {
   readonly sessions = new Map<string, WebSessionRecord>();
+  owner?: {
+    issuer: string;
+    subject: string;
+    email?: string;
+    claimedAt: number;
+  };
+
+  async claimOwner(owner: {
+    issuer: string;
+    subject: string;
+    email?: string;
+    claimedAt: number;
+  }) {
+    this.owner ??= owner;
+    return this.owner;
+  }
 
   async createWebSession(session: WebSessionRecord) {
     this.sessions.set(session.tokenHash, session);
@@ -49,7 +66,6 @@ const oidc: OidcAuthConfig = {
   issuerUrl: "https://id.example.com/",
   clientId: "client",
   clientSecret: "secret",
-  ownerSub: "owner-1",
 };
 
 const discovery = {
@@ -138,18 +154,26 @@ describe("authentication service", () => {
     expect(await service.authenticate(token, 86_401_000)).toBeUndefined();
   });
 
-  test("rejects non-owner claims", async () => {
+  test("claims the first verified identity and rejects later identities", async () => {
+    const store = new MemorySessionStore();
     const service = createAuthService({
       config: oidc,
       appOrigin: "https://agent.example.com",
-      store: new MemorySessionStore(),
+      store,
       fetch: async () => new Response(JSON.stringify(discovery)),
       now: () => 1_000,
     });
 
     await expect(
+      service.createSession({ sub: "owner-1", email: "owner@example.com" }),
+    ).resolves.toBeTypeOf("string");
+    expect(store.owner).toMatchObject({
+      issuer: oidc.issuerUrl,
+      subject: "owner-1",
+    });
+    await expect(
       service.createSession({ sub: "someone-else" }),
-    ).rejects.toThrow(/owner/i);
+    ).rejects.toThrow(/administrator/i);
   });
 
   test("verifies a signed ID token from a mock OIDC issuer", async () => {

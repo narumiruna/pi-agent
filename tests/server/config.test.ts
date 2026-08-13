@@ -6,12 +6,11 @@ const baseEnv = {
   OIDC_ISSUER_URL: "https://id.example.com",
   OIDC_CLIENT_ID: "pi-agent",
   OIDC_CLIENT_SECRET: "secret",
-  OIDC_OWNER_SUB: "owner-1",
 };
 
 describe("parseConfig", () => {
   test("fails closed when OIDC configuration is absent", () => {
-    expect(() => parseConfig({})).toThrow(/OIDC configuration is required/);
+    expect(() => parseConfig({})).toThrow(/OIDC_ISSUER_URL is required/);
   });
 
   test("allows an explicitly disabled authentication mode", () => {
@@ -24,14 +23,13 @@ describe("parseConfig", () => {
     expect(config.agentTools).toEqual(["read", "grep", "find", "ls"]);
   });
 
-  test("normalizes an OIDC origin and requires an owner", () => {
+  test("normalizes an OIDC origin without owner environment variables", () => {
     const config = parseConfig(baseEnv);
 
     expect(config.appOrigin).toBe("https://agent.example.com");
     expect(config.auth).toMatchObject({
       mode: "oidc",
-      ownerSub: "owner-1",
-      issuerUrl: "https://id.example.com/",
+      issuerUrl: "https://id.example.com",
     });
   });
 

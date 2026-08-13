@@ -18,8 +18,6 @@ export interface OidcAuthConfig {
   issuerUrl: string;
   clientId: string;
   clientSecret: string;
-  ownerSub?: string;
-  ownerEmail?: string;
 }
 
 export interface DisabledAuthConfig {
@@ -99,13 +97,6 @@ export function parseConfig(env: Environment = process.env): AppConfig {
   if (authMode === "disabled") {
     auth = { mode: "disabled" };
   } else {
-    const ownerSub = env.OIDC_OWNER_SUB?.trim() || undefined;
-    const ownerEmail = env.OIDC_OWNER_EMAIL?.trim() || undefined;
-    if (!ownerSub && !ownerEmail) {
-      throw new Error(
-        "OIDC configuration is required and must include OIDC_OWNER_SUB or OIDC_OWNER_EMAIL",
-      );
-    }
     const publicUrl = new URL(appOrigin);
     if (
       publicUrl.protocol !== "https:" &&
@@ -115,7 +106,8 @@ export function parseConfig(env: Environment = process.env): AppConfig {
         "OIDC deployments require an HTTPS APP_ORIGIN unless running on localhost",
       );
     }
-    const issuerUrl = new URL(required(env, "OIDC_ISSUER_URL"));
+    const issuerUrlValue = required(env, "OIDC_ISSUER_URL");
+    const issuerUrl = new URL(issuerUrlValue);
     if (
       !/^https?:$/.test(issuerUrl.protocol) ||
       issuerUrl.username ||
@@ -137,11 +129,9 @@ export function parseConfig(env: Environment = process.env): AppConfig {
     }
     auth = {
       mode: "oidc",
-      issuerUrl: issuerUrl.href,
+      issuerUrl: issuerUrlValue,
       clientId: required(env, "OIDC_CLIENT_ID"),
       clientSecret: required(env, "OIDC_CLIENT_SECRET"),
-      ...(ownerSub ? { ownerSub } : {}),
-      ...(ownerEmail ? { ownerEmail } : {}),
     };
   }
 

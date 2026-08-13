@@ -5,8 +5,16 @@ import type {
   AppStore,
   HeartbeatRunRecord,
   HeartbeatRunUpdate,
+  OwnerRecord,
   WebSessionRecord,
 } from "./types.js";
+
+interface OwnerRow {
+  issuer: string;
+  subject: string;
+  email: string | null;
+  claimed_at: number;
+}
 
 interface SessionRow {
   token_hash: string;
@@ -23,6 +31,15 @@ interface HeartbeatRow {
   status: HeartbeatRunRecord["status"];
   summary: string | null;
   error: string | null;
+}
+
+function mapOwner(row: OwnerRow): OwnerRecord {
+  return {
+    issuer: row.issuer,
+    subject: row.subject,
+    ...(row.email ? { email: row.email } : {}),
+    claimedAt: row.claimed_at,
+  };
 }
 
 function mapSession(row: SessionRow): WebSessionRecord {
@@ -64,6 +81,13 @@ export class SqliteStore implements AppStore {
       CREATE TABLE IF NOT EXISTS schema_migrations (
         version INTEGER PRIMARY KEY
       );
+      CREATE TABLE IF NOT EXISTS app_owner (
+        singleton INTEGER PRIMARY KEY CHECK (singleton = 1),
+        issuer TEXT NOT NULL,
+        subject TEXT NOT NULL,
+        email TEXT,
+        claimed_at INTEGER NOT NULL
+      );
       CREATE TABLE IF NOT EXISTS web_sessions (
         token_hash TEXT PRIMARY KEY,
         subject TEXT NOT NULL,
@@ -82,8 +106,30 @@ export class SqliteStore implements AppStore {
       );
       CREATE INDEX IF NOT EXISTS heartbeat_runs_started_at ON heartbeat_runs(started_at DESC);
       INSERT OR IGNORE INTO schema_migrations(version) VALUES (1);
+      INSERT OR IGNORE INTO schema_migrations(version) VALUES (2);
       COMMIT;
     `);
+    const owner = await this.getOwner();
+    if (!owner) this.database.prepare("DELETE FROM web_sessions").run();
+  }
+
+  async claimOwner(owner: OwnerRecord): Promise<OwnerRecord> {
+    this.database
+      .prepare(
+        `INSERT OR IGNORE INTO app_owner(singleton, issuer, subject, email, claimed_at)
+         VALUES (1, ?, ?, ?, ?)`,
+      )
+      .run(owner.issuer, owner.subject, owner.email ?? null, owner.claimedAt);
+    return (await this.getOwner()) as OwnerRecord;
+  }
+
+  async getOwner(): Promise<OwnerRecord | undefined> {
+    const row = this.database
+      .prepare(
+        "SELECT issuer, subject, email, claimed_at FROM app_owner WHERE singleton = 1",
+      )
+      .get() as OwnerRow | undefined;
+    return row ? mapOwner(row) : undefined;
   }
 
   async createWebSession(session: WebSessionRecord): Promise<void> {

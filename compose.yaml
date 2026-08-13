@@ -12,8 +12,6 @@ services:
       OIDC_ISSUER_URL: ${OIDC_ISSUER_URL:-}
       OIDC_CLIENT_ID: ${OIDC_CLIENT_ID:-}
       OIDC_CLIENT_SECRET: ${OIDC_CLIENT_SECRET:-}
-      OIDC_OWNER_SUB: ${OIDC_OWNER_SUB:-}
-      OIDC_OWNER_EMAIL: ${OIDC_OWNER_EMAIL:-}
       AGENT_TOOLS: ${AGENT_TOOLS:-read,grep,find,ls}
     volumes:
       - pi-agent:/app/.pi/agent

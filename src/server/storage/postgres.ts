@@ -3,8 +3,16 @@ import type {
   AppStore,
   HeartbeatRunRecord,
   HeartbeatRunUpdate,
+  OwnerRecord,
   WebSessionRecord,
 } from "./types.js";
+
+interface OwnerRow {
+  issuer: string;
+  subject: string;
+  email: string | null;
+  claimed_at: string | number;
+}
 
 interface SessionRow {
   token_hash: string;
@@ -21,6 +29,15 @@ interface HeartbeatRow {
   status: HeartbeatRunRecord["status"];
   summary: string | null;
   error: string | null;
+}
+
+function mapOwner(row: OwnerRow): OwnerRecord {
+  return {
+    issuer: row.issuer,
+    subject: row.subject,
+    ...(row.email ? { email: row.email } : {}),
+    claimedAt: Number(row.claimed_at),
+  };
 }
 
 function mapSession(row: SessionRow): WebSessionRecord {
@@ -56,6 +73,13 @@ export class PostgresStore implements AppStore {
   async migrate(): Promise<void> {
     await this.sql.begin(async (sql) => {
       await sql`CREATE TABLE IF NOT EXISTS schema_migrations (version INTEGER PRIMARY KEY)`;
+      await sql`CREATE TABLE IF NOT EXISTS app_owner (
+        singleton BOOLEAN PRIMARY KEY DEFAULT TRUE CHECK (singleton),
+        issuer TEXT NOT NULL,
+        subject TEXT NOT NULL,
+        email TEXT,
+        claimed_at BIGINT NOT NULL
+      )`;
       await sql`CREATE TABLE IF NOT EXISTS web_sessions (
         token_hash TEXT PRIMARY KEY,
         subject TEXT NOT NULL,
@@ -74,7 +98,29 @@ export class PostgresStore implements AppStore {
       )`;
       await sql`CREATE INDEX IF NOT EXISTS heartbeat_runs_started_at ON heartbeat_runs(started_at DESC)`;
       await sql`INSERT INTO schema_migrations(version) VALUES (1) ON CONFLICT DO NOTHING`;
+      const inserted =
+        await sql`INSERT INTO schema_migrations(version) VALUES (2) ON CONFLICT DO NOTHING RETURNING version`;
+      if (inserted.count > 0) await sql`DELETE FROM web_sessions`;
     });
+  }
+
+  async claimOwner(owner: OwnerRecord): Promise<OwnerRecord> {
+    return this.sql.begin(async (sql) => {
+      await sql`INSERT INTO app_owner(singleton, issuer, subject, email, claimed_at)
+        VALUES (TRUE, ${owner.issuer}, ${owner.subject}, ${owner.email ?? null}, ${owner.claimedAt})
+        ON CONFLICT (singleton) DO NOTHING`;
+      const rows = await sql<
+        OwnerRow[]
+      >`SELECT issuer, subject, email, claimed_at FROM app_owner WHERE singleton = TRUE`;
+      return mapOwner(rows[0] as OwnerRow);
+    });
+  }
+
+  async getOwner(): Promise<OwnerRecord | undefined> {
+    const rows = await this.sql<
+      OwnerRow[]
+    >`SELECT issuer, subject, email, claimed_at FROM app_owner WHERE singleton = TRUE`;
+    return rows[0] ? mapOwner(rows[0]) : undefined;
   }
 
   async createWebSession(session: WebSessionRecord): Promise<void> {
@@ -133,7 +179,7 @@ export class PostgresStore implements AppStore {
   }
 
   async resetForTests(): Promise<void> {
-    await this.sql`TRUNCATE heartbeat_runs, web_sessions`;
+    await this.sql`TRUNCATE heartbeat_runs, web_sessions, app_owner`;
   }
 
   async close(): Promise<void> {

@@ -15,6 +15,47 @@ afterEach(async () => {
 
 function storageContract(name: string, createStore: () => Promise<AppStore>) {
   describe(name, () => {
+    test("atomically claims exactly one OIDC owner", async () => {
+      const store = await createStore();
+      await store.migrate();
+
+      const candidates = await Promise.all([
+        store.claimOwner({
+          issuer: "https://id.example.com",
+          subject: "owner-1",
+          email: "owner@example.com",
+          claimedAt: 1_000,
+        }),
+        store.claimOwner({
+          issuer: "https://id.example.com",
+          subject: "owner-2",
+          claimedAt: 2_000,
+        }),
+      ]);
+      expect(new Set(candidates.map((owner) => owner.subject)).size).toBe(1);
+      expect(await store.getOwner()).toEqual(candidates[0]);
+    });
+
+    test("preserves sessions after ownership has been claimed and migration reruns", async () => {
+      const store = await createStore();
+      await store.migrate();
+      await store.claimOwner({
+        issuer: "https://id.example.com",
+        subject: "owner-1",
+        claimedAt: 1_000,
+      });
+      await store.createWebSession({
+        tokenHash: "kept",
+        subject: "owner-1",
+        createdAt: 1_000,
+        expiresAt: 2_000,
+      });
+
+      await store.migrate();
+
+      expect(await store.findWebSession("kept")).toBeDefined();
+    });
+
     test("migrates idempotently and persists web sessions", async () => {
       const store = await createStore();
       await store.migrate();
