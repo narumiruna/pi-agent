@@ -38,13 +38,19 @@ ci:
 docker-build:
     docker build -t pi-agent:local .
 
-# Start the SQLite Compose stack using .env.
-compose-up:
+# Start Pi Agent using Compose and .env.
+up:
     docker compose up -d --build
 
-# Stop the SQLite Compose stack.
-compose-down:
+# Stop Pi Agent.
+down:
     docker compose down
+
+# Start the SQLite Compose stack using .env.
+compose-up: up
+
+# Stop the SQLite Compose stack.
+compose-down: down
 
 # Show recent SQLite Compose logs without following.
 compose-logs:
@@ -62,7 +68,7 @@ postgres-down:
 smoke:
     #!/usr/bin/env bash
     set -euo pipefail
-    export APP_ORIGIN=http://localhost:3100 AUTH_MODE=disabled PORT=3100
+    export APP_ORIGIN=http://localhost:39100 AUTH_MODE=disabled PORT=39100
     trap 'docker compose -p pi-agent-smoke down -v >/dev/null 2>&1 || true' EXIT
     docker compose -p pi-agent-smoke up -d --build
     for _ in $(seq 1 60); do docker compose -p pi-agent-smoke exec -T agent node -e "fetch('http://127.0.0.1:3000/health/ready').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))" && exit 0; sleep 1; done
@@ -72,7 +78,7 @@ smoke:
 postgres-smoke:
     #!/usr/bin/env bash
     set -euo pipefail
-    export APP_ORIGIN=http://localhost:3101 AUTH_MODE=disabled PORT=3101 POSTGRES_PASSWORD=smoke-password
+    export APP_ORIGIN=http://localhost:39101 AUTH_MODE=disabled PORT=39101 POSTGRES_PASSWORD=smoke-password
     trap 'docker compose -p pi-agent-postgres-smoke -f compose.yaml -f compose.postgres.yaml down -v >/dev/null 2>&1 || true' EXIT
     docker compose -p pi-agent-postgres-smoke -f compose.yaml -f compose.postgres.yaml up -d --build
     for _ in $(seq 1 60); do docker compose -p pi-agent-postgres-smoke -f compose.yaml -f compose.postgres.yaml exec -T agent node -e "fetch('http://127.0.0.1:3000/health/ready').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))" && exit 0; sleep 1; done
