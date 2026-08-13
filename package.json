@@ -1,0 +1,18 @@
+{
+  "name": "typescript-template",
+  "private": true,
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "check": "biome ci .",
+    "test": "vitest run",
+    "ci": "npm run check && npm test && npm run build",
+    "prepare": "husky"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^2.5.7",
+    "husky": "^9.1.7",
+    "typescript": "^7.0.2",
+    "vitest": "^4.1.10"
+  }
+}
