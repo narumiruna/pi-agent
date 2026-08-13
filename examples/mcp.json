@@ -1,0 +1,16 @@
+{
+  "mcpServers": {
+    "local-example": {
+      "transport": "stdio",
+      "command": "node",
+      "args": ["/app/.pi/agent/packages/example/server.js"]
+    },
+    "remote-example": {
+      "transport": "http",
+      "url": "https://mcp.example.com/",
+      "headers": {
+        "Authorization": "Bearer replace-me"
+      }
+    }
+  }
+}
