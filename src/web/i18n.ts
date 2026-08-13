@@ -1,0 +1,136 @@
+import i18n from "i18next";
+import { initReactI18next } from "react-i18next";
+
+const resources = {
+  en: {
+    translation: {
+      appName: "Pi Agent",
+      chat: "Chat",
+      heartbeat: "Heartbeat",
+      library: "Library",
+      settings: "Settings",
+      newConversation: "New conversation",
+      emptyConversation: "Start with a clear request.",
+      messagePlaceholder: "Ask Pi anything…",
+      send: "Send",
+      stop: "Stop",
+      signIn: "Sign in with Pocket ID",
+      signedOut: "Sign in to reach your agent.",
+      authDisabled:
+        "Authentication is disabled. Do not expose this instance to the internet.",
+      save: "Save changes",
+      runNow: "Run now",
+      heartbeatEmpty:
+        "Add instructions to HEARTBEAT.md to enable periodic checks.",
+      lastRuns: "Recent runs",
+      systemPrompt: "System prompt",
+      appendPrompt: "Additional prompt",
+      templates: "Prompt templates",
+      packages: "Pi packages",
+      mcp: "MCP servers",
+      providers: "Models & providers",
+      language: "Language",
+      activeTools: "Active tools",
+      install: "Install",
+      packageWarning:
+        "Pi packages can execute arbitrary code inside this container. Review the source first.",
+      confirmInstall: "I reviewed and trust this package",
+      noMessages: "No messages yet",
+      noRuns: "No heartbeat runs yet",
+      loading: "Loading…",
+      error: "Something went wrong",
+      logout: "Sign out",
+      attention: "Attention",
+      quiet: "Quiet",
+      running: "Running",
+      failed: "Failed",
+      menu: "Open navigation",
+      close: "Close",
+      delete: "Delete",
+      edit: "Edit",
+      update: "Update",
+      name: "Name",
+      content: "Content",
+      addTemplate: "Add template",
+      source: "npm, git, or container path",
+      providerLogin: "Configure",
+      providerLogout: "Disconnect",
+      interaction: "Input required",
+      cancel: "Cancel",
+      continue: "Continue",
+    },
+  },
+  "zh-TW": {
+    translation: {
+      appName: "Pi Agent",
+      chat: "對話",
+      heartbeat: "Heartbeat",
+      library: "資源庫",
+      settings: "設定",
+      newConversation: "新增對話",
+      emptyConversation: "從一個清楚的需求開始。",
+      messagePlaceholder: "交代 Pi 一件事…",
+      send: "傳送",
+      stop: "停止",
+      signIn: "使用 Pocket ID 登入",
+      signedOut: "登入以連線到你的 agent。",
+      authDisabled: "驗證功能已停用。請勿將此服務直接暴露於網際網路。",
+      save: "儲存變更",
+      runNow: "立即執行",
+      heartbeatEmpty: "在 HEARTBEAT.md 加入指示，即可啟用定期檢查。",
+      lastRuns: "近期執行",
+      systemPrompt: "系統提示詞",
+      appendPrompt: "附加提示詞",
+      templates: "提示詞模板",
+      packages: "Pi Packages",
+      mcp: "MCP Servers",
+      providers: "模型與供應商",
+      language: "語言",
+      activeTools: "啟用的工具",
+      install: "安裝",
+      packageWarning: "Pi package 可在容器中執行任意程式碼。請先檢查來源。",
+      confirmInstall: "我已檢查並信任此 package",
+      noMessages: "尚無訊息",
+      noRuns: "尚無 heartbeat 執行紀錄",
+      loading: "載入中…",
+      error: "發生錯誤",
+      logout: "登出",
+      attention: "需要注意",
+      quiet: "正常",
+      running: "執行中",
+      failed: "失敗",
+      menu: "開啟導覽",
+      close: "關閉",
+      delete: "刪除",
+      edit: "編輯",
+      update: "更新",
+      name: "名稱",
+      content: "內容",
+      addTemplate: "新增模板",
+      source: "npm、git 或容器路徑",
+      providerLogin: "設定",
+      providerLogout: "中斷連線",
+      interaction: "需要輸入",
+      cancel: "取消",
+      continue: "繼續",
+    },
+  },
+} as const;
+
+const saved = window.localStorage.getItem("pi-agent-language");
+const browserLanguage = navigator.language.toLowerCase().startsWith("zh")
+  ? "zh-TW"
+  : "en";
+void i18n.use(initReactI18next).init({
+  resources,
+  lng: saved === "en" || saved === "zh-TW" ? saved : browserLanguage,
+  fallbackLng: "en",
+  interpolation: { escapeValue: false },
+});
+
+export async function setLanguage(language: "en" | "zh-TW"): Promise<void> {
+  window.localStorage.setItem("pi-agent-language", language);
+  await i18n.changeLanguage(language);
+}
+
+export default i18n;

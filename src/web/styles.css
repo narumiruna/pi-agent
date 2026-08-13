@@ -1,0 +1,546 @@
+:root {
+  font-family: "IBM Plex Sans Variable", "Noto Sans TC", system-ui, sans-serif;
+  color: #172126;
+  background: #f5f7f7;
+  font-synthesis: none;
+  color-scheme: light;
+  --canvas: #f5f7f7;
+  --surface: #ffffff;
+  --ink: #172126;
+  --muted: #657279;
+  --line: #dce2e3;
+  --accent: #28717a;
+  --danger: #c34747;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    color: #e8eeee;
+    background: #101719;
+    color-scheme: dark;
+    --canvas: #101719;
+    --surface: #172124;
+    --ink: #e8eeee;
+    --muted: #9aa9ad;
+    --line: #2d3a3d;
+    --accent: #62abb3;
+    --danger: #e17676;
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root,
+.radix-themes {
+  min-height: 100%;
+  margin: 0;
+}
+
+button,
+textarea,
+input {
+  font: inherit;
+}
+
+code,
+.codeEditor textarea,
+.toolRow {
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
+}
+
+button:focus-visible,
+a:focus-visible,
+textarea:focus-visible,
+input:focus-visible,
+[role="button"]:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.appShell {
+  min-height: 100vh;
+  display: grid;
+  grid-template-columns: 244px minmax(0, 1fr);
+  background: var(--canvas);
+}
+
+.sidebar {
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  border-right: 1px solid var(--line);
+  background: color-mix(in srgb, var(--surface) 86%, transparent);
+}
+
+.navContent {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  padding: 20px 14px 14px;
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 8px 22px;
+}
+
+.brandMark,
+.loginMark,
+.emptyGlyph {
+  font-family: Georgia, serif;
+  color: var(--accent);
+}
+
+.brandMark {
+  width: 25px;
+  height: 25px;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--line);
+  border-radius: 50%;
+}
+
+.primaryNav {
+  display: grid;
+  gap: 3px;
+}
+
+.navItem,
+.conversationItem {
+  appearance: none;
+  border: 0;
+  color: var(--muted);
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+}
+
+.navItem {
+  position: relative;
+  min-height: 40px;
+  padding: 0 10px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  border-radius: 7px;
+}
+
+.navItem:hover,
+.navItem.active,
+.conversationItem:hover,
+.conversationItem.active {
+  color: var(--ink);
+  background: color-mix(in srgb, var(--accent) 9%, transparent);
+}
+
+.pulseRail {
+  position: absolute;
+  right: 8px;
+  width: 2px;
+  height: 14px;
+  border-radius: 1px;
+  background: var(--teal-9, var(--accent));
+  opacity: 0.55;
+}
+
+.navItem.active .pulseRail {
+  animation: pulse-rail 700ms ease-out 1;
+}
+
+@keyframes pulse-rail {
+  0% {
+    transform: scaleY(0.4);
+    opacity: 0.25;
+  }
+  50% {
+    transform: scaleY(1.5);
+    opacity: 1;
+  }
+}
+
+.conversationHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 26px 8px 8px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.conversationScroll {
+  flex: 1;
+  min-height: 0;
+}
+
+.conversationList {
+  display: grid;
+  gap: 2px;
+}
+
+.conversationItem {
+  width: 100%;
+  padding: 8px 10px;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  border-radius: 6px;
+  font-size: 13px;
+}
+
+.workspace {
+  position: relative;
+  min-width: 0;
+  min-height: 100vh;
+}
+
+.chatPage {
+  height: 100vh;
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) auto;
+}
+
+.messageScroll {
+  min-height: 0;
+}
+
+.messageColumn,
+.composer,
+.pageColumn {
+  width: min(100% - 40px, 820px);
+  margin-inline: auto;
+}
+
+.messageColumn {
+  padding: 64px 0 32px;
+  display: grid;
+  gap: 30px;
+}
+
+.message {
+  display: grid;
+  grid-template-columns: 54px minmax(0, 1fr);
+  gap: 14px;
+  line-height: 1.62;
+}
+
+.message.user {
+  padding: 16px 18px;
+  border-radius: 9px;
+  background: color-mix(in srgb, var(--accent) 8%, var(--surface));
+}
+
+.messageRole {
+  padding-top: 4px;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+}
+
+.markdown > :first-child {
+  margin-top: 0;
+}
+
+.markdown > :last-child {
+  margin-bottom: 0;
+}
+
+.markdown pre {
+  overflow: auto;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--surface);
+}
+
+.toolRow {
+  grid-column: 2;
+  padding: 8px 0;
+  color: var(--muted);
+  font-size: 12px;
+  border-top: 1px solid var(--line);
+}
+
+.toolRow.error {
+  color: var(--danger);
+}
+
+.toolRow summary {
+  cursor: pointer;
+}
+
+.toolRow code {
+  display: block;
+  white-space: pre-wrap;
+  padding-top: 8px;
+}
+
+.composerWrap {
+  padding: 12px 0 22px;
+  background: var(--canvas);
+}
+
+.composer {
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface);
+  box-shadow: 0 8px 28px rgb(20 40 45 / 7%);
+}
+
+.composer textarea {
+  min-height: 62px;
+  border: 0;
+  box-shadow: none;
+  resize: none;
+}
+
+.emptyState,
+.centerState,
+.loginPage {
+  min-height: 70vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  color: var(--muted);
+  text-align: center;
+}
+
+.emptyGlyph {
+  font-size: 62px;
+  line-height: 1;
+  opacity: 0.36;
+}
+
+.loginPage {
+  min-height: 100vh;
+  background: var(--canvas);
+}
+
+.loginPage h1,
+.loginPage p {
+  margin: 0;
+}
+
+.loginMark {
+  font-size: 82px;
+  line-height: 1;
+}
+
+.pageColumn {
+  padding: 62px 0 80px;
+  display: grid;
+  gap: 24px;
+}
+
+.tabContent,
+.editorBlock {
+  padding-top: 24px;
+  display: grid;
+  gap: 15px;
+}
+
+.editorBlock + .editorBlock {
+  margin-top: 34px;
+  padding-top: 34px;
+  border-top: 1px solid var(--line);
+}
+
+.listRow,
+.settingRow {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 20px;
+  padding: 15px 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.riskNotice,
+.inlineNotice {
+  padding: 13px 15px;
+  border-left: 3px solid var(--amber-9, #b9862e);
+  background: color-mix(in srgb, var(--amber-9, #b9862e) 10%, transparent);
+}
+
+.status {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.status::before {
+  content: "";
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+.status.quiet {
+  color: var(--accent);
+}
+
+.status.attention,
+.status.error {
+  color: var(--danger);
+}
+
+.toolChips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.toolChips code {
+  padding: 5px 8px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  background: var(--surface);
+  color: var(--muted);
+}
+
+.authWarning {
+  position: absolute;
+  z-index: 2;
+  top: 10px;
+  right: 16px;
+  left: 16px;
+}
+
+.notification {
+  position: fixed;
+  z-index: 20;
+  right: 20px;
+  bottom: 20px;
+  max-width: 420px;
+  cursor: pointer;
+}
+
+.dialogOverlay {
+  position: fixed;
+  z-index: 40;
+  inset: 0;
+  background: rgb(7 14 16 / 48%);
+  backdrop-filter: blur(3px);
+}
+
+.dialogContent,
+.mobileNavigation {
+  position: fixed;
+  z-index: 41;
+  background: var(--surface);
+  color: var(--ink);
+  box-shadow: 0 24px 70px rgb(0 0 0 / 24%);
+}
+
+.dialogContent {
+  top: 50%;
+  left: 50%;
+  width: min(92vw, 480px);
+  max-height: 85vh;
+  padding: 24px;
+  overflow: auto;
+  transform: translate(-50%, -50%);
+  border-radius: 10px;
+}
+
+.dialogTitle {
+  margin: 0 0 16px;
+  font-size: 19px;
+  font-weight: 600;
+}
+
+.mobileMenu,
+.mobileNavigation {
+  display: none;
+}
+
+.srOnly {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+@media (max-width: 760px) {
+  .appShell {
+    display: block;
+  }
+
+  .sidebar {
+    display: none;
+  }
+
+  .mobileMenu {
+    display: inline-flex;
+    position: fixed;
+    z-index: 12;
+    top: 12px;
+    left: 12px;
+  }
+
+  .mobileNavigation {
+    display: block;
+    inset: 0 auto 0 0;
+    width: min(88vw, 300px);
+  }
+
+  .mobileClose {
+    position: absolute;
+    z-index: 2;
+    top: 13px;
+    right: 10px;
+  }
+
+  .messageColumn,
+  .composer,
+  .pageColumn {
+    width: min(100% - 24px, 820px);
+  }
+
+  .messageColumn {
+    padding-top: 66px;
+  }
+
+  .message {
+    grid-template-columns: 1fr;
+    gap: 4px;
+  }
+
+  .toolRow {
+    grid-column: 1;
+  }
+
+  .pageColumn {
+    padding-top: 66px;
+  }
+
+  .settingRow,
+  .listRow {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *[class],
+  *[class]::before,
+  *[class]::after {
+    scroll-behavior: auto;
+    animation-duration: 0.001ms;
+    animation-iteration-count: 1;
+    transition-duration: 0.001ms;
+  }
+}

@@ -1,0 +1,24 @@
+services:
+  agent:
+    environment:
+      DATABASE_URL: postgresql://pi-agent:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD}@database:5432/pi-agent
+    depends_on:
+      database:
+        condition: service_healthy
+  database:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: pi-agent
+      POSTGRES_USER: pi-agent
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD}
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U pi-agent -d pi-agent"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+
+volumes:
+  postgres-data:
