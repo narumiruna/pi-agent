@@ -1,5 +1,6 @@
 import { join } from "node:path";
 import type { ThinkingLevel } from "@earendil-works/pi-agent-core";
+import { getSupportedThinkingLevels } from "@earendil-works/pi-ai";
 import { tbValidator } from "@hono/typebox-validator";
 import type { Context, Env, Hono, Input } from "hono";
 import { streamSSE } from "hono/streaming";
@@ -57,6 +58,7 @@ const ThinkingBody = Type.Object({
 });
 const ProviderLoginBody = Type.Object({
   type: Type.Union([Type.Literal("api_key"), Type.Literal("oauth")]),
+  apiKey: Type.Optional(Type.String({ minLength: 1, maxLength: 100_000 })),
 });
 const DocumentBody = Type.Object({
   content: Type.String({ maxLength: 1_000_000 }),
@@ -81,10 +83,14 @@ function errorResponse<E extends Env, P extends string, I extends Input>(
 ) {
   if (error instanceof AgentBusyError)
     return context.json(apiError("agent_busy"), 409);
+  if (error instanceof DOMException && error.name === "AbortError")
+    return context.json(apiError("cancelled"), 400);
   const message = error instanceof Error ? error.message : "";
   if (/not found/i.test(message))
     return context.json(apiError("not_found"), 404);
-  if (/active conversation|already/i.test(message))
+  if (/no API key|provider is not configured/i.test(message))
+    return context.json(apiError("provider_not_configured"), 400);
+  if (/active conversation|already|in progress/i.test(message))
     return context.json(apiError("conflict"), 409);
   return context.json(apiError("bad_request"), 400);
 }
@@ -173,6 +179,11 @@ export function registerApi<E extends ApiEnv>(
         if (!live) queued.push(event);
         else void writeEvent(event).catch(close);
       });
+      if (!rawCursor) {
+        services.interactions.replayPending((data) =>
+          queued.push({ id: initialCursor, type: "interaction", data }),
+        );
+      }
       try {
         if (replay === undefined) {
           await stream.writeSSE({
@@ -243,10 +254,22 @@ export function registerApi<E extends ApiEnv>(
     },
   );
 
-  app.get("/api/models", (context) =>
-    context.json({
-      current: services.pi.activeSession.model,
+  app.get("/api/models", async (context) => {
+    const activeModel = services.pi.activeSession.model;
+    const current = activeModel
+      ? {
+          id: activeModel.id,
+          name: activeModel.name,
+          provider: activeModel.provider,
+        }
+      : undefined;
+    return context.json({
+      current,
       thinkingLevel: services.pi.activeSession.thinkingLevel,
+      thinkingLevels: activeModel
+        ? getSupportedThinkingLevels(activeModel)
+        : ["off"],
+      authPending: services.pi.providerLoginPending,
       models: services.pi.models().map((model) => ({
         id: model.id,
         name: model.name,
@@ -257,17 +280,9 @@ export function registerApi<E extends ApiEnv>(
         contextWindow: model.contextWindow,
         maxTokens: model.maxTokens,
       })),
-      providers: services.pi.modelRuntime.getProviders().map((provider) => ({
-        id: provider.id,
-        name: provider.name,
-        auth: {
-          apiKey: provider.auth?.apiKey?.name,
-          oauth: provider.auth?.oauth?.name,
-        },
-        status: services.pi.modelRuntime.getProviderAuthStatus(provider.id),
-      })),
-    }),
-  );
+      providers: await services.pi.providerAccess(),
+    });
+  });
   app.put("/api/model", tbValidator("json", ModelBody), async (context) => {
     try {
       const body = context.req.valid("json");
@@ -292,9 +307,13 @@ export function registerApi<E extends ApiEnv>(
     tbValidator("json", ProviderLoginBody),
     async (context) => {
       try {
+        const body = context.req.valid("json");
+        if (body.type === "oauth" && body.apiKey !== undefined)
+          return context.json(apiError("bad_request"), 400);
         await services.pi.providerLogin(
           context.req.param("id"),
-          context.req.valid("json").type,
+          body.type,
+          body.apiKey,
         );
         return context.json({ ok: true });
       } catch (error) {
@@ -302,9 +321,17 @@ export function registerApi<E extends ApiEnv>(
       }
     },
   );
-  app.post("/api/providers/:id/logout", async (context) => {
-    await services.pi.providerLogout(context.req.param("id"));
+  app.post("/api/providers/login/cancel", (context) => {
+    services.pi.cancelProviderLogin();
     return context.json({ ok: true });
+  });
+  app.post("/api/providers/:id/logout", async (context) => {
+    try {
+      await services.pi.providerLogout(context.req.param("id"));
+      return context.json({ ok: true });
+    } catch (error) {
+      return errorResponse(context, error);
+    }
   });
   app.get("/api/commands", (context) => context.json(services.pi.commands()));
   app.get("/api/diagnostics", (context) =>

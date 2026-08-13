@@ -54,6 +54,35 @@ describe("InteractionBroker", () => {
     expect(published).not.toHaveBeenCalled();
   });
 
+  test("classifies a cancelled authentication prompt without retaining it", async () => {
+    const events = new EventHub();
+    const broker = new InteractionBroker(events);
+    const prompt = broker.prompt({ type: "text", message: "Code" });
+    const replayed: unknown[] = [];
+    broker.replayPending((data) => replayed.push(data));
+
+    broker.respond((replayed[0] as { id: string }).id);
+
+    await expect(prompt).rejects.toMatchObject({ name: "AbortError" });
+    expect(broker.pendingCount).toBe(0);
+  });
+
+  test("replays the active request for clients that connect after it starts", async () => {
+    const events = new EventHub();
+    const broker = new InteractionBroker(events);
+    const pending = broker.request("secret", { title: "API key" });
+
+    const replayed: unknown[] = [];
+    expect(broker.replayPending((data) => replayed.push(data))).toBe(1);
+    expect(replayed).toEqual([
+      expect.objectContaining({ kind: "secret", title: "API key" }),
+    ]);
+
+    const id = (replayed[0] as { id: string }).id;
+    broker.respond(id, "sk-secret");
+    await pending;
+  });
+
   test("does not expose secret responses in events", async () => {
     const events = new EventHub();
     const broker = new InteractionBroker(events);

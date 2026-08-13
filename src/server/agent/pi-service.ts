@@ -5,6 +5,7 @@ import type {
   Api,
   AuthInteraction,
   AuthPrompt,
+  CredentialInfo,
   Model,
 } from "@earendil-works/pi-ai";
 import {
@@ -39,12 +40,33 @@ export interface ConversationSummary {
   active: boolean;
 }
 
+export interface ProviderAccess {
+  id: string;
+  name: string;
+  status: {
+    configured: boolean;
+    source?: string;
+    label?: string;
+    credentialType?: "api_key" | "oauth";
+    disconnectable: boolean;
+  };
+  auth: {
+    apiKey?: { name: string };
+    oauth?: {
+      name: string;
+      loginLabel?: string;
+      subscription: boolean;
+    };
+  };
+}
+
 export class PiService {
   readonly coordinator = new RunCoordinator();
   readonly modelRuntime: ModelRuntime;
   readonly settingsManager: SettingsManager;
   readonly packageManager: DefaultPackageManager;
   private readonly runtime: AgentSessionRuntime;
+  private providerLoginAbort: AbortController | undefined;
   private unsubscribe?: () => void;
 
   private constructor(
@@ -334,8 +356,15 @@ export class PiService {
   async setModel(provider: string, modelId: string): Promise<void> {
     const model = this.modelRuntime.getModel(provider, modelId);
     if (!model) throw new Error("Model not found");
-    await this.runtime.session.setModel(model);
+    const previousHeartbeatModel = this.heartbeatSession.model;
     await this.heartbeatSession.setModel(model);
+    try {
+      await this.runtime.session.setModel(model);
+    } catch (error) {
+      if (previousHeartbeatModel)
+        await this.heartbeatSession.setModel(previousHeartbeatModel);
+      throw error;
+    }
   }
 
   setThinkingLevel(level: ThinkingLevel): void {
@@ -343,18 +372,97 @@ export class PiService {
     this.heartbeatSession.setThinkingLevel(level);
   }
 
+  get providerLoginPending(): boolean {
+    return Boolean(this.providerLoginAbort);
+  }
+
+  async providerAccess(): Promise<ProviderAccess[]> {
+    const credentials = new Map<string, CredentialInfo>(
+      (await this.modelRuntime.listCredentials()).map((credential) => [
+        credential.providerId,
+        credential,
+      ]),
+    );
+    return this.modelRuntime.getProviders().map((provider) => {
+      const status = this.modelRuntime.getProviderAuthStatus(provider.id);
+      const credential = credentials.get(provider.id);
+      const credentialType =
+        credential?.type ??
+        (status.configured
+          ? this.modelRuntime.isUsingOAuth(provider.id)
+            ? "oauth"
+            : "api_key"
+          : undefined);
+      return {
+        id: provider.id,
+        name: provider.name,
+        status: {
+          ...status,
+          ...(credentialType ? { credentialType } : {}),
+          disconnectable: Boolean(credential),
+        },
+        auth: {
+          ...(provider.auth.apiKey?.login
+            ? { apiKey: { name: provider.auth.apiKey.name } }
+            : {}),
+          ...(provider.auth.oauth
+            ? {
+                oauth: {
+                  name: provider.auth.oauth.name,
+                  ...(provider.auth.oauth.loginLabel
+                    ? { loginLabel: provider.auth.oauth.loginLabel }
+                    : {}),
+                  subscription: provider.auth.oauth.isSubscription === true,
+                },
+              }
+            : {}),
+        },
+      };
+    });
+  }
+
   async providerLogin(
     providerId: string,
     type: "api_key" | "oauth",
+    apiKey?: string,
   ): Promise<void> {
+    if (this.providerLoginAbort)
+      throw new Error("Provider authentication is already in progress");
+    const abort = new AbortController();
+    this.providerLoginAbort = abort;
+    let submittedKey = apiKey;
     const interaction: AuthInteraction = {
-      prompt: (prompt: AuthPrompt) => this.interactions.prompt(prompt),
+      signal: abort.signal,
+      prompt: (prompt: AuthPrompt) => {
+        if (prompt.type === "secret" && submittedKey !== undefined) {
+          const key = submittedKey;
+          submittedKey = undefined;
+          return Promise.resolve(key);
+        }
+        return this.interactions.prompt(prompt);
+      },
       notify: (event) => this.interactions.notify(event),
     };
-    await this.modelRuntime.login(providerId, type, interaction);
+    try {
+      await this.modelRuntime.login(providerId, type, interaction);
+    } finally {
+      if (this.providerLoginAbort === abort)
+        this.providerLoginAbort = undefined;
+    }
+  }
+
+  cancelProviderLogin(): void {
+    const abort = this.providerLoginAbort;
+    if (!abort) return;
+    abort.abort(new DOMException("Authentication cancelled", "AbortError"));
+    this.interactions.cancelAll();
   }
 
   async providerLogout(providerId: string): Promise<void> {
+    const stored = (await this.modelRuntime.listCredentials()).some(
+      (credential) => credential.providerId === providerId,
+    );
+    if (!stored) throw new Error("Stored provider credential not found");
     await this.modelRuntime.logout(providerId);
   }
 
@@ -365,7 +473,7 @@ export class PiService {
   }
 
   models(): readonly Model<Api>[] {
-    return this.modelRuntime.getModels();
+    return this.modelRuntime.getAvailableSnapshot();
   }
 
   commands(): Array<{
@@ -416,6 +524,7 @@ export class PiService {
   }
 
   async dispose(): Promise<void> {
+    this.cancelProviderLogin();
     this.unsubscribe?.();
     await this.settingsManager.flush();
     this.heartbeatSession.dispose();

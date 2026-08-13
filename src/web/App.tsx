@@ -3,6 +3,10 @@ import { Button, Callout, Spinner, Theme } from "@radix-ui/themes";
 import { useCallback, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { ApiError, api, mutation } from "./api.js";
+import {
+  AuthNotification,
+  type AuthNotificationData,
+} from "./components/AuthNotification.js";
 import { InteractionDialog } from "./components/InteractionDialog.js";
 import { Navigation, type Page } from "./components/Navigation.js";
 import { ChatPage } from "./pages/ChatPage.js";
@@ -31,7 +35,7 @@ export function App() {
   const [eventsConnectedFor, setEventsConnectedFor] = useState<string>();
   const [liveTools, setLiveTools] = useState<LiveTool[]>([]);
   const [interaction, setInteraction] = useState<InteractionEvent>();
-  const [notification, setNotification] = useState<string>();
+  const [notification, setNotification] = useState<AuthNotificationData>();
   const [dark, setDark] = useState(
     () => window.matchMedia?.("(prefers-color-scheme: dark)").matches ?? false,
   );
@@ -114,9 +118,9 @@ export function App() {
         message?: string;
         type?: string;
       };
-      setNotification(
-        event.message ?? event.type ?? "Package operation updated",
-      );
+      setNotification({
+        message: event.message ?? event.type ?? "Package operation updated",
+      });
     });
     source.addEventListener("interaction", (raw) => {
       const event = JSON.parse(
@@ -136,16 +140,30 @@ export function App() {
     });
     source.addEventListener("notification", (raw) => {
       const event = JSON.parse((raw as MessageEvent).data) as {
+        type?: string;
         message?: string;
         statusText?: string;
+        url?: string;
+        instructions?: string;
+        verificationUri?: string;
+        userCode?: string;
       };
-      if (event.message ?? event.statusText)
-        setNotification(event.message ?? event.statusText);
+      const url = event.url ?? event.verificationUri;
+      const message = [event.instructions, event.message]
+        .filter(Boolean)
+        .join(" — ");
+      if (url) window.open(url, "_blank", "noopener,noreferrer");
+      if (message || event.statusText)
+        setNotification({
+          message: message || event.statusText || "Authentication updated",
+          ...(url ? { url } : {}),
+          ...(event.userCode ? { code: event.userCode } : {}),
+        });
     });
     source.addEventListener("reset", () => setRefresh((value) => value + 1));
     source.onerror = () => {
       setEventsConnectedFor(undefined);
-      setNotification("Connection interrupted; retrying…");
+      setNotification({ message: "Connection interrupted; retrying…" });
       void api<SessionInfo>("/api/session").catch((reason) => {
         if (reason instanceof ApiError && reason.status === 401) {
           source.close();
@@ -214,14 +232,10 @@ export function App() {
                 <Callout.Text>{t("authDisabled")}</Callout.Text>
               </Callout.Root>
             )}
-            {notification && (
-              <Callout.Root
-                className="notification"
-                onClick={() => setNotification(undefined)}
-              >
-                <Callout.Text>{notification}</Callout.Text>
-              </Callout.Root>
-            )}
+            <AuthNotification
+              notification={notification}
+              onClose={() => setNotification(undefined)}
+            />
             {page === "chat" && (
               <ChatPage
                 conversationId={activeId}
@@ -240,6 +254,7 @@ export function App() {
             {page === "settings" && <SettingsPage session={session} />}
           </main>
           <InteractionDialog
+            authNotification={notification?.url ? notification : undefined}
             interaction={interaction}
             onClose={() => setInteraction(undefined)}
           />

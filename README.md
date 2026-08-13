@@ -98,6 +98,30 @@ The image runs as UID and GID `10001`, so Linux bind-mounted directories must be
 sudo chown -R 10001:10001 ./data/pi/agent ./data/app
 ```
 
+## Models and providers
+
+Open Settings and select **Add access**.
+
+Choose **Subscription or account** for provider OAuth, or choose **API key** to save a key through Pi's native login flow.
+
+Provider credentials are saved by Pi in `/app/.pi/agent/auth.json`, so the agent directory must be writable and persistent.
+
+After adding access, select **Change model**, preview an available model, and confirm **Use this model**.
+
+The selected model is applied to both Web chat and heartbeat, while the thinking menu only shows levels supported by that model.
+
+For non-interactive deployment, you may instead mount an existing `auth.json` or pass a provider environment variable through Compose, such as `ANTHROPIC_API_KEY`.
+
+Settings identifies environment and `models.json` credentials as externally managed and does not offer to remove them.
+
+Only credentials stored in Pi's `auth.json` can be disconnected from Settings, and removal requires confirmation.
+
+Custom providers and models use `/app/.pi/agent/models.json` in Pi's native format.
+
+OAuth opens the provider URL when possible and always displays the URL or device code for recovery.
+
+A provider's localhost callback may be unreachable inside Docker, so use the displayed manual code, redirect URL, or device-code path when prompted.
+
 ## Data and database
 
 `/app/data/app.db` stores Web login sessions and heartbeat run summaries when `DATABASE_URL` is absent.

@@ -11,13 +11,22 @@ import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { api, mutation } from "../api.js";
 import type { InteractionEvent } from "../types.js";
+import {
+  AuthNotification,
+  type AuthNotificationData,
+} from "./AuthNotification.js";
 
 interface Props {
+  authNotification?: AuthNotificationData;
   interaction?: InteractionEvent;
   onClose: () => void;
 }
 
-export function InteractionDialog({ interaction, onClose }: Props) {
+export function InteractionDialog({
+  authNotification,
+  interaction,
+  onClose,
+}: Props) {
   const { t } = useTranslation();
   const [value, setValue] = useState("");
   const completed = useRef(false);
@@ -57,6 +66,13 @@ export function InteractionDialog({ interaction, onClose }: Props) {
             <Text as="p" id="interaction-description" color="gray">
               {interaction.message}
             </Text>
+          )}
+          {authNotification && (
+            <AuthNotification
+              embedded
+              notification={authNotification}
+              onClose={() => undefined}
+            />
           )}
           {options ? (
             <RadioGroup.Root value={value} onValueChange={setValue}>
