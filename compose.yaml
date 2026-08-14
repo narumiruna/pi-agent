@@ -12,7 +12,7 @@ services:
       OIDC_ISSUER_URL: ${OIDC_ISSUER_URL:-}
       OIDC_CLIENT_ID: ${OIDC_CLIENT_ID:-}
       OIDC_CLIENT_SECRET: ${OIDC_CLIENT_SECRET:-}
-      AGENT_TOOLS: ${AGENT_TOOLS:-read,grep,find,ls}
+      AGENT_TOOLS: ${AGENT_TOOLS:-read,grep,find,ls,write}
     volumes:
       - pi-agent:/app/.pi/agent
       - app-data:/app/data

@@ -20,7 +20,7 @@ describe("parseConfig", () => {
     expect(config.agentDir).toBe("/app/.pi/agent");
     expect(config.dataDir).toBe("/app/data");
     expect(config.workspace).toBe("/workspace");
-    expect(config.agentTools).toEqual(["read", "grep", "find", "ls"]);
+    expect(config.agentTools).toEqual(["read", "grep", "find", "ls", "write"]);
   });
 
   test("normalizes an OIDC origin without owner environment variables", () => {

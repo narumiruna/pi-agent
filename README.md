@@ -152,21 +152,27 @@ Back up `/app/.pi/agent` and PostgreSQL at a consistent maintenance point for Po
 
 `/workspace` is the fixed working directory for Pi tools.
 
-Mount a repository read-only for the default tool set.
+`AGENT_TOOLS` defaults to `read,grep,find,ls,write`, so Pi can create or completely rewrite files in container-writable locations.
+
+Mount a repository read-write only when it forms an acceptable security boundary.
 
 ```yaml
 services:
   agent:
     volumes:
-      - ./project:/workspace:ro
+      - ./project:/workspace
 ```
 
-`AGENT_TOOLS` defaults to `read,grep,find,ls`.
-
-Explicitly add `bash`, `edit`, or `write` only when the container and workspace mounts form an acceptable security boundary.
+For a read-only workspace, mount it with `:ro` and remove `write` explicitly.
 
 ```env
-AGENT_TOOLS=read,grep,find,ls,bash,edit,write
+AGENT_TOOLS=read,grep,find,ls
+```
+
+Add `edit` for targeted changes or `bash` for shell access only when their broader permissions are acceptable.
+
+```env
+AGENT_TOOLS=read,grep,find,ls,write,edit,bash
 ```
 
 OIDC authenticates the owner but does not sandbox Pi, extensions, skills, MCP servers, packages, or model-generated tool calls.
@@ -206,6 +212,8 @@ MCP servers execute code or receive data with the application's privileges, so t
 ## Heartbeat
 
 `/app/.pi/agent/HEARTBEAT.md` is the only proactive routine.
+
+With the default `write` tool, ask Pi to write this absolute path because a relative `HEARTBEAT.md` would be created under `/workspace` and would not control the scheduler.
 
 ```markdown
 ---

@@ -9,7 +9,7 @@ const TOOL_NAMES = new Set([
   "read",
   "write",
 ]);
-const DEFAULT_TOOLS = ["read", "grep", "find", "ls"];
+const DEFAULT_TOOLS = ["read", "grep", "find", "ls", "write"];
 
 type Environment = Record<string, string | undefined>;
 
