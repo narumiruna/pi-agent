@@ -81,6 +81,20 @@ export function ProviderAuthDialog({
   const expired = Boolean(task.expiresAt && task.expiresAt <= now && active);
   const url = task.verificationUri ?? task.url;
   const isCodex = task.providerId === "openai-codex";
+  const displayedOptions =
+    options && isCodex
+      ? [...options].sort(
+          (left, right) =>
+            (left.id === "device_code" ? 0 : left.id === "browser" ? 1 : 2) -
+            (right.id === "device_code" ? 0 : right.id === "browser" ? 1 : 2),
+        )
+      : options;
+  const primaryActionLabel =
+    isCodex && value === "device_code"
+      ? t("continueWithDeviceCode")
+      : isCodex && value === "browser"
+        ? t("continueInBrowser")
+        : t("continue");
 
   const respond = async (response?: string) => {
     if (!interaction || completed.current) return;
@@ -144,23 +158,39 @@ export function ProviderAuthDialog({
 
           {task.phase === "waiting" && !expired && (
             <div className="providerAuthFlow">
-              {options && (
+              {displayedOptions && (
                 <div className="authMethodStep">
                   <Text weight="medium">{t("chooseSignInMethod")}</Text>
                   <RadioGroup.Root value={value} onValueChange={setValue}>
-                    {options.map((option) => (
-                      <RadioGroup.Item key={option.id} value={option.id}>
-                        <span className="authMethodText">
-                          {option.label}
-                          {option.id === "device_code" && isCodex && (
-                            <small>{t("recommendedForDocker")}</small>
-                          )}
-                          {option.description && (
-                            <small>{option.description}</small>
-                          )}
-                        </span>
-                      </RadioGroup.Item>
-                    ))}
+                    {displayedOptions.map((option) => {
+                      const label =
+                        isCodex && option.id === "device_code"
+                          ? t("deviceCodeLogin")
+                          : isCodex && option.id === "browser"
+                            ? t("browserLogin")
+                            : option.label;
+                      return (
+                        <RadioGroup.Item
+                          aria-label={label}
+                          className={`authMethodOption${value === option.id ? " selected" : ""}`}
+                          key={option.id}
+                          value={option.id}
+                        >
+                          <span className="authMethodText">
+                            <strong>{label}</strong>
+                            {option.id === "device_code" && isCodex ? (
+                              <small>{t("recommendedForDocker")}</small>
+                            ) : option.id === "browser" && isCodex ? (
+                              <small>{t("browserLoginHelp")}</small>
+                            ) : (
+                              option.description && (
+                                <small>{option.description}</small>
+                              )
+                            )}
+                          </span>
+                        </RadioGroup.Item>
+                      );
+                    })}
                   </RadioGroup.Root>
                 </div>
               )}
@@ -250,7 +280,11 @@ export function ProviderAuthDialog({
             </Callout.Root>
           )}
 
-          <Flex className="providerAuthActions" gap="3" justify="end">
+          <Flex
+            className={`providerAuthActions${options ? " providerAuthMethodActions" : ""}`}
+            gap="3"
+            justify="end"
+          >
             {active && !expired && (
               <Button color="gray" variant="soft" onClick={() => void cancel()}>
                 {t("cancelSignIn")}
@@ -263,7 +297,7 @@ export function ProviderAuthDialog({
                   void respond(interaction.kind === "confirm" ? "true" : value)
                 }
               >
-                {t("continue")}
+                {primaryActionLabel}
               </Button>
             )}
             {(expired ||
