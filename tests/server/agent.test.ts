@@ -220,14 +220,16 @@ describe("conversation listing", () => {
 });
 
 describe("native session operations", () => {
-  test("forks through AgentSessionRuntime without copying session state", async () => {
+  test("forks through AgentSessionRuntime and seeds the new editor state", async () => {
     const fork = vi.fn(async () => ({
       cancelled: false,
       selectedText: "edit this",
     }));
+    const setEditorText = vi.fn();
     const service = Object.create(PiService.prototype) as PiService;
     Object.defineProperties(service, {
       coordinator: { value: new RunCoordinator() },
+      extensionState: { value: { setEditorText } },
       runtime: {
         value: {
           session: {
@@ -244,6 +246,7 @@ describe("native session operations", () => {
       service.forkConversation("session", "entry", "before"),
     ).resolves.toEqual({ id: "session", selectedText: "edit this" });
     expect(fork).toHaveBeenCalledWith("entry", { position: "before" });
+    expect(setEditorText).toHaveBeenCalledWith("edit this", "replace");
   });
 
   test("keeps the original JSONL unchanged when Pi creates a branch", async () => {

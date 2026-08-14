@@ -692,6 +692,8 @@ export class PiService {
     );
     if (result.cancelled)
       throw new DOMException("Session fork was cancelled", "AbortError");
+    if (result.selectedText)
+      this.extensionState.setEditorText(result.selectedText, "replace");
     return {
       id: this.activeSessionId,
       ...(result.selectedText ? { selectedText: result.selectedText } : {}),

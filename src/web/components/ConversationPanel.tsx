@@ -87,11 +87,10 @@ export function ConversationPanel({
   const fork = (position: "at" | "before") => {
     if (!selectedId) return;
     void run(position === "at" ? "clone" : "fork", async () => {
-      const result = await api<{ id: string; selectedText?: string }>(
+      const result = await api<{ id: string }>(
         `/api/conversations/${conversationId}/fork`,
         mutation("POST", { targetId: selectedId, position }),
       );
-      if (result.selectedText) onDraft(result.selectedText, "replace");
       setOpen(false);
       await onConversationChanged(result.id);
     });

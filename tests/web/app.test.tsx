@@ -641,7 +641,7 @@ describe("web application", () => {
     );
   });
 
-  test("opens native session details and clones a selected tree node", async () => {
+  test("keeps a forked draft out of the conversation being replaced", async () => {
     HTMLElement.prototype.scrollIntoView = vi.fn();
     vi.mocked(fetch).mockImplementation(async (input, init) => {
       const url = String(input);
@@ -650,11 +650,21 @@ describe("web application", () => {
           status: 200,
           headers: { "content-type": "application/json" },
         });
-      if (url === "/api/conversations/session/fork" && init?.method === "POST")
-        return new Response(JSON.stringify({ id: "cloned" }), {
-          status: 201,
-          headers: { "content-type": "application/json" },
-        });
+      if (
+        url === "/api/conversations/session/fork" &&
+        init?.method === "POST"
+      ) {
+        expect(init.body).toBe(
+          JSON.stringify({ targetId: "entry", position: "before" }),
+        );
+        return new Response(
+          JSON.stringify({ id: "forked", selectedText: "Original prompt" }),
+          {
+            status: 201,
+            headers: { "content-type": "application/json" },
+          },
+        );
+      }
       throw new Error(`Unexpected request: ${url}`);
     });
     const onConversationChanged = vi.fn(async () => undefined);
@@ -736,10 +746,11 @@ describe("web application", () => {
     expect(screen.getByText("Test model")).toBeVisible();
     expect(screen.getByText("1.0 KB")).toBeVisible();
     await user.click(screen.getByRole("treeitem"));
-    await user.click(screen.getByRole("button", { name: "Clone" }));
+    await user.click(screen.getByRole("button", { name: "Fork" }));
     await waitFor(() =>
-      expect(onConversationChanged).toHaveBeenCalledWith("cloned"),
+      expect(onConversationChanged).toHaveBeenCalledWith("forked"),
     );
+    expect(screen.getByLabelText("Ask Pi anything…")).toHaveValue("");
   });
 
   test("preserves the active conversation when creating another fails", async () => {
