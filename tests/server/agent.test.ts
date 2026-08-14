@@ -95,6 +95,36 @@ describe("conversation listing", () => {
   });
 });
 
+describe("heartbeat execution", () => {
+  test("executes the loaded routine instead of recreating HEARTBEAT.md", async () => {
+    const prompt = vi.fn(async () => undefined);
+    const service = Object.create(PiService.prototype) as PiService;
+    Object.defineProperty(service, "heartbeatSession", {
+      value: {
+        prompt,
+        messages: [
+          {
+            role: "assistant",
+            content: [{ type: "text", text: "HEARTBEAT_OK" }],
+          },
+        ],
+      },
+    });
+
+    await expect(service.runHeartbeat("Check the weather.")).resolves.toBe(
+      "HEARTBEAT_OK",
+    );
+    expect(prompt).toHaveBeenCalledWith(
+      expect.stringContaining("Do not create or modify HEARTBEAT.md"),
+    );
+    expect(prompt).toHaveBeenCalledWith(
+      expect.stringContaining(
+        "<heartbeat_routine>\nCheck the weather.\n</heartbeat_routine>",
+      ),
+    );
+  });
+});
+
 describe("model selection", () => {
   test("only exposes models with configured authentication", () => {
     const available = { provider: "anthropic", id: "available" };

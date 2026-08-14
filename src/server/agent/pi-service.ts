@@ -32,6 +32,29 @@ import type { EventHub } from "./events.js";
 import { AgentBusyError, RunCoordinator } from "./run-coordinator.js";
 import { projectTranscript } from "./transcript.js";
 
+function heartbeatFileGuidance(agentDir: string): string {
+  const path = join(agentDir, "HEARTBEAT.md");
+  return [
+    `Pi Agent stores its scheduled heartbeat configuration at ${path}.`,
+    `When the user asks to create or update HEARTBEAT.md without another path, write ${path}, not a relative file in the workspace.`,
+    "Use YAML frontmatter with enabled and every fields for the schedule.",
+  ].join(" ");
+}
+
+function heartbeatExecutionPrompt(routine: string): string {
+  return [
+    "Execute the scheduled heartbeat routine below now.",
+    "Treat it as work to perform, not as a request to configure the routine.",
+    "Do not create or modify HEARTBEAT.md during this run.",
+    "Report only the result that needs the user's attention.",
+    "If nothing needs attention, reply exactly HEARTBEAT_OK.",
+    "",
+    "<heartbeat_routine>",
+    routine,
+    "</heartbeat_routine>",
+  ].join("\n");
+}
+
 export interface ConversationSummary {
   id: string;
   name?: string;
@@ -124,6 +147,7 @@ export class PiService {
       config.agentDir,
       { projectTrusted: false },
     );
+    const heartbeatGuidance = heartbeatFileGuidance(config.agentDir);
     const modelRuntime = await ModelRuntime.create({
       authPath: join(config.agentDir, "auth.json"),
       modelsPath: join(config.agentDir, "models.json"),
@@ -143,9 +167,10 @@ export class PiService {
         agentDir: config.agentDir,
         settingsManager,
         modelRuntime,
-        ...(mcp
-          ? { resourceLoaderOptions: { extensionFactories: [mcp.extension()] } }
-          : {}),
+        resourceLoaderOptions: {
+          appendSystemPrompt: [heartbeatGuidance],
+          ...(mcp ? { extensionFactories: [mcp.extension()] } : {}),
+        },
       });
       return {
         ...(await createAgentSessionFromServices({
@@ -372,7 +397,7 @@ export class PiService {
   }
 
   async runHeartbeat(prompt: string): Promise<string> {
-    await this.heartbeatSession.prompt(prompt);
+    await this.heartbeatSession.prompt(heartbeatExecutionPrompt(prompt));
     const last = [...this.heartbeatSession.messages]
       .reverse()
       .find((message) => message.role === "assistant");
