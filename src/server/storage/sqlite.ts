@@ -31,6 +31,7 @@ interface HeartbeatRow {
   status: HeartbeatRunRecord["status"];
   summary: string | null;
   error: string | null;
+  details: string | null;
 }
 
 function mapOwner(row: OwnerRow): OwnerRecord {
@@ -60,6 +61,13 @@ function mapHeartbeat(row: HeartbeatRow): HeartbeatRunRecord {
     status: row.status,
     ...(row.summary === null ? {} : { summary: row.summary }),
     ...(row.error === null ? {} : { error: row.error }),
+    ...(row.details === null
+      ? {}
+      : {
+          details: JSON.parse(row.details) as NonNullable<
+            HeartbeatRunRecord["details"]
+          >,
+        }),
   };
 }
 
@@ -102,13 +110,22 @@ export class SqliteStore implements AppStore {
         finished_at INTEGER,
         status TEXT NOT NULL,
         summary TEXT,
-        error TEXT
+        error TEXT,
+        details TEXT
       );
       CREATE INDEX IF NOT EXISTS heartbeat_runs_started_at ON heartbeat_runs(started_at DESC);
       INSERT OR IGNORE INTO schema_migrations(version) VALUES (1);
       INSERT OR IGNORE INTO schema_migrations(version) VALUES (2);
       COMMIT;
     `);
+    const heartbeatColumns = this.database
+      .prepare("PRAGMA table_info(heartbeat_runs)")
+      .all() as unknown as Array<{ name: string }>;
+    if (!heartbeatColumns.some((column) => column.name === "details"))
+      this.database.exec("ALTER TABLE heartbeat_runs ADD COLUMN details TEXT");
+    this.database
+      .prepare("INSERT OR IGNORE INTO schema_migrations(version) VALUES (3)")
+      .run();
     const owner = await this.getOwner();
     if (!owner) this.database.prepare("DELETE FROM web_sessions").run();
   }
@@ -172,8 +189,8 @@ export class SqliteStore implements AppStore {
   async createHeartbeatRun(run: HeartbeatRunRecord): Promise<void> {
     this.database
       .prepare(
-        `INSERT INTO heartbeat_runs(id, started_at, finished_at, status, summary, error)
-         VALUES (?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO heartbeat_runs(id, started_at, finished_at, status, summary, error, details)
+         VALUES (?, ?, ?, ?, ?, ?, ?)`,
       )
       .run(
         run.id,
@@ -182,6 +199,7 @@ export class SqliteStore implements AppStore {
         run.status,
         run.summary ?? null,
         run.error ?? null,
+        run.details ? JSON.stringify(run.details) : null,
       );
   }
 
@@ -191,13 +209,14 @@ export class SqliteStore implements AppStore {
   ): Promise<void> {
     this.database
       .prepare(
-        `UPDATE heartbeat_runs SET finished_at = ?, status = ?, summary = ?, error = ? WHERE id = ?`,
+        `UPDATE heartbeat_runs SET finished_at = ?, status = ?, summary = ?, error = ?, details = ? WHERE id = ?`,
       )
       .run(
         update.finishedAt,
         update.status,
         update.summary ?? null,
         update.error ?? null,
+        update.details ? JSON.stringify(update.details) : null,
         id,
       );
   }

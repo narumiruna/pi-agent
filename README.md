@@ -8,7 +8,7 @@ The application uses TypeScript, Hono, React, Radix UI, SQLite or PostgreSQL, an
 
 ## Scope
 
-Pi Agent provides Web chat, Pocket ID-compatible OIDC, prompt and package management, MCP tools, and one `HEARTBEAT.md` routine.
+Pi Agent provides Web chat, native steering and follow-up queues, Pi session management, Pocket ID-compatible OIDC, prompt and package management, MCP tools, and one `HEARTBEAT.md` routine.
 
 It does not provide multiple users, messaging channels, workflows, cron jobs, a Web terminal, or horizontal scaling.
 
@@ -124,6 +124,8 @@ After adding access, select **Change model**, preview an available model, and co
 
 The selected model is applied to both Web chat and heartbeat, while the thinking menu only shows levels supported by that model.
 
+Settings also controls Pi's native steering and follow-up delivery modes, automatic compaction, automatic retry, and the active tools allowed by the server configuration.
+
 For non-interactive deployment, you may instead mount an existing `auth.json` or pass a provider environment variable through Compose, such as `ANTHROPIC_API_KEY`.
 
 Settings identifies environment and `models.json` credentials as externally managed and does not offer to remove them.
@@ -144,6 +146,12 @@ Set a `postgresql://` `DATABASE_URL` to use PostgreSQL for that Web state.
 
 Pi conversations remain native JSONL files under `/app/.pi/agent` in both database modes.
 
+The conversation details panel shows native session statistics and tree entries, and it uses Pi APIs for navigation, fork, clone, manual compaction, HTML or JSONL export, and JSONL import.
+
+Imported sessions are limited to 5 MB, are validated as Pi JSONL, use the configured workspace instead of the source machine path, and reject a duplicate session ID.
+
+Destructive session operations are rejected while chat or heartbeat work is active.
+
 Back up `/app/.pi/agent` and `/app/data` together for SQLite deployments.
 
 Back up `/app/.pi/agent` and PostgreSQL at a consistent maintenance point for PostgreSQL deployments.
@@ -151,6 +159,10 @@ Back up `/app/.pi/agent` and PostgreSQL at a consistent maintenance point for Po
 ## Workspace and tools
 
 `/workspace` is the fixed working directory for Pi tools.
+
+The chat composer offers slash-command completion and bounded `@file` search inside this directory.
+
+Workspace search returns relative paths, skips symlinks, secret-like files, VCS metadata, `node_modules`, and private agent directories, and never returns host absolute paths.
 
 `AGENT_TOOLS` defaults to `read,grep,find,ls,write`, so Pi can create or completely rewrite files in container-writable locations.
 
@@ -187,9 +199,13 @@ Pi packages and extensions execute arbitrary code with the application user's co
 
 Review every source before acknowledging the installation warning.
 
-TUI-specific extension components are not rendered in the browser.
+Web extensions can use tools, events, commands, `select`, `confirm`, `input`, `editor`, typed notifications, keyed status messages, string widgets, document titles, working labels, tool expansion state, and editor prefill.
 
-Web extensions can use tools, events, commands, `select`, `confirm`, `input`, `editor`, notifications, and status messages.
+Extension UI text has terminal control sequences removed and is bounded by count, size, and update-rate limits before it reaches the browser.
+
+TUI component factories from `ctx.ui.custom()`, component widgets, custom headers, custom footers, custom editors, raw terminal input, terminal themes, and renderer callbacks are not rendered or executed in the browser.
+
+See [`docs/research/pi-tui-web-compatibility.md`](docs/research/pi-tui-web-compatibility.md) for the compatibility analysis and design boundary.
 
 ## MCP
 

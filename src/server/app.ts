@@ -82,15 +82,25 @@ export function createApp(options: CreateAppOptions): Hono<AppBindings> {
     maxSize: 8_000_000,
     onError: (context) => context.json(apiError("bad_request"), 413),
   });
+  const importBodyLimit = bodyLimit({
+    maxSize: 12_000_000,
+    onError: (context) => context.json(apiError("bad_request"), 413),
+  });
   app.use("/api/*", (context, next) => {
     const path = context.req.path.split("/");
     const limit =
-      path.length === 5 &&
+      path.length === 4 &&
       path[1] === "api" &&
       path[2] === "conversations" &&
-      path[4] === "messages"
-        ? messageBodyLimit
-        : defaultBodyLimit;
+      path[3] === "import"
+        ? importBodyLimit
+        : path.length === 5 &&
+            path[1] === "api" &&
+            path[2] === "conversations" &&
+            path[4] !== undefined &&
+            ["follow-up", "messages", "steer"].includes(path[4])
+          ? messageBodyLimit
+          : defaultBodyLimit;
     return limit(context, next);
   });
   app.get("/health/live", (context) => context.json({ status: "ok" }));

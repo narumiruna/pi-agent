@@ -1,10 +1,26 @@
+import { writeFileSync } from "node:fs";
+import { access, mkdtemp, readFile, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import type { AuthInteraction } from "@earendil-works/pi-ai";
-import { describe, expect, test, vi } from "vitest";
+import { SessionManager } from "@earendil-works/pi-coding-agent";
+import { afterEach, describe, expect, test, vi } from "vitest";
 import { EventHub } from "../../src/server/agent/events.js";
 import { PiService } from "../../src/server/agent/pi-service.js";
 import { RunCoordinator } from "../../src/server/agent/run-coordinator.js";
 import { projectTranscript } from "../../src/server/agent/transcript.js";
 import { InteractionBroker } from "../../src/server/interactions/broker.js";
+import { WebExtensionState } from "../../src/server/interactions/web-state.js";
+
+const temporaryDirectories: string[] = [];
+
+afterEach(async () => {
+  await Promise.all(
+    temporaryDirectories
+      .splice(0)
+      .map((path) => rm(path, { force: true, recursive: true })),
+  );
+});
 
 describe("RunCoordinator", () => {
   test("allows exactly one run and becomes reusable after failure", async () => {
@@ -69,6 +85,114 @@ describe("EventHub", () => {
   });
 });
 
+describe("Pi event bridge", () => {
+  test("publishes thinking, tool updates, queue, retry, and completion with session identity", async () => {
+    const events = new EventHub();
+    const published: Array<{ type: string; data: unknown }> = [];
+    events.subscribe((event) => published.push(event));
+    let listener: ((event: never) => void) | undefined;
+    const session = {
+      sessionId: "session",
+      bindExtensions: vi.fn(async () => undefined),
+      subscribe: vi.fn((next: (event: never) => void) => {
+        listener = next;
+        return vi.fn();
+      }),
+      getSteeringMessages: () => ["change direction"],
+      getFollowUpMessages: () => ["then test"],
+    };
+    const service = Object.create(PiService.prototype) as PiService;
+    Object.defineProperties(service, {
+      events: { value: events },
+      interactions: { value: new InteractionBroker(events) },
+      extensionState: { value: new WebExtensionState(events) },
+      toolStartedAt: { value: new Map<string, number>() },
+    });
+
+    await (
+      service as unknown as {
+        bindSession(value: typeof session): Promise<void>;
+      }
+    ).bindSession(session);
+    listener?.({
+      type: "message_update",
+      assistantMessageEvent: { type: "thinking_start" },
+    } as never);
+    listener?.({
+      type: "message_update",
+      assistantMessageEvent: { type: "thinking_delta", delta: "reason" },
+    } as never);
+    listener?.({
+      type: "tool_execution_start",
+      toolCallId: "tool-1",
+      toolName: "bash",
+      args: { command: "echo ok" },
+    } as never);
+    listener?.({
+      type: "tool_execution_update",
+      toolCallId: "tool-1",
+      toolName: "bash",
+      args: { command: "echo ok" },
+      partialResult: {
+        content: [{ type: "text", text: "ok" }],
+        details: {},
+      },
+    } as never);
+    listener?.({
+      type: "queue_update",
+      steering: ["ignored event copy"],
+      followUp: [],
+    } as never);
+    listener?.({
+      type: "auto_retry_start",
+      attempt: 1,
+      maxAttempts: 3,
+      delayMs: 10,
+      errorMessage: "overloaded",
+    } as never);
+    listener?.({
+      type: "message_end",
+      message: { role: "assistant", timestamp: 42 },
+    } as never);
+
+    expect(published).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          type: "thinking_status",
+          data: { sessionId: "session", status: "running", delta: "reason" },
+        }),
+        expect.objectContaining({
+          type: "tool_status",
+          data: expect.objectContaining({
+            sessionId: "session",
+            id: "tool-1",
+            output: "ok",
+          }),
+        }),
+        expect.objectContaining({
+          type: "queue_update",
+          data: {
+            sessionId: "session",
+            steering: ["change direction"],
+            followUp: ["then test"],
+          },
+        }),
+        expect.objectContaining({
+          type: "agent_status",
+          data: expect.objectContaining({
+            sessionId: "session",
+            kind: "retry",
+          }),
+        }),
+        expect.objectContaining({
+          type: "message_complete",
+          data: { sessionId: "session", role: "assistant", timestamp: 42 },
+        }),
+      ]),
+    );
+  });
+});
+
 describe("conversation listing", () => {
   test("includes the active in-memory conversation before Pi persists it", async () => {
     const service = Object.create(PiService.prototype) as PiService;
@@ -95,6 +219,292 @@ describe("conversation listing", () => {
   });
 });
 
+describe("native session operations", () => {
+  test("forks through AgentSessionRuntime without copying session state", async () => {
+    const fork = vi.fn(async () => ({
+      cancelled: false,
+      selectedText: "edit this",
+    }));
+    const service = Object.create(PiService.prototype) as PiService;
+    Object.defineProperties(service, {
+      coordinator: { value: new RunCoordinator() },
+      runtime: {
+        value: {
+          session: {
+            sessionId: "session",
+            isIdle: true,
+            sessionManager: { getEntry: () => ({ id: "entry" }) },
+          },
+          fork,
+        },
+      },
+    });
+
+    await expect(
+      service.forkConversation("session", "entry", "before"),
+    ).resolves.toEqual({ id: "session", selectedText: "edit this" });
+    expect(fork).toHaveBeenCalledWith("entry", { position: "before" });
+  });
+
+  test("keeps the original JSONL unchanged when Pi creates a branch", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "pi-agent-session-"));
+    temporaryDirectories.push(directory);
+    const manager = SessionManager.create("/workspace", directory);
+    manager.appendMessage({
+      role: "user",
+      content: [{ type: "text", text: "original" }],
+      timestamp: 1,
+    });
+    const assistantId = manager.appendMessage({
+      role: "assistant",
+      content: [{ type: "text", text: "response" }],
+      api: "test",
+      provider: "test",
+      model: "test",
+      usage: {
+        input: 1,
+        output: 1,
+        cacheRead: 0,
+        cacheWrite: 0,
+        cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+      },
+      stopReason: "stop",
+      timestamp: 2,
+    });
+    const originalPath = manager.getSessionFile();
+    if (!originalPath) throw new Error("Session was not persisted");
+    const before = await readFile(originalPath, "utf8");
+
+    const branchPath = manager.createBranchedSession(assistantId);
+
+    expect(branchPath).toBeDefined();
+    expect(await readFile(originalPath, "utf8")).toBe(before);
+    expect(await readFile(branchPath as string, "utf8")).toContain("original");
+  });
+
+  test("rejects destructive session operations during an active run", async () => {
+    const coordinator = new RunCoordinator();
+    let release: (() => void) | undefined;
+    const active = coordinator.run(
+      "chat",
+      () =>
+        new Promise<void>((resolve) => {
+          release = resolve;
+        }),
+    );
+    const fork = vi.fn();
+    const service = Object.create(PiService.prototype) as PiService;
+    Object.defineProperties(service, {
+      coordinator: { value: coordinator },
+      runtime: {
+        value: {
+          session: { sessionId: "session", isIdle: false },
+          fork,
+        },
+      },
+    });
+
+    await expect(
+      service.forkConversation("session", "entry", "at"),
+    ).rejects.toMatchObject({ code: "agent_busy" });
+    expect(fork).not.toHaveBeenCalled();
+    release?.();
+    await active;
+  });
+
+  test("imports validated JSONL through a private temporary file", async () => {
+    const dataDir = await mkdtemp(join(tmpdir(), "pi-agent-import-"));
+    temporaryDirectories.push(dataDir);
+    let session = { sessionId: "current", isIdle: true };
+    let importedPath: string | undefined;
+    const runtime = {
+      get session() {
+        return session;
+      },
+      importFromJsonl: vi.fn(async (path: string, cwd: string) => {
+        importedPath = path;
+        expect(path.startsWith(dataDir)).toBe(true);
+        expect(cwd).toBe("/workspace");
+        session = { sessionId: "imported", isIdle: true };
+        return { cancelled: false };
+      }),
+    };
+    const service = Object.create(PiService.prototype) as PiService;
+    Object.defineProperties(service, {
+      config: { value: { dataDir, workspace: "/workspace" } },
+      coordinator: { value: new RunCoordinator() },
+      runtime: { value: runtime },
+      nativeSessions: { value: vi.fn(async () => []) },
+    });
+    const content = `${JSON.stringify({
+      type: "session",
+      version: 3,
+      id: "imported",
+      timestamp: new Date(0).toISOString(),
+      cwd: "/private/source",
+    })}\n`;
+
+    await expect(service.importConversation(content)).resolves.toBe("imported");
+    expect(importedPath).toBeDefined();
+    await expect(access(importedPath as string)).rejects.toThrow();
+  });
+
+  test("rejects malformed and duplicate session imports before writing", async () => {
+    const dataDir = await mkdtemp(join(tmpdir(), "pi-agent-import-"));
+    temporaryDirectories.push(dataDir);
+    const importFromJsonl = vi.fn();
+    const service = Object.create(PiService.prototype) as PiService;
+    Object.defineProperties(service, {
+      config: { value: { dataDir, workspace: "/workspace" } },
+      coordinator: { value: new RunCoordinator() },
+      runtime: {
+        value: {
+          session: { sessionId: "current", isIdle: true },
+          importFromJsonl,
+        },
+      },
+      nativeSessions: {
+        value: vi.fn(async () => [{ id: "duplicate" }]),
+      },
+    });
+
+    await expect(service.importConversation("not jsonl")).rejects.toThrow();
+    await expect(
+      service.importConversation(
+        `${JSON.stringify({
+          type: "session",
+          version: 3,
+          id: "bad\r\nheader",
+          timestamp: new Date(0).toISOString(),
+          cwd: "/workspace",
+        })}\n`,
+      ),
+    ).rejects.toThrow(/invalid/i);
+    await expect(
+      service.importConversation(
+        [
+          JSON.stringify({
+            type: "session",
+            version: 3,
+            id: "valid-import-id",
+            timestamp: new Date(0).toISOString(),
+            cwd: "/workspace",
+          }),
+          JSON.stringify({
+            type: "message",
+            id: "entry",
+            parentId: null,
+            timestamp: new Date(0).toISOString(),
+          }),
+        ].join("\n"),
+      ),
+    ).rejects.toThrow(/invalid/i);
+    await expect(
+      service.importConversation(
+        `${JSON.stringify({
+          type: "session",
+          version: 3,
+          id: "duplicate",
+          timestamp: new Date(0).toISOString(),
+          cwd: "/workspace",
+        })}\n`,
+      ),
+    ).rejects.toThrow(/already exists/i);
+    expect(importFromJsonl).not.toHaveBeenCalled();
+  });
+
+  test("exports through a cleaned temporary path with an opaque filename", async () => {
+    const dataDir = await mkdtemp(join(tmpdir(), "pi-agent-export-"));
+    temporaryDirectories.push(dataDir);
+    let outputPath: string | undefined;
+    const session = {
+      sessionId: "session-secret-path",
+      isIdle: true,
+      exportToJsonl: (path: string) => {
+        outputPath = path;
+        return path;
+      },
+    };
+    const service = Object.create(PiService.prototype) as PiService;
+    Object.defineProperties(service, {
+      config: { value: { dataDir } },
+      coordinator: { value: new RunCoordinator() },
+      runtime: { value: { session } },
+    });
+    vi.spyOn(session, "exportToJsonl").mockImplementation((path) => {
+      outputPath = path;
+      writeFileSync(path, "jsonl");
+      return path;
+    });
+
+    const exported = await service.exportConversation(
+      "session-secret-path",
+      "jsonl",
+    );
+
+    expect(exported.content.toString()).toBe("jsonl");
+    expect(exported.fileName).toBe("conversation-session-secr.jsonl");
+    expect(exported.fileName).not.toContain(dataDir);
+    await expect(access(outputPath as string)).rejects.toThrow();
+  });
+
+  test("applies queue, retry, compaction, and tool settings to AgentSession", () => {
+    const setSteeringMode = vi.fn();
+    const setFollowUpMode = vi.fn();
+    const setAutoCompactionEnabled = vi.fn();
+    const setAutoRetryEnabled = vi.fn();
+    const setActiveToolsByName = vi.fn();
+    const events = new EventHub();
+    const session = {
+      sessionId: "session",
+      isIdle: true,
+      steeringMode: "one-at-a-time",
+      followUpMode: "all",
+      autoCompactionEnabled: false,
+      autoRetryEnabled: true,
+      getActiveToolNames: () => ["read", "edit"],
+      getAllTools: () => [
+        { name: "read", description: "Read" },
+        { name: "edit", description: "Edit" },
+      ],
+      setSteeringMode,
+      setFollowUpMode,
+      setAutoCompactionEnabled,
+      setAutoRetryEnabled,
+      setActiveToolsByName,
+    };
+    const service = Object.create(PiService.prototype) as PiService;
+    Object.defineProperties(service, {
+      coordinator: { value: new RunCoordinator() },
+      events: { value: events },
+      runtime: { value: { session } },
+    });
+
+    service.setPreferences({
+      steeringMode: "one-at-a-time",
+      followUpMode: "all",
+      autoCompaction: false,
+      autoRetry: true,
+      activeTools: ["read", "edit", "read"],
+    });
+
+    expect(setSteeringMode).toHaveBeenCalledWith("one-at-a-time");
+    expect(setFollowUpMode).toHaveBeenCalledWith("all");
+    expect(setAutoCompactionEnabled).toHaveBeenCalledWith(false);
+    expect(setAutoRetryEnabled).toHaveBeenCalledWith(true);
+    expect(setActiveToolsByName).toHaveBeenCalledWith(["read", "edit"]);
+
+    vi.clearAllMocks();
+    expect(() =>
+      service.setPreferences({
+        steeringMode: "all",
+        activeTools: ["unknown"],
+      }),
+    ).toThrow(/active tools/i);
+    expect(setSteeringMode).not.toHaveBeenCalled();
+  });
+});
+
 describe("conversation prompting", () => {
   test("sends image attachments through Pi's native prompt options", async () => {
     const prompt = vi.fn(async () => undefined);
@@ -117,6 +527,115 @@ describe("conversation prompting", () => {
     expect(prompt).toHaveBeenCalledWith("", { images: [image] });
   });
 
+  test("queues steering input on the active Pi session", async () => {
+    const coordinator = new RunCoordinator();
+    let release: (() => void) | undefined;
+    const activeRun = coordinator.run(
+      "chat",
+      () =>
+        new Promise<void>((resolve) => {
+          release = resolve;
+        }),
+    );
+    const prompt = vi.fn(async () => undefined);
+    const service = Object.create(PiService.prototype) as PiService;
+    Object.defineProperties(service, {
+      coordinator: { value: coordinator },
+      runtime: {
+        value: {
+          session: { sessionId: "session", isStreaming: true, prompt },
+        },
+      },
+    });
+    const image = {
+      type: "image" as const,
+      data: "aW1hZ2U=",
+      mimeType: "image/png",
+    };
+
+    await service.steer("session", "Change direction", [image]);
+
+    expect(prompt).toHaveBeenCalledWith("Change direction", {
+      streamingBehavior: "steer",
+      images: [image],
+    });
+    release?.();
+    await activeRun;
+  });
+
+  test("queues follow-up input through Pi's native queue", async () => {
+    const coordinator = new RunCoordinator();
+    let release: (() => void) | undefined;
+    const activeRun = coordinator.run(
+      "chat",
+      () =>
+        new Promise<void>((resolve) => {
+          release = resolve;
+        }),
+    );
+    const prompt = vi.fn(async () => undefined);
+    const service = Object.create(PiService.prototype) as PiService;
+    Object.defineProperties(service, {
+      coordinator: { value: coordinator },
+      runtime: {
+        value: {
+          session: { sessionId: "session", isStreaming: true, prompt },
+        },
+      },
+    });
+
+    await service.followUp("session", "Run tests next");
+
+    expect(prompt).toHaveBeenCalledWith("Run tests next", {
+      streamingBehavior: "followUp",
+    });
+    release?.();
+    await activeRun;
+  });
+
+  test("restores native queued messages when clearing the queue", () => {
+    const events = new EventHub();
+    const clearQueue = vi.fn(() => ({
+      steering: ["change direction"],
+      followUp: ["run tests"],
+    }));
+    const service = Object.create(PiService.prototype) as PiService;
+    Object.defineProperties(service, {
+      events: { value: events },
+      runtime: {
+        value: {
+          session: {
+            sessionId: "session",
+            clearQueue,
+            getSteeringMessages: () => [],
+            getFollowUpMessages: () => [],
+          },
+        },
+      },
+    });
+
+    expect(service.clearQueue("session")).toEqual({
+      queue: { sessionId: "session", steering: [], followUp: [] },
+      restored: ["change direction", "run tests"],
+    });
+  });
+
+  test("rejects steering without an active chat run", async () => {
+    const service = Object.create(PiService.prototype) as PiService;
+    Object.defineProperties(service, {
+      coordinator: { value: new RunCoordinator() },
+      runtime: {
+        value: {
+          session: { sessionId: "session", isStreaming: false },
+        },
+      },
+    });
+
+    await expect(service.steer("session", "Change direction")).rejects.toThrow(
+      /active chat run/i,
+    );
+  });
+
   test("rejects malformed image data before starting a run", async () => {
     const service = Object.create(PiService.prototype) as PiService;
 
@@ -129,24 +648,59 @@ describe("conversation prompting", () => {
 });
 
 describe("heartbeat execution", () => {
-  test("executes the loaded routine instead of recreating HEARTBEAT.md", async () => {
-    const prompt = vi.fn(async () => undefined);
+  test("executes the loaded routine and captures diagnostic details", async () => {
+    const messages: Array<Record<string, unknown>> = [];
+    const prompt = vi.fn(async () => {
+      messages.push(
+        {
+          role: "assistant",
+          timestamp: 1,
+          content: [
+            { type: "thinking", thinking: "Checking the weather endpoint." },
+            {
+              type: "toolCall",
+              id: "tool-1",
+              name: "bash",
+              arguments: {
+                command: "curl weather.example",
+                apiKey: "must-not-leak",
+              },
+            },
+            { type: "text", text: "Weather lookup failed." },
+          ],
+        },
+        {
+          role: "toolResult",
+          timestamp: 2,
+          toolCallId: "tool-1",
+          toolName: "bash",
+          content: [{ type: "text", text: "connection refused" }],
+          isError: true,
+        },
+      );
+    });
     const service = Object.create(PiService.prototype) as PiService;
     Object.defineProperty(service, "heartbeatSession", {
-      value: {
-        prompt,
-        messages: [
+      value: { prompt, messages },
+    });
+
+    await expect(service.runHeartbeat("Check the weather.")).resolves.toEqual({
+      response: "Weather lookup failed.",
+      details: {
+        response: "Weather lookup failed.",
+        reasoning: "Checking the weather endpoint.",
+        tools: [
           {
-            role: "assistant",
-            content: [{ type: "text", text: "HEARTBEAT_OK" }],
+            id: "tool-1",
+            name: "bash",
+            input:
+              '{\n  "command": "curl weather.example",\n  "apiKey": "[REDACTED]"\n}',
+            output: "connection refused",
+            isError: true,
           },
         ],
       },
     });
-
-    await expect(service.runHeartbeat("Check the weather.")).resolves.toBe(
-      "HEARTBEAT_OK",
-    );
     expect(prompt).toHaveBeenCalledWith(
       expect.stringContaining("Do not create or modify HEARTBEAT.md"),
     );
@@ -155,6 +709,32 @@ describe("heartbeat execution", () => {
         "<heartbeat_routine>\nCheck the weather.\n</heartbeat_routine>",
       ),
     );
+  });
+
+  test("attaches partial diagnostics when heartbeat execution throws", async () => {
+    const messages: Array<Record<string, unknown>> = [];
+    const prompt = vi.fn(async () => {
+      messages.push({
+        role: "assistant",
+        timestamp: 1,
+        content: [
+          { type: "thinking", thinking: "The provider request failed." },
+        ],
+      });
+      throw new Error("Provider unavailable");
+    });
+    const service = Object.create(PiService.prototype) as PiService;
+    Object.defineProperty(service, "heartbeatSession", {
+      value: { prompt, messages },
+    });
+
+    await expect(
+      service.runHeartbeat("Check the weather."),
+    ).rejects.toMatchObject({
+      name: "HeartbeatExecutionError",
+      message: "Provider unavailable",
+      details: { reasoning: "The provider request failed." },
+    });
   });
 });
 
@@ -725,7 +1305,7 @@ describe("provider access", () => {
 });
 
 describe("transcript projection", () => {
-  test("keeps semantic message and tool content without exposing thinking", () => {
+  test("keeps semantic message, thinking, and tool content", () => {
     const transcript = projectTranscript([
       {
         role: "user",
@@ -760,9 +1340,17 @@ describe("transcript projection", () => {
         stopReason: "stop",
         timestamp: 2,
       },
+      {
+        role: "toolResult",
+        toolCallId: "call-1",
+        toolName: "read",
+        content: [{ type: "text", text: "file contents" }],
+        details: { diff: "+added" },
+        isError: false,
+        timestamp: 3,
+      },
     ]);
 
-    expect(JSON.stringify(transcript)).not.toContain("secret");
     expect(transcript).toMatchObject([
       {
         role: "user",
@@ -772,7 +1360,14 @@ describe("transcript projection", () => {
       {
         role: "assistant",
         text: "Hi",
-        tools: [{ id: "call-1", name: "read" }],
+        thinking: "secret",
+        tools: [
+          {
+            id: "call-1",
+            name: "read",
+            result: { text: "file contents", diff: "+added", isError: false },
+          },
+        ],
       },
     ]);
   });

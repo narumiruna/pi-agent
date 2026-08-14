@@ -1,3 +1,4 @@
+import { statSync } from "node:fs";
 import { unlink } from "node:fs/promises";
 import { join, sep } from "node:path";
 import type { ThinkingLevel } from "@earendil-works/pi-agent-core";
@@ -22,62 +23,134 @@ import {
   SessionManager,
   SettingsManager,
 } from "@earendil-works/pi-coding-agent";
-import {
-  MAX_CHAT_IMAGE_BYTES,
-  MAX_CHAT_IMAGES,
-  normalizeChatImageMimeType,
+import type {
+  AgentPreferences,
+  AgentQueueState,
+  AgentStats,
+  ConversationAgentState,
+  QueueMode,
 } from "../../shared/contracts.js";
 import type { AppConfig } from "../config.js";
+import { HeartbeatExecutionError } from "../heartbeat/scheduler.js";
 import type { InteractionBroker } from "../interactions/broker.js";
 import {
-  createHeadlessTheme,
-  createWebExtensionUi,
-} from "../interactions/ui.js";
+  sanitizeExtensionText,
+  WebExtensionState,
+} from "../interactions/web-state.js";
 import type { McpManager } from "../mcp/manager.js";
+import type { HeartbeatRunDetails } from "../storage/types.js";
 import type { EventHub } from "./events.js";
+import {
+  heartbeatExecutionPrompt,
+  heartbeatFileGuidance,
+  validateUserInput,
+} from "./prompt-input.js";
 import { AgentBusyError, RunCoordinator } from "./run-coordinator.js";
+import { bindWebSessionEvents } from "./session-events.js";
+import {
+  type ConversationExport,
+  exportSession,
+  validateSessionImport,
+  withSessionImport,
+} from "./session-transfer.js";
 import { projectTranscript } from "./transcript.js";
+import { boundedQueue, projectSessionTree } from "./web-projection.js";
 
-function validatePromptImages(
-  images: readonly ImageContent[] | undefined,
-): ImageContent[] {
-  if (!images) return [];
-  if (images.length > MAX_CHAT_IMAGES) throw new Error("Too many images");
-  let totalBytes = 0;
-  return images.map((image) => {
-    const mimeType = normalizeChatImageMimeType(image.mimeType);
-    if (!mimeType) throw new Error("Image type is invalid");
-    const bytes = Buffer.from(image.data, "base64");
-    if (bytes.length < 1 || bytes.toString("base64") !== image.data)
-      throw new Error("Image data is invalid");
-    totalBytes += bytes.length;
-    if (totalBytes > MAX_CHAT_IMAGE_BYTES)
-      throw new Error("Images are too large");
-    return { type: "image", data: image.data, mimeType };
-  });
+function redactHeartbeatText(value: string): string {
+  return value
+    .replace(/\b(Bearer)\s+[A-Za-z0-9._~+/-]+=*/gi, "$1 [REDACTED]")
+    .replace(
+      /((?:api[_-]?key|token|password|secret|authorization)\s*[=:]\s*)(?:"[^"]*"|'[^']*'|[^\s,;&]+)/gi,
+      "$1[REDACTED]",
+    );
 }
 
-function heartbeatFileGuidance(agentDir: string): string {
-  const path = join(agentDir, "HEARTBEAT.md");
-  return [
-    `Pi Agent stores its scheduled heartbeat configuration at ${path}.`,
-    `When the user asks to create or update HEARTBEAT.md without another path, write ${path}, not a relative file in the workspace.`,
-    "Use YAML frontmatter with enabled and every fields for the schedule.",
-  ].join(" ");
+function stringifyHeartbeatInput(value: unknown): string | undefined {
+  try {
+    const json = JSON.stringify(
+      value,
+      (key, item: unknown) =>
+        key && /api[_-]?key|token|password|secret|authorization/i.test(key)
+          ? "[REDACTED]"
+          : item,
+      2,
+    );
+    return json === undefined
+      ? undefined
+      : sanitizeExtensionText(redactHeartbeatText(json), 2_000);
+  } catch {
+    return "[Input could not be serialized]";
+  }
 }
 
-function heartbeatExecutionPrompt(routine: string): string {
-  return [
-    "Execute the scheduled heartbeat routine below now.",
-    "Treat it as work to perform, not as a request to configure the routine.",
-    "Do not create or modify HEARTBEAT.md during this run.",
-    "Report only the result that needs the user's attention.",
-    "If nothing needs attention, reply exactly HEARTBEAT_OK.",
-    "",
-    "<heartbeat_routine>",
-    routine,
-    "</heartbeat_routine>",
-  ].join("\n");
+function heartbeatResponse(
+  messages: Parameters<typeof projectTranscript>[0],
+): string {
+  const last = [...messages]
+    .reverse()
+    .find((message) => message.role === "assistant");
+  if (!last || !Array.isArray(last.content)) return "";
+  return sanitizeExtensionText(
+    redactHeartbeatText(
+      last.content
+        .filter(
+          (part): part is { type: "text"; text: string } =>
+            part.type === "text",
+        )
+        .map((part) => part.text)
+        .join(""),
+    ),
+    20_000,
+  );
+}
+
+function projectHeartbeatDetails(
+  messages: Parameters<typeof projectTranscript>[0],
+  response: string,
+): HeartbeatRunDetails {
+  const transcript = projectTranscript(messages);
+  const reasoning = transcript
+    .flatMap((message) => (message.thinking ? [message.thinking] : []))
+    .join("\n\n");
+  const tools = transcript.flatMap((message) =>
+    (message.tools ?? []).map((tool) => {
+      const input = stringifyHeartbeatInput(tool.arguments);
+      return {
+        id: sanitizeExtensionText(tool.id, 200),
+        name: sanitizeExtensionText(tool.name, 200),
+        ...(input ? { input } : {}),
+        ...(tool.result?.text
+          ? {
+              output: sanitizeExtensionText(
+                redactHeartbeatText(tool.result.text),
+                5_000,
+              ),
+            }
+          : {}),
+        ...(tool.result?.diff
+          ? {
+              diff: sanitizeExtensionText(
+                redactHeartbeatText(tool.result.diff),
+                2_000,
+              ),
+            }
+          : {}),
+        isError: tool.result?.isError ?? false,
+      };
+    }),
+  );
+  return {
+    ...(response ? { response } : {}),
+    ...(reasoning
+      ? {
+          reasoning: sanitizeExtensionText(
+            redactHeartbeatText(reasoning),
+            20_000,
+          ),
+        }
+      : {}),
+    ...(tools.length > 0 ? { tools: tools.slice(0, 10) } : {}),
+  };
 }
 
 export interface ConversationSummary {
@@ -135,6 +208,7 @@ export class PiService {
   readonly settingsManager: SettingsManager;
   readonly packageManager: DefaultPackageManager;
   private readonly runtime: AgentSessionRuntime;
+  private readonly extensionState: WebExtensionState;
   private providerLoginAbort: AbortController | undefined;
   private providerLoginSettled: Promise<void> | undefined;
   private currentProviderAuthTask: ProviderAuthTask | undefined;
@@ -154,6 +228,7 @@ export class PiService {
     this.settingsManager = settingsManager;
     this.packageManager = packageManager;
     this.runtime = runtime;
+    this.extensionState = new WebExtensionState(events);
     runtime.setRebindSession(async (session) => this.bindSession(session));
     packageManager.setProgressCallback((event) =>
       this.events.publish("package_progress", event),
@@ -244,44 +319,11 @@ export class PiService {
 
   private async bindSession(session: AgentSession): Promise<void> {
     this.unsubscribe?.();
-    await session.bindExtensions({
-      mode: "rpc",
-      uiContext: createWebExtensionUi(
-        this.interactions,
-        this.events,
-        createHeadlessTheme(),
-      ),
-      abortHandler: () => void session.abort(),
-      onError: (error) =>
-        this.events.publish("notification", {
-          type: "error",
-          message: error.error,
-        }),
-    });
-    this.unsubscribe = session.subscribe((event) => {
-      if (
-        event.type === "message_update" &&
-        event.assistantMessageEvent.type === "text_delta"
-      ) {
-        this.events.publish("message_delta", {
-          sessionId: session.sessionId,
-          delta: event.assistantMessageEvent.delta,
-        });
-      } else if (event.type === "tool_execution_start") {
-        this.events.publish("tool_status", {
-          status: "running",
-          id: event.toolCallId,
-          name: event.toolName,
-          args: event.args,
-        });
-      } else if (event.type === "tool_execution_end") {
-        this.events.publish("tool_status", {
-          status: event.isError ? "error" : "done",
-          id: event.toolCallId,
-          name: event.toolName,
-          result: event.result,
-        });
-      }
+    this.unsubscribe = await bindWebSessionEvents({
+      session,
+      events: this.events,
+      interactions: this.interactions,
+      extensionState: this.extensionState,
     });
   }
 
@@ -291,6 +333,80 @@ export class PiService {
 
   get activeSession(): AgentSession {
     return this.runtime.session;
+  }
+
+  private queueState(session = this.activeSession): AgentQueueState {
+    return {
+      sessionId: session.sessionId,
+      steering: boundedQueue(session.getSteeringMessages()),
+      followUp: boundedQueue(session.getFollowUpMessages()),
+    };
+  }
+
+  private clearCurrentQueue() {
+    const session = this.activeSession;
+    const cleared = session.clearQueue();
+    const queue = this.queueState(session);
+    this.events.publish("queue_update", queue);
+    return {
+      queue,
+      restored: [...cleared.steering, ...cleared.followUp],
+    };
+  }
+
+  preferences(): AgentPreferences {
+    const session = this.activeSession;
+    return {
+      steeringMode: session.steeringMode,
+      followUpMode: session.followUpMode,
+      autoCompaction: session.autoCompactionEnabled,
+      autoRetry: session.autoRetryEnabled,
+      activeTools: session.getActiveToolNames(),
+      availableTools: session.getAllTools().map((tool) => ({
+        name: tool.name,
+        description: tool.description,
+      })),
+    };
+  }
+
+  private stats(): AgentStats {
+    const {
+      sessionFile,
+      sessionId: _sessionId,
+      ...stats
+    } = this.activeSession.getSessionStats();
+    const model = this.activeSession.model;
+    let sessionBytes: number | undefined;
+    if (sessionFile) {
+      try {
+        sessionBytes = statSync(sessionFile).size;
+      } catch {
+        // A new in-memory session may not have a file yet.
+      }
+    }
+    return {
+      ...stats,
+      ...(model
+        ? {
+            model: {
+              provider: model.provider,
+              id: model.id,
+              name: model.name,
+            },
+          }
+        : {}),
+      ...(sessionBytes !== undefined ? { sessionBytes } : {}),
+    };
+  }
+
+  private requireActiveConversation(id: string): void {
+    if (id !== this.activeSessionId)
+      throw new Error("Conversation is not the active conversation");
+  }
+
+  private requireIdle(): void {
+    if (!this.coordinator.isIdle || !this.activeSession.isIdle)
+      throw new AgentBusyError();
   }
 
   private async nativeSessions() {
@@ -329,6 +445,37 @@ export class PiService {
     await this.coordinator.waitForIdle();
     await this.runtime.newSession();
     return this.activeSessionId;
+  }
+
+  async activateConversation(id: string): Promise<void> {
+    this.requireIdle();
+    await this.switchConversation(id);
+  }
+
+  conversationState(id: string): ConversationAgentState {
+    this.requireActiveConversation(id);
+    const tree = projectSessionTree(
+      this.activeSession.sessionManager.getTree(),
+    );
+    return {
+      sessionId: id,
+      running:
+        this.coordinator.currentKind === "chat" &&
+        this.activeSession.isStreaming,
+      queue: this.queueState(),
+      preferences: this.preferences(),
+      stats: this.stats(),
+      tree: tree.tree,
+      leafId: this.activeSession.sessionManager.getLeafId(),
+      treeTruncated: tree.truncated,
+      extensionUi: this.extensionState.snapshot(),
+    };
+  }
+
+  setComposerDraft(id: string, text: string): void {
+    this.requireActiveConversation(id);
+    if (text.length > 100_000) throw new Error("Message is invalid");
+    this.extensionState.setComposerFromClient(text);
   }
 
   async switchConversation(id: string): Promise<void> {
@@ -382,10 +529,7 @@ export class PiService {
     message: string,
     images?: ImageContent[],
   ): Promise<string> {
-    const text = message.trim();
-    const promptImages = validatePromptImages(images);
-    if ((text.length < 1 && promptImages.length < 1) || text.length > 100_000)
-      throw new Error("Message is invalid");
+    const input = validateUserInput(message, images);
     if (!this.coordinator.isIdle) throw new AgentBusyError();
     await this.switchConversation(id);
     if (!this.coordinator.isIdle) throw new AgentBusyError();
@@ -400,9 +544,11 @@ export class PiService {
             status: "running",
           });
           try {
-            if (promptImages.length > 0)
-              await this.runtime.session.prompt(text, { images: promptImages });
-            else await this.runtime.session.prompt(text);
+            if (input.images.length > 0)
+              await this.runtime.session.prompt(input.text, {
+                images: input.images,
+              });
+            else await this.runtime.session.prompt(input.text);
             this.events.publish("run_status", {
               runId,
               sessionId: id,
@@ -424,22 +570,226 @@ export class PiService {
     return runId;
   }
 
-  async abort(): Promise<void> {
-    await this.coordinator.abort();
+  async steer(
+    id: string,
+    message: string,
+    images?: ImageContent[],
+  ): Promise<void> {
+    const input = validateUserInput(message, images);
+    if (
+      this.coordinator.currentKind !== "chat" ||
+      id !== this.activeSessionId ||
+      !this.runtime.session.isStreaming
+    )
+      throw new Error(
+        "Steering requires an active chat run in this conversation",
+      );
+    await this.runtime.session.prompt(input.text, {
+      streamingBehavior: "steer",
+      ...(input.images.length > 0 ? { images: input.images } : {}),
+    });
   }
 
-  async runHeartbeat(prompt: string): Promise<string> {
-    await this.heartbeatSession.prompt(heartbeatExecutionPrompt(prompt));
-    const last = [...this.heartbeatSession.messages]
-      .reverse()
-      .find((message) => message.role === "assistant");
-    if (!last || !Array.isArray(last.content)) return "";
-    return last.content
-      .filter(
-        (part): part is { type: "text"; text: string } => part.type === "text",
+  async followUp(
+    id: string,
+    message: string,
+    images?: ImageContent[],
+  ): Promise<void> {
+    const input = validateUserInput(message, images);
+    if (
+      this.coordinator.currentKind !== "chat" ||
+      id !== this.activeSessionId ||
+      !this.runtime.session.isStreaming
+    )
+      throw new Error(
+        "Follow-up requires an active chat run in this conversation",
+      );
+    await this.runtime.session.prompt(input.text, {
+      streamingBehavior: "followUp",
+      ...(input.images.length > 0 ? { images: input.images } : {}),
+    });
+  }
+
+  clearQueue(id: string) {
+    this.requireActiveConversation(id);
+    return this.clearCurrentQueue();
+  }
+
+  async abort() {
+    const chat = this.coordinator.currentKind === "chat";
+    await this.coordinator.abort();
+    return chat ? this.clearCurrentQueue() : undefined;
+  }
+
+  setPreferences(input: {
+    steeringMode?: QueueMode;
+    followUpMode?: QueueMode;
+    autoCompaction?: boolean;
+    autoRetry?: boolean;
+    activeTools?: string[];
+  }): AgentPreferences {
+    this.requireIdle();
+    const session = this.activeSession;
+    const activeTools = input.activeTools
+      ? [...new Set(input.activeTools)]
+      : undefined;
+    if (activeTools) {
+      const available = new Set(session.getAllTools().map((tool) => tool.name));
+      if (
+        activeTools.length < 1 ||
+        activeTools.some((name) => !available.has(name))
       )
-      .map((part) => part.text)
-      .join("");
+        throw new Error("Active tools are invalid");
+    }
+    if (input.steeringMode) session.setSteeringMode(input.steeringMode);
+    if (input.followUpMode) session.setFollowUpMode(input.followUpMode);
+    if (input.autoCompaction !== undefined)
+      session.setAutoCompactionEnabled(input.autoCompaction);
+    if (input.autoRetry !== undefined)
+      session.setAutoRetryEnabled(input.autoRetry);
+    if (activeTools) session.setActiveToolsByName(activeTools);
+    const preferences = this.preferences();
+    this.events.publish("agent_config", {
+      sessionId: session.sessionId,
+      preferences,
+    });
+    return preferences;
+  }
+
+  async navigateConversationTree(
+    id: string,
+    targetId: string,
+    options: {
+      summarize?: boolean;
+      customInstructions?: string;
+      label?: string;
+    },
+  ) {
+    this.requireIdle();
+    await this.switchConversation(id);
+    this.requireIdle();
+    if (!this.activeSession.sessionManager.getEntry(targetId))
+      throw new Error("Session entry not found");
+    return this.coordinator.run(
+      "maintenance",
+      () => this.activeSession.navigateTree(targetId, options),
+      async () => this.activeSession.abortBranchSummary(),
+    );
+  }
+
+  async forkConversation(
+    id: string,
+    targetId: string,
+    position: "at" | "before",
+  ): Promise<{ id: string; selectedText?: string }> {
+    this.requireIdle();
+    await this.switchConversation(id);
+    this.requireIdle();
+    if (!this.activeSession.sessionManager.getEntry(targetId))
+      throw new Error("Session entry not found");
+    const result = await this.coordinator.run("maintenance", () =>
+      this.runtime.fork(targetId, { position }),
+    );
+    if (result.cancelled)
+      throw new DOMException("Session fork was cancelled", "AbortError");
+    return {
+      id: this.activeSessionId,
+      ...(result.selectedText ? { selectedText: result.selectedText } : {}),
+    };
+  }
+
+  async compactConversation(
+    id: string,
+    customInstructions?: string,
+  ): Promise<{
+    summary: string;
+    tokensBefore: number;
+    estimatedTokensAfter?: number;
+  }> {
+    this.requireIdle();
+    await this.switchConversation(id);
+    this.requireIdle();
+    const instructions = customInstructions?.trim();
+    if (instructions && instructions.length > 10_000)
+      throw new Error("Compaction instructions are invalid");
+    const result = await this.coordinator.run(
+      "maintenance",
+      () => this.activeSession.compact(instructions),
+      async () => this.activeSession.abortCompaction(),
+    );
+    return {
+      summary: result.summary,
+      tokensBefore: result.tokensBefore,
+      ...(result.estimatedTokensAfter !== undefined
+        ? { estimatedTokensAfter: result.estimatedTokensAfter }
+        : {}),
+    };
+  }
+
+  async exportConversation(
+    id: string,
+    format: "html" | "jsonl",
+  ): Promise<ConversationExport> {
+    this.requireActiveConversation(id);
+    this.requireIdle();
+    return this.coordinator.run("maintenance", () =>
+      exportSession(this.activeSession, this.config.dataDir, id, format),
+    );
+  }
+
+  async importConversation(content: string): Promise<string> {
+    this.requireIdle();
+    validateSessionImport(
+      content,
+      new Set((await this.nativeSessions()).map((session) => session.id)),
+    );
+    const result = await this.coordinator.run("maintenance", () =>
+      withSessionImport(this.config.dataDir, content, (inputPath) =>
+        this.runtime.importFromJsonl(inputPath, this.config.workspace),
+      ),
+    );
+    if (result.cancelled)
+      throw new DOMException("Session import was cancelled", "AbortError");
+    return this.activeSessionId;
+  }
+
+  heartbeatRunDetails(
+    startedAt: number,
+    finishedAt = Date.now(),
+  ): HeartbeatRunDetails | undefined {
+    const messages = this.heartbeatSession.messages.filter(
+      (message) =>
+        message.timestamp >= startedAt && message.timestamp <= finishedAt,
+    );
+    if (messages.length === 0) return undefined;
+    const response = heartbeatResponse(messages);
+    return projectHeartbeatDetails(messages, response);
+  }
+
+  async runHeartbeat(prompt: string) {
+    const previousMessages = new Set(this.heartbeatSession.messages);
+    try {
+      await this.heartbeatSession.prompt(heartbeatExecutionPrompt(prompt));
+    } catch (cause) {
+      const runMessages = this.heartbeatSession.messages.filter(
+        (message) => !previousMessages.has(message),
+      );
+      throw new HeartbeatExecutionError(
+        cause instanceof Error
+          ? redactHeartbeatText(cause.message)
+          : "Heartbeat failed",
+        projectHeartbeatDetails(runMessages, heartbeatResponse(runMessages)),
+        cause,
+      );
+    }
+    const runMessages = this.heartbeatSession.messages.filter(
+      (message) => !previousMessages.has(message),
+    );
+    const response = heartbeatResponse(runMessages);
+    return {
+      response,
+      details: projectHeartbeatDetails(runMessages, response),
+    };
   }
 
   async abortHeartbeat(): Promise<void> {
@@ -453,6 +803,12 @@ export class PiService {
     await this.heartbeatSession.setModel(model);
     try {
       await this.runtime.session.setModel(model);
+      this.events.publish("agent_status", {
+        sessionId: this.activeSessionId,
+        kind: "model",
+        status: "changed",
+        message: `${model.provider}/${model.id}`,
+      });
     } catch (error) {
       if (previousHeartbeatModel)
         await this.heartbeatSession.setModel(previousHeartbeatModel);

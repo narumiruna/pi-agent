@@ -28,11 +28,16 @@ test("persists HEARTBEAT.md and records a quiet manual run", async ({
   );
   await page.getByRole("button", { name: "Run now" }).click();
   expect((await completed).status()).toBe(200);
-  await expect(page.getByText("quiet", { exact: true })).toBeVisible();
-  await expect(page.getByText("HEARTBEAT_OK", { exact: true })).toBeVisible();
+  await expect(page.getByText("Quiet", { exact: true })).toBeVisible();
+  await expect(
+    page.locator("span").getByText("HEARTBEAT_OK", { exact: true }),
+  ).toBeVisible();
+  await page.getByText("View details", { exact: true }).click();
+  await expect(page.getByText("Full response", { exact: true })).toBeVisible();
 
   await page.reload();
   await page.getByRole("button", { name: "Heartbeat" }).click();
   await expect(page.getByLabel("HEARTBEAT.md")).toHaveValue(content);
-  await expect(page.getByText("quiet", { exact: true })).toBeVisible();
+  await expect(page.getByText("Quiet", { exact: true })).toBeVisible();
+  await expect(page.getByText("View details", { exact: true })).toBeVisible();
 });

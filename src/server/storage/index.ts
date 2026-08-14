@@ -11,8 +11,10 @@ export function createStore(config: AppConfig): AppStore {
 
 export type {
   AppStore,
+  HeartbeatRunDetails,
   HeartbeatRunRecord,
   HeartbeatRunStatus,
   HeartbeatRunUpdate,
+  HeartbeatToolDetail,
   WebSessionRecord,
 } from "./types.js";

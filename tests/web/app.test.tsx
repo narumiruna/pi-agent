@@ -10,7 +10,7 @@ import {
 } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
-import { App } from "../../src/web/App.js";
+import { App, updateLiveTools } from "../../src/web/App.js";
 import { AuthNotification } from "../../src/web/components/AuthNotification.js";
 import { DisconnectProviderDialog } from "../../src/web/components/DisconnectProviderDialog.js";
 import { InteractionDialog } from "../../src/web/components/InteractionDialog.js";
@@ -18,12 +18,49 @@ import { ModelAccessDialog } from "../../src/web/components/ModelAccessDialog.js
 import { ProviderAuthDialog } from "../../src/web/components/ProviderAuthDialog.js";
 import i18n, { setLanguage } from "../../src/web/i18n.js";
 import { ChatPage } from "../../src/web/pages/ChatPage.js";
+import { HeartbeatPage } from "../../src/web/pages/HeartbeatPage.js";
 import { SettingsPage } from "../../src/web/pages/SettingsPage.js";
 
 describe("web application", () => {
+  test("deduplicates live tool updates and ignores another conversation", () => {
+    const initial = [
+      {
+        sessionId: "session",
+        id: "tool",
+        name: "bash",
+        status: "running" as const,
+        startedAt: 1,
+        updatedAt: 1,
+        durationMs: 0,
+      },
+    ];
+    const updated = updateLiveTools(
+      initial,
+      {
+        ...initial[0],
+        status: "done",
+        output: "ok",
+        updatedAt: 2,
+      },
+      "session",
+    );
+
+    expect(updated).toHaveLength(1);
+    expect(updated[0]).toMatchObject({ status: "done", output: "ok" });
+    expect(
+      updateLiveTools(
+        updated,
+        { ...updated[0], sessionId: "other", output: "wrong" },
+        "session",
+      ),
+    ).toBe(updated);
+  });
   beforeEach(async () => {
     await setLanguage("en");
     vi.stubGlobal("fetch", vi.fn());
+    HTMLElement.prototype.hasPointerCapture = vi.fn(() => false);
+    HTMLElement.prototype.setPointerCapture = vi.fn();
+    HTMLElement.prototype.releasePointerCapture = vi.fn();
     vi.stubGlobal(
       "ResizeObserver",
       class {
@@ -63,6 +100,64 @@ describe("web application", () => {
     await setLanguage("zh-TW");
     expect(i18n.t("newConversation")).toBe("新增對話");
     expect(window.localStorage.getItem("pi-agent-language")).toBe("zh-TW");
+  });
+
+  test("expands heartbeat failure diagnostics", async () => {
+    vi.mocked(fetch).mockImplementation(async (input) => {
+      const url = String(input);
+      if (url === "/api/documents/heartbeat")
+        return new Response(JSON.stringify({ content: "Check weather" }), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        });
+      if (url === "/api/heartbeat")
+        return new Response(
+          JSON.stringify({
+            config: {},
+            runs: [
+              {
+                id: "run",
+                startedAt: 1,
+                finishedAt: 2,
+                status: "attention",
+                summary: "Weather lookup failed.",
+                details: {
+                  response: "The weather service could not be reached.",
+                  reasoning: "The request timed out.",
+                  tools: [
+                    {
+                      id: "tool-1",
+                      name: "bash",
+                      input: "curl weather.example",
+                      output: "connection refused",
+                      isError: true,
+                    },
+                  ],
+                },
+              },
+            ],
+          }),
+          { status: 200, headers: { "content-type": "application/json" } },
+        );
+      throw new Error(`Unexpected request: ${url}`);
+    });
+    const user = userEvent.setup();
+
+    render(
+      <Theme>
+        <HeartbeatPage refresh={0} />
+      </Theme>,
+    );
+
+    expect(await screen.findByText("Weather lookup failed.")).toBeVisible();
+    await user.click(screen.getByText("View details", { selector: "summary" }));
+    expect(
+      screen.getByText(
+        "The run completed, but Pi returned a diagnostic instead of exactly HEARTBEAT_OK.",
+      ),
+    ).toBeVisible();
+    expect(screen.getByText("The request timed out.")).toBeVisible();
+    expect(screen.getByText("connection refused")).toBeVisible();
   });
 
   test("pastes and sends an image-only message", async () => {
@@ -127,6 +222,524 @@ describe("web application", () => {
     await user.click(send);
 
     await waitFor(() => expect(onRunning).toHaveBeenCalledWith(true));
+  });
+
+  test("keeps images in the composer instead of putting them in Pi's text queue", async () => {
+    HTMLElement.prototype.scrollIntoView = vi.fn();
+    vi.mocked(fetch).mockImplementation(async (input) => {
+      const url = String(input);
+      if (url === "/api/conversations/session")
+        return new Response(JSON.stringify({ messages: [] }), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        });
+      throw new Error(`Unexpected request: ${url}`);
+    });
+    const user = userEvent.setup();
+
+    render(
+      <Theme>
+        <ChatPage
+          conversationId="session"
+          delta="Working"
+          eventsConnected
+          inputDisabled={false}
+          liveTools={[]}
+          refresh={0}
+          running
+          onRunning={vi.fn()}
+        />
+      </Theme>,
+    );
+    const input = await screen.findByLabelText(/Ask Pi anything/i);
+    const file = new File(["image"], "image.png", { type: "image/png" });
+    fireEvent.paste(input, {
+      clipboardData: {
+        items: [{ kind: "file", getAsFile: () => file }],
+      },
+    });
+    await screen.findByRole("img", { name: "Attached image 1" });
+    await user.click(screen.getByRole("button", { name: "Steer" }));
+
+    expect(
+      screen.getByText("Wait for the current response before sending images."),
+    ).toBeVisible();
+    expect(screen.getByRole("img", { name: "Attached image 1" })).toBeVisible();
+    expect(fetch).not.toHaveBeenCalledWith(
+      "/api/conversations/session/steer",
+      expect.anything(),
+    );
+  });
+
+  test("sends steering input while a conversation run is active", async () => {
+    HTMLElement.prototype.scrollIntoView = vi.fn();
+    vi.mocked(fetch).mockImplementation(async (input, init) => {
+      const url = String(input);
+      if (url === "/api/conversations/session")
+        return new Response(JSON.stringify({ messages: [] }), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        });
+      if (url === "/api/conversations/session/steer") {
+        expect(init?.body).toBe(
+          JSON.stringify({ message: "Change direction" }),
+        );
+        return new Response(JSON.stringify({ queued: true }), {
+          status: 202,
+          headers: { "content-type": "application/json" },
+        });
+      }
+      throw new Error(`Unexpected request: ${url}`);
+    });
+    const onRunning = vi.fn();
+    const user = userEvent.setup();
+
+    render(
+      <Theme>
+        <ChatPage
+          conversationId="session"
+          delta="Working"
+          eventsConnected
+          inputDisabled={false}
+          liveTools={[]}
+          refresh={0}
+          running
+          onRunning={onRunning}
+        />
+      </Theme>,
+    );
+    const input = await screen.findByLabelText(/Ask Pi anything/i);
+    expect(input).toBeEnabled();
+    expect(input).toHaveAttribute(
+      "placeholder",
+      "Guide Pi while it is working…",
+    );
+    await user.type(input, "Change direction");
+    await user.click(screen.getByRole("button", { name: "Steer" }));
+
+    await waitFor(() =>
+      expect(fetch).toHaveBeenCalledWith(
+        "/api/conversations/session/steer",
+        expect.objectContaining({ method: "POST" }),
+      ),
+    );
+    expect(onRunning).not.toHaveBeenCalled();
+    expect(screen.getByRole("button", { name: "Stop" })).toBeVisible();
+  });
+
+  test("queues follow-up input and restores native queued messages", async () => {
+    HTMLElement.prototype.scrollIntoView = vi.fn();
+    vi.mocked(fetch).mockImplementation(async (input, init) => {
+      const url = String(input);
+      if (url === "/api/conversations/session")
+        return new Response(JSON.stringify({ messages: [] }), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        });
+      if (url === "/api/conversations/session/follow-up")
+        return new Response(JSON.stringify({ queued: true }), {
+          status: 202,
+          headers: { "content-type": "application/json" },
+        });
+      if (
+        url === "/api/conversations/session/queue" &&
+        init?.method === "DELETE"
+      )
+        return new Response(
+          JSON.stringify({
+            queue: { sessionId: "session", steering: [], followUp: [] },
+            restored: ["queued task"],
+          }),
+          { status: 200, headers: { "content-type": "application/json" } },
+        );
+      throw new Error(`Unexpected request: ${url}`);
+    });
+    const user = userEvent.setup();
+
+    render(
+      <Theme>
+        <ChatPage
+          conversationId="session"
+          delta="Working"
+          eventsConnected
+          inputDisabled={false}
+          liveTools={[]}
+          queue={{
+            sessionId: "session",
+            steering: ["change direction"],
+            followUp: ["queued task"],
+          }}
+          refresh={0}
+          running
+          thinking=""
+          onChooseModel={vi.fn()}
+          onConversationChanged={vi.fn()}
+          onRunning={vi.fn()}
+          onStateChanged={vi.fn()}
+        />
+      </Theme>,
+    );
+
+    await user.click(
+      screen.getByRole("combobox", { name: "Message delivery" }),
+    );
+    await user.click(screen.getByRole("option", { name: "Follow up" }));
+    await user.type(
+      screen.getByLabelText(/Ask Pi anything/i),
+      "Run tests next",
+    );
+    await user.click(screen.getByRole("button", { name: "Follow up" }));
+    await waitFor(() =>
+      expect(fetch).toHaveBeenCalledWith(
+        "/api/conversations/session/follow-up",
+        expect.objectContaining({ method: "POST" }),
+      ),
+    );
+
+    await user.click(screen.getByRole("button", { name: "Restore to editor" }));
+    expect(screen.getByLabelText(/Ask Pi anything/i)).toHaveValue(
+      "queued task",
+    );
+  });
+
+  test("supports command and workspace autocomplete with keyboard input", async () => {
+    HTMLElement.prototype.scrollIntoView = vi.fn();
+    vi.mocked(fetch).mockImplementation(async (input) => {
+      const url = String(input);
+      if (url === "/api/commands")
+        return new Response(
+          JSON.stringify([
+            {
+              name: "review",
+              description: "Review changes",
+              source: "prompt",
+            },
+          ]),
+          { status: 200, headers: { "content-type": "application/json" } },
+        );
+      if (url === "/api/conversations/session")
+        return new Response(JSON.stringify({ messages: [] }), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        });
+      if (url.startsWith("/api/workspace/files"))
+        return new Response(
+          JSON.stringify([{ path: "src/review file.ts", directory: false }]),
+          { status: 200, headers: { "content-type": "application/json" } },
+        );
+      throw new Error(`Unexpected request: ${url}`);
+    });
+    const user = userEvent.setup();
+
+    render(
+      <Theme>
+        <ChatPage
+          conversationId="session"
+          delta=""
+          eventsConnected
+          inputDisabled={false}
+          liveTools={[]}
+          refresh={0}
+          running={false}
+          thinking=""
+          onChooseModel={vi.fn()}
+          onConversationChanged={vi.fn()}
+          onRunning={vi.fn()}
+          onStateChanged={vi.fn()}
+        />
+      </Theme>,
+    );
+    const input = await screen.findByLabelText(/Ask Pi anything/i);
+    await user.type(input, "/rev");
+    expect(
+      await screen.findByRole("option", { name: /Review changes/ }),
+    ).toBeVisible();
+    await user.keyboard("{Enter}");
+    expect(input).toHaveValue("/review ");
+
+    await user.clear(input);
+    await user.type(input, "open @rev");
+    expect(
+      await screen.findByRole("option", { name: /src\/review file\.ts/ }),
+    ).toBeVisible();
+    await user.keyboard("{Enter}");
+    expect(input).toHaveValue('open @"src/review file.ts" ');
+
+    await user.clear(input);
+    await user.type(input, "中文");
+    fireEvent.compositionStart(input);
+    fireEvent.keyDown(input, { key: "Enter", isComposing: true });
+    fireEvent.compositionEnd(input);
+    expect(
+      vi
+        .mocked(fetch)
+        .mock.calls.some(
+          ([url]) => String(url) === "/api/conversations/session/messages",
+        ),
+    ).toBe(false);
+  });
+
+  test("renders thinking, merged tool diffs, extension state, and editor prefill", async () => {
+    HTMLElement.prototype.scrollIntoView = vi.fn();
+    vi.mocked(fetch).mockImplementation(async (input) => {
+      if (String(input) === "/api/conversations/session")
+        return new Response(
+          JSON.stringify({
+            messages: [
+              {
+                id: "assistant",
+                role: "assistant",
+                text: "Done",
+                thinking: "Reasoning",
+                timestamp: 1,
+                tools: [
+                  {
+                    id: "tool",
+                    name: "edit",
+                    arguments: { path: "README.md" },
+                    result: {
+                      text: "Edited",
+                      diff: "-old\n+new",
+                      isError: false,
+                    },
+                  },
+                ],
+              },
+            ],
+          }),
+          { status: 200, headers: { "content-type": "application/json" } },
+        );
+      throw new Error(`Unexpected request: ${String(input)}`);
+    });
+
+    render(
+      <Theme>
+        <ChatPage
+          conversationId="session"
+          delta=""
+          editorCommand={{ sequence: 1, text: "prefill", mode: "replace" }}
+          eventsConnected
+          extensionUi={{
+            sessionId: "session",
+            statuses: [{ key: "plan", text: "active" }],
+            widgets: [
+              { key: "todo", lines: ["One task"], placement: "aboveEditor" },
+            ],
+            editorText: "",
+            workingVisible: true,
+            hiddenThinkingLabel: "Reasoning details",
+            toolsExpanded: true,
+          }}
+          inputDisabled={false}
+          liveTools={[]}
+          refresh={0}
+          running={false}
+          thinking=""
+          onChooseModel={vi.fn()}
+          onConversationChanged={vi.fn()}
+          onRunning={vi.fn()}
+          onStateChanged={vi.fn()}
+        />
+      </Theme>,
+    );
+
+    expect(await screen.findByText("Done")).toBeVisible();
+    expect(screen.getByText("Reasoning details")).toBeVisible();
+    expect(screen.getByText("+new")).toBeVisible();
+    expect(screen.getByText("One task")).toBeVisible();
+    expect(screen.getByText("active")).toBeVisible();
+    expect(screen.getByLabelText(/Ask Pi anything/i)).toHaveValue("prefill");
+  });
+
+  test("restores active run and queue state after reconnect", async () => {
+    HTMLElement.prototype.scrollIntoView = vi.fn();
+    class FakeEventSource {
+      onerror: (() => void) | null = null;
+      onopen: (() => void) | null = null;
+      addEventListener(): void {}
+      close(): void {}
+    }
+    vi.stubGlobal("EventSource", FakeEventSource);
+    vi.mocked(fetch).mockImplementation(async (input) => {
+      const url = String(input);
+      const json = (value: unknown) =>
+        new Response(JSON.stringify(value), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        });
+      if (url === "/api/session")
+        return json({
+          authenticated: true,
+          authDisabled: false,
+          tools: ["read"],
+        });
+      if (url === "/api/provider-auth") return json(null);
+      if (url === "/api/conversations")
+        return json([
+          {
+            id: "session",
+            createdAt: new Date(0).toISOString(),
+            modifiedAt: new Date(0).toISOString(),
+            messageCount: 1,
+            active: true,
+          },
+        ]);
+      if (url === "/api/conversations/session") return json({ messages: [] });
+      if (url === "/api/conversations/session/state")
+        return json({
+          sessionId: "session",
+          running: true,
+          queue: {
+            sessionId: "session",
+            steering: ["restored steering"],
+            followUp: [],
+          },
+          preferences: {
+            steeringMode: "all",
+            followUpMode: "all",
+            autoCompaction: true,
+            autoRetry: true,
+            activeTools: ["read"],
+            availableTools: [{ name: "read", description: "Read" }],
+          },
+          stats: {
+            userMessages: 1,
+            assistantMessages: 0,
+            toolCalls: 0,
+            toolResults: 0,
+            totalMessages: 1,
+            tokens: {
+              input: 0,
+              output: 0,
+              cacheRead: 0,
+              cacheWrite: 0,
+              total: 0,
+            },
+            cost: 0,
+          },
+          tree: [],
+          leafId: null,
+          treeTruncated: false,
+          extensionUi: {
+            sessionId: "session",
+            statuses: [],
+            widgets: [],
+            editorText: "restored draft",
+            workingVisible: true,
+            toolsExpanded: false,
+          },
+        });
+      throw new Error(`Unexpected request: ${url}`);
+    });
+
+    render(<App />);
+
+    expect(await screen.findByText("restored steering")).toBeVisible();
+    expect(screen.getByRole("button", { name: "Stop" })).toBeVisible();
+    expect(screen.getByLabelText(/Ask Pi anything/i)).toHaveValue(
+      "restored draft",
+    );
+  });
+
+  test("opens native session details and clones a selected tree node", async () => {
+    HTMLElement.prototype.scrollIntoView = vi.fn();
+    vi.mocked(fetch).mockImplementation(async (input, init) => {
+      const url = String(input);
+      if (url === "/api/conversations/session")
+        return new Response(JSON.stringify({ messages: [] }), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        });
+      if (url === "/api/conversations/session/fork" && init?.method === "POST")
+        return new Response(JSON.stringify({ id: "cloned" }), {
+          status: 201,
+          headers: { "content-type": "application/json" },
+        });
+      throw new Error(`Unexpected request: ${url}`);
+    });
+    const onConversationChanged = vi.fn(async () => undefined);
+    const user = userEvent.setup();
+
+    render(
+      <Theme>
+        <ChatPage
+          agentState={{
+            sessionId: "session",
+            running: false,
+            queue: { sessionId: "session", steering: [], followUp: [] },
+            preferences: {
+              steeringMode: "all",
+              followUpMode: "all",
+              autoCompaction: true,
+              autoRetry: true,
+              activeTools: ["read"],
+              availableTools: [{ name: "read", description: "Read" }],
+            },
+            stats: {
+              model: { provider: "test", id: "model", name: "Test model" },
+              sessionBytes: 1_024,
+              userMessages: 1,
+              assistantMessages: 0,
+              toolCalls: 0,
+              toolResults: 0,
+              totalMessages: 1,
+              tokens: {
+                input: 1,
+                output: 0,
+                cacheRead: 0,
+                cacheWrite: 0,
+                total: 1,
+              },
+              cost: 0,
+            },
+            tree: [
+              {
+                id: "entry",
+                parentId: null,
+                type: "message",
+                timestamp: new Date(0).toISOString(),
+                preview: "Original prompt",
+                canForkBefore: true,
+                children: [],
+              },
+            ],
+            leafId: "entry",
+            treeTruncated: false,
+            extensionUi: {
+              sessionId: "session",
+              statuses: [],
+              widgets: [],
+              editorText: "",
+              workingVisible: true,
+              toolsExpanded: false,
+            },
+          }}
+          conversationId="session"
+          delta=""
+          eventsConnected
+          inputDisabled={false}
+          liveTools={[]}
+          refresh={0}
+          running={false}
+          thinking=""
+          onChooseModel={vi.fn()}
+          onConversationChanged={onConversationChanged}
+          onRunning={vi.fn()}
+          onStateChanged={vi.fn()}
+        />
+      </Theme>,
+    );
+
+    await user.click(
+      await screen.findByRole("button", { name: "Conversation details" }),
+    );
+    expect(screen.getByText("Test model")).toBeVisible();
+    expect(screen.getByText("1.0 KB")).toBeVisible();
+    await user.click(screen.getByRole("treeitem"));
+    await user.click(screen.getByRole("button", { name: "Clone" }));
+    await waitFor(() =>
+      expect(onConversationChanged).toHaveBeenCalledWith("cloned"),
+    );
   });
 
   test("preserves the active conversation when creating another fails", async () => {

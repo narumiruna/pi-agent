@@ -29,6 +29,7 @@ interface HeartbeatRow {
   status: HeartbeatRunRecord["status"];
   summary: string | null;
   error: string | null;
+  details: string | null;
 }
 
 function mapOwner(row: OwnerRow): OwnerRecord {
@@ -60,6 +61,13 @@ function mapHeartbeat(row: HeartbeatRow): HeartbeatRunRecord {
     status: row.status,
     ...(row.summary === null ? {} : { summary: row.summary }),
     ...(row.error === null ? {} : { error: row.error }),
+    ...(row.details === null
+      ? {}
+      : {
+          details: JSON.parse(row.details) as NonNullable<
+            HeartbeatRunRecord["details"]
+          >,
+        }),
   };
 }
 
@@ -94,13 +102,16 @@ export class PostgresStore implements AppStore {
         finished_at BIGINT,
         status TEXT NOT NULL,
         summary TEXT,
-        error TEXT
+        error TEXT,
+        details TEXT
       )`;
+      await sql`ALTER TABLE heartbeat_runs ADD COLUMN IF NOT EXISTS details TEXT`;
       await sql`CREATE INDEX IF NOT EXISTS heartbeat_runs_started_at ON heartbeat_runs(started_at DESC)`;
       await sql`INSERT INTO schema_migrations(version) VALUES (1) ON CONFLICT DO NOTHING`;
       const inserted =
         await sql`INSERT INTO schema_migrations(version) VALUES (2) ON CONFLICT DO NOTHING RETURNING version`;
       if (inserted.count > 0) await sql`DELETE FROM web_sessions`;
+      await sql`INSERT INTO schema_migrations(version) VALUES (3) ON CONFLICT DO NOTHING`;
     });
   }
 
@@ -150,8 +161,8 @@ export class PostgresStore implements AppStore {
 
   async createHeartbeatRun(run: HeartbeatRunRecord): Promise<void> {
     await this
-      .sql`INSERT INTO heartbeat_runs(id, started_at, finished_at, status, summary, error)
-      VALUES (${run.id}, ${run.startedAt}, ${run.finishedAt ?? null}, ${run.status}, ${run.summary ?? null}, ${run.error ?? null})`;
+      .sql`INSERT INTO heartbeat_runs(id, started_at, finished_at, status, summary, error, details)
+      VALUES (${run.id}, ${run.startedAt}, ${run.finishedAt ?? null}, ${run.status}, ${run.summary ?? null}, ${run.error ?? null}, ${run.details ? JSON.stringify(run.details) : null})`;
   }
 
   async finishHeartbeatRun(
@@ -159,7 +170,7 @@ export class PostgresStore implements AppStore {
     update: HeartbeatRunUpdate,
   ): Promise<void> {
     await this.sql`UPDATE heartbeat_runs
-      SET finished_at = ${update.finishedAt}, status = ${update.status}, summary = ${update.summary ?? null}, error = ${update.error ?? null}
+      SET finished_at = ${update.finishedAt}, status = ${update.status}, summary = ${update.summary ?? null}, error = ${update.error ?? null}, details = ${update.details ? JSON.stringify(update.details) : null}
       WHERE id = ${id}`;
   }
 

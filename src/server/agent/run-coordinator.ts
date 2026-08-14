@@ -1,4 +1,4 @@
-export type RunKind = "chat" | "heartbeat";
+export type RunKind = "chat" | "heartbeat" | "maintenance";
 
 export class AgentBusyError extends Error {
   readonly code = "agent_busy";

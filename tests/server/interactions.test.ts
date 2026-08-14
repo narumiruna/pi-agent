@@ -1,6 +1,95 @@
 import { describe, expect, test, vi } from "vitest";
 import { EventHub } from "../../src/server/agent/events.js";
 import { InteractionBroker } from "../../src/server/interactions/broker.js";
+import {
+  createHeadlessTheme,
+  createWebExtensionUi,
+} from "../../src/server/interactions/ui.js";
+import {
+  sanitizeExtensionText,
+  WebExtensionState,
+} from "../../src/server/interactions/web-state.js";
+
+describe("Web extension UI", () => {
+  test("keeps keyed status and string widgets while stripping terminal control sequences", () => {
+    const events = new EventHub();
+    const state = new WebExtensionState(events);
+    state.reset("session");
+
+    state.setStatus("build", "\u001b[31mrunning\u001b[0m");
+    state.setWidget(
+      "todo",
+      Array.from({ length: 30 }, (_, index) => `line ${index}`),
+      "belowEditor",
+    );
+
+    expect(state.snapshot()).toMatchObject({
+      statuses: [{ key: "build", text: "running" }],
+      widgets: [
+        { key: "todo", placement: "belowEditor", lines: expect.any(Array) },
+      ],
+    });
+    expect(state.snapshot().widgets[0].lines).toHaveLength(20);
+    state.setStatus("build", undefined);
+    expect(state.snapshot().statuses).toEqual([]);
+  });
+
+  test("supports editor prefill and safely ignores component widgets", () => {
+    const events = new EventHub();
+    const state = new WebExtensionState(events);
+    state.reset("session");
+    const ui = createWebExtensionUi(
+      new InteractionBroker(events),
+      events,
+      state,
+      createHeadlessTheme(),
+    );
+
+    ui.setEditorText("one");
+    ui.pasteToEditor(" two");
+    ui.setWidget("component", (() => undefined) as never);
+
+    expect(ui.getEditorText()).toBe("one two");
+    state.setComposerFromClient("a".repeat(99_999));
+    ui.pasteToEditor("overflow");
+    expect(ui.getEditorText()).toHaveLength(100_000);
+    expect(state.snapshot().widgets).toEqual([]);
+  });
+
+  test("bounds extension update frequency and sanitizes notifications", () => {
+    const events = new EventHub();
+    const state = new WebExtensionState(events);
+    state.reset("session");
+    const published: unknown[] = [];
+    events.subscribe((event) => published.push(event));
+    const ui = createWebExtensionUi(
+      new InteractionBroker(events),
+      events,
+      state,
+      createHeadlessTheme(),
+    );
+
+    for (let index = 0; index < 130; index += 1)
+      state.setStatus("build", String(index));
+    ui.notify("\u001b]0;bad\u0007Ready", "warning");
+
+    expect(
+      published.filter(
+        (event) => (event as { type: string }).type === "extension_ui",
+      ),
+    ).toHaveLength(120);
+    expect(published.at(-1)).toMatchObject({
+      type: "notification",
+      data: { message: "Ready", type: "warning" },
+    });
+  });
+
+  test("removes ANSI, OSC, and C0 controls without damaging Unicode", () => {
+    expect(
+      sanitizeExtensionText("\u001b[32m綠色\u001b[0m\u009b31m\u0000\t文字"),
+    ).toBe("綠色\t文字");
+  });
+});
 
 describe("InteractionBroker", () => {
   test("publishes a request and resolves a matching response", async () => {

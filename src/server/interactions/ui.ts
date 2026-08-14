@@ -6,6 +6,7 @@ import {
 } from "@earendil-works/pi-coding-agent";
 import type { EventHub } from "../agent/events.js";
 import type { InteractionBroker } from "./broker.js";
+import { sanitizeExtensionText, type WebExtensionState } from "./web-state.js";
 
 const THEME_COLORS: ThemeColor[] = [
   "accent",
@@ -79,6 +80,7 @@ export function createHeadlessTheme(): ExtensionUIContext["theme"] {
 export function createWebExtensionUi(
   broker: InteractionBroker,
   events: EventHub,
+  state: WebExtensionState,
   theme: ExtensionUIContext["theme"],
 ): ExtensionUIContext {
   const unsupported = () => undefined;
@@ -87,35 +89,72 @@ export function createWebExtensionUi(
       title: string,
       options: string[],
       opts?: ExtensionUIDialogOptions,
-    ) => broker.request("select", { title, options }, opts),
+    ) =>
+      broker.request(
+        "select",
+        {
+          title: sanitizeExtensionText(title),
+          options: options
+            .slice(0, 100)
+            .map((option) => sanitizeExtensionText(option, 1_000)),
+        },
+        opts,
+      ),
     confirm: async (
       title: string,
       message: string,
       opts?: ExtensionUIDialogOptions,
-    ) => (await broker.request("confirm", { title, message }, opts)) === "true",
+    ) =>
+      (await broker.request(
+        "confirm",
+        {
+          title: sanitizeExtensionText(title),
+          message: sanitizeExtensionText(message, 20_000),
+        },
+        opts,
+      )) === "true",
     input: (
       title: string,
       placeholder?: string,
       opts?: ExtensionUIDialogOptions,
-    ) => broker.request("input", { title, placeholder }, opts),
+    ) =>
+      broker.request(
+        "input",
+        {
+          title: sanitizeExtensionText(title),
+          ...(placeholder
+            ? { placeholder: sanitizeExtensionText(placeholder) }
+            : {}),
+        },
+        opts,
+      ),
     editor: (title: string, prefill?: string) =>
-      broker.request("editor", { title, prefill }),
+      broker.request("editor", {
+        title: sanitizeExtensionText(title),
+        ...(prefill
+          ? { prefill: sanitizeExtensionText(prefill, 100_000) }
+          : {}),
+      }),
     notify: (message, type = "info") =>
-      events.publish("notification", { message, type }),
-    setStatus: (key, text) =>
-      events.publish("notification", { statusKey: key, statusText: text }),
-    setWidget: unsupported,
-    setTitle: unsupported,
-    setEditorText: (text) =>
-      events.publish("interaction", { kind: "set_editor_text", text }),
-    pasteToEditor: (text) =>
-      events.publish("interaction", { kind: "set_editor_text", text }),
-    getEditorText: () => "",
+      events.publish("notification", {
+        message: sanitizeExtensionText(message),
+        type,
+      }),
+    setStatus: (key, text) => state.setStatus(key, text),
+    setWidget: (key, content, options) => {
+      if (content === undefined || Array.isArray(content))
+        state.setWidget(key, content, options?.placement);
+    },
+    setTitle: (title) => state.setTitle(title),
+    setEditorText: (text) => state.setEditorText(text, "replace"),
+    pasteToEditor: (text) => state.setEditorText(text, "append"),
+    getEditorText: () => state.getComposer(),
     onTerminalInput: () => unsupported,
-    setWorkingMessage: unsupported,
-    setWorkingVisible: unsupported,
-    setWorkingIndicator: unsupported,
-    setHiddenThinkingLabel: unsupported,
+    setWorkingMessage: (message) => state.setWorkingMessage(message),
+    setWorkingVisible: (visible) => state.setWorkingVisible(visible),
+    setWorkingIndicator: (options) =>
+      state.setWorkingIndicator(options?.frames),
+    setHiddenThinkingLabel: (label) => state.setHiddenThinkingLabel(label),
     setFooter: unsupported,
     setHeader: unsupported,
     custom: async () => undefined as never,
@@ -129,7 +168,7 @@ export function createWebExtensionUi(
       success: false,
       error: "Themes are not available in the web UI",
     }),
-    getToolsExpanded: () => false,
-    setToolsExpanded: unsupported,
+    getToolsExpanded: () => state.snapshot().toolsExpanded,
+    setToolsExpanded: (expanded) => state.setToolsExpanded(expanded),
   };
 }
