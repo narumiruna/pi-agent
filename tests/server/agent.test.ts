@@ -95,6 +95,39 @@ describe("conversation listing", () => {
   });
 });
 
+describe("conversation prompting", () => {
+  test("sends image attachments through Pi's native prompt options", async () => {
+    const prompt = vi.fn(async () => undefined);
+    const service = Object.create(PiService.prototype) as PiService;
+    Object.defineProperties(service, {
+      coordinator: { value: new RunCoordinator() },
+      events: { value: new EventHub() },
+      runtime: { value: { session: { prompt, abort: vi.fn() } } },
+      switchConversation: { value: vi.fn(async () => undefined) },
+    });
+    const image = {
+      type: "image" as const,
+      data: "aW1hZ2U=",
+      mimeType: "image/png",
+    };
+
+    await service.prompt("session", "", [image]);
+    await service.coordinator.waitForIdle();
+
+    expect(prompt).toHaveBeenCalledWith("", { images: [image] });
+  });
+
+  test("rejects malformed image data before starting a run", async () => {
+    const service = Object.create(PiService.prototype) as PiService;
+
+    await expect(
+      service.prompt("session", "", [
+        { type: "image", data: "not-base64", mimeType: "image/png" },
+      ]),
+    ).rejects.toThrow(/image data/i);
+  });
+});
+
 describe("heartbeat execution", () => {
   test("executes the loaded routine instead of recreating HEARTBEAT.md", async () => {
     const prompt = vi.fn(async () => undefined);
@@ -694,7 +727,14 @@ describe("provider access", () => {
 describe("transcript projection", () => {
   test("keeps semantic message and tool content without exposing thinking", () => {
     const transcript = projectTranscript([
-      { role: "user", content: "Hello", timestamp: 1 },
+      {
+        role: "user",
+        content: [
+          { type: "text", text: "Hello" },
+          { type: "image", data: "aW1hZ2U=", mimeType: "image/png" },
+        ],
+        timestamp: 1,
+      },
       {
         role: "assistant",
         content: [
@@ -724,7 +764,11 @@ describe("transcript projection", () => {
 
     expect(JSON.stringify(transcript)).not.toContain("secret");
     expect(transcript).toMatchObject([
-      { role: "user", text: "Hello" },
+      {
+        role: "user",
+        text: "Hello",
+        images: [{ type: "image", data: "aW1hZ2U=", mimeType: "image/png" }],
+      },
       {
         role: "assistant",
         text: "Hi",

@@ -1,5 +1,9 @@
 import type { AgentMessage } from "@earendil-works/pi-agent-core";
 import type { ToolCall } from "@earendil-works/pi-ai";
+import {
+  type ChatImage,
+  normalizeChatImageMimeType,
+} from "../../shared/contracts.js";
 
 export interface TranscriptTool {
   id: string;
@@ -7,14 +11,45 @@ export interface TranscriptTool {
   arguments: unknown;
 }
 
+export interface TranscriptImage extends ChatImage {
+  id: string;
+}
+
 export interface TranscriptMessage {
   id: string;
   role: "assistant" | "tool" | "user";
   text: string;
   timestamp: number;
+  images?: TranscriptImage[];
   tools?: TranscriptTool[];
   toolName?: string;
   isError?: boolean;
+}
+
+function imagesFromContent(
+  content: unknown,
+  timestamp: number,
+): TranscriptImage[] {
+  if (!Array.isArray(content)) return [];
+  return content.flatMap((part, index) => {
+    if (
+      part?.type !== "image" ||
+      typeof part.data !== "string" ||
+      typeof part.mimeType !== "string"
+    )
+      return [];
+    const mimeType = normalizeChatImageMimeType(part.mimeType);
+    return mimeType
+      ? [
+          {
+            id: `${timestamp}-image-${index}`,
+            type: "image" as const,
+            data: part.data,
+            mimeType,
+          },
+        ]
+      : [];
+  });
 }
 
 function textFromContent(content: unknown): string {
@@ -35,11 +70,13 @@ export function projectTranscript(
   const projected = messages.flatMap(
     (message): Omit<TranscriptMessage, "id">[] => {
       if (message.role === "user") {
+        const images = imagesFromContent(message.content, message.timestamp);
         return [
           {
             role: "user",
             text: textFromContent(message.content),
             timestamp: message.timestamp,
+            ...(images.length > 0 ? { images } : {}),
           },
         ];
       }

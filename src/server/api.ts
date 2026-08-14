@@ -5,7 +5,12 @@ import { tbValidator } from "@hono/typebox-validator";
 import type { Context, Env, Hono, Input } from "hono";
 import { streamSSE } from "hono/streaming";
 import { Type } from "typebox";
-import { apiError } from "../shared/contracts.js";
+import {
+  apiError,
+  CHAT_IMAGE_MIME_TYPES,
+  MAX_CHAT_IMAGE_BASE64_LENGTH,
+  MAX_CHAT_IMAGES,
+} from "../shared/contracts.js";
 import type { WebEvent } from "./agent/events.js";
 import type { PiService } from "./agent/pi-service.js";
 import { AgentBusyError } from "./agent/run-coordinator.js";
@@ -37,7 +42,22 @@ export interface ApiServices {
 }
 
 const MessageBody = Type.Object({
-  message: Type.String({ minLength: 1, maxLength: 100_000 }),
+  message: Type.String({ maxLength: 100_000 }),
+  images: Type.Optional(
+    Type.Array(
+      Type.Object({
+        type: Type.Literal("image"),
+        data: Type.String({
+          minLength: 1,
+          maxLength: MAX_CHAT_IMAGE_BASE64_LENGTH,
+        }),
+        mimeType: Type.Union(
+          CHAT_IMAGE_MIME_TYPES.map((mimeType) => Type.Literal(mimeType)),
+        ),
+      }),
+      { maxItems: MAX_CHAT_IMAGES },
+    ),
+  ),
 });
 const RenameBody = Type.Object({
   name: Type.String({ minLength: 1, maxLength: 120 }),
@@ -144,9 +164,11 @@ export function registerApi<E extends ApiEnv>(
     tbValidator("json", MessageBody),
     async (context) => {
       try {
+        const body = context.req.valid("json");
         const runId = await services.pi.prompt(
           context.req.param("id"),
-          context.req.valid("json").message,
+          body.message,
+          body.images,
         );
         return context.json({ runId }, 202);
       } catch (error) {

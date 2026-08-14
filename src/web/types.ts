@@ -1,3 +1,5 @@
+import type { ChatImage } from "../shared/contracts.js";
+
 export interface SessionInfo {
   authenticated: boolean;
   authDisabled: boolean;
@@ -28,11 +30,16 @@ export interface LiveTool {
   result?: unknown;
 }
 
+export interface TranscriptImage extends ChatImage {
+  id: string;
+}
+
 export interface TranscriptMessage {
   id: string;
   role: "assistant" | "tool" | "user";
   text: string;
   timestamp: number;
+  images?: TranscriptImage[];
   tools?: TranscriptTool[];
   toolName?: string;
   isError?: boolean;

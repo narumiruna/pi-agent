@@ -1,7 +1,13 @@
 // @vitest-environment jsdom
 
 import { Theme } from "@radix-ui/themes";
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { App } from "../../src/web/App.js";
@@ -11,6 +17,7 @@ import { InteractionDialog } from "../../src/web/components/InteractionDialog.js
 import { ModelAccessDialog } from "../../src/web/components/ModelAccessDialog.js";
 import { ProviderAuthDialog } from "../../src/web/components/ProviderAuthDialog.js";
 import i18n, { setLanguage } from "../../src/web/i18n.js";
+import { ChatPage } from "../../src/web/pages/ChatPage.js";
 import { SettingsPage } from "../../src/web/pages/SettingsPage.js";
 
 describe("web application", () => {
@@ -56,6 +63,70 @@ describe("web application", () => {
     await setLanguage("zh-TW");
     expect(i18n.t("newConversation")).toBe("新增對話");
     expect(window.localStorage.getItem("pi-agent-language")).toBe("zh-TW");
+  });
+
+  test("pastes and sends an image-only message", async () => {
+    HTMLElement.prototype.scrollIntoView = vi.fn();
+    vi.mocked(fetch).mockImplementation(async (input, init) => {
+      const url = String(input);
+      if (url === "/api/conversations/session")
+        return new Response(JSON.stringify({ messages: [] }), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        });
+      if (url === "/api/conversations/session/messages") {
+        expect(init?.body).toBe(
+          JSON.stringify({
+            message: "",
+            images: [
+              {
+                type: "image",
+                data: "aW1hZ2U=",
+                mimeType: "image/png",
+              },
+            ],
+          }),
+        );
+        return new Response(JSON.stringify({ runId: "run-1" }), {
+          status: 202,
+          headers: { "content-type": "application/json" },
+        });
+      }
+      throw new Error(`Unexpected request: ${url}`);
+    });
+    const onRunning = vi.fn();
+    const user = userEvent.setup();
+
+    render(
+      <Theme>
+        <ChatPage
+          conversationId="session"
+          delta=""
+          eventsConnected
+          inputDisabled={false}
+          liveTools={[]}
+          refresh={0}
+          running={false}
+          onRunning={onRunning}
+        />
+      </Theme>,
+    );
+    const input = await screen.findByLabelText(/Ask Pi anything/i);
+    const file = new File(["image"], "image.png", { type: "image/png" });
+    fireEvent.paste(input, {
+      clipboardData: {
+        items: [{ kind: "file", getAsFile: () => file }],
+      },
+    });
+
+    expect(
+      await screen.findByRole("img", { name: "Attached image 1" }),
+    ).toBeVisible();
+    const send = screen.getByRole("button", { name: "Send" });
+    expect(send).toBeEnabled();
+    await user.click(send);
+
+    await waitFor(() => expect(onRunning).toHaveBeenCalledWith(true));
   });
 
   test("preserves the active conversation when creating another fails", async () => {

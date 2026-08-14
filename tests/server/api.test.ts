@@ -32,6 +32,26 @@ function appWith(overrides: Partial<ApiServices> = {}) {
 }
 
 describe("API contracts", () => {
+  test("accepts an image-only conversation message", async () => {
+    const prompt = vi.fn(async () => "run-1");
+    const app = appWith({ pi: { prompt } as never });
+    const image = {
+      type: "image",
+      data: "aW1hZ2U=",
+      mimeType: "image/png",
+    };
+
+    const response = await app.request("/api/conversations/session/messages", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ message: "", images: [image] }),
+    });
+
+    expect(response.status).toBe(202);
+    expect(await response.json()).toEqual({ runId: "run-1" });
+    expect(prompt).toHaveBeenCalledWith("session", "", [image]);
+  });
+
   test("replays pending interactions when an SSE client connects", async () => {
     const events = new EventHub();
     const replayPending = vi.fn((publish: (data: unknown) => void) => {

@@ -241,6 +241,30 @@ input:focus-visible,
   letter-spacing: 0.07em;
 }
 
+.messageContent {
+  min-width: 0;
+}
+
+.messageImages {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.messageImages:last-child {
+  margin-bottom: 0;
+}
+
+.messageImages img {
+  width: min(240px, 100%);
+  max-height: 420px;
+  object-fit: contain;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--canvas);
+}
+
 .markdown > :first-child {
   margin-top: 0;
 }
@@ -297,6 +321,40 @@ input:focus-visible,
   border: 0;
   box-shadow: none;
   resize: none;
+}
+
+.attachmentTray {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0;
+  padding: 2px 4px 8px;
+  list-style: none;
+}
+
+.attachmentPreview {
+  position: relative;
+  width: 72px;
+  height: 72px;
+}
+
+.attachmentPreview img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+}
+
+.removeAttachment {
+  position: absolute;
+  top: -5px;
+  right: -5px;
+  box-shadow: 0 1px 4px rgb(0 0 0 / 22%);
+}
+
+.composer [role="alert"] {
+  margin: 0 4px 6px;
 }
 
 .emptyState,

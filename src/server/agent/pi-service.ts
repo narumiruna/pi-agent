@@ -7,6 +7,7 @@ import type {
   AuthInteraction,
   AuthPrompt,
   CredentialInfo,
+  ImageContent,
   Model,
 } from "@earendil-works/pi-ai";
 import {
@@ -21,6 +22,11 @@ import {
   SessionManager,
   SettingsManager,
 } from "@earendil-works/pi-coding-agent";
+import {
+  MAX_CHAT_IMAGE_BYTES,
+  MAX_CHAT_IMAGES,
+  normalizeChatImageMimeType,
+} from "../../shared/contracts.js";
 import type { AppConfig } from "../config.js";
 import type { InteractionBroker } from "../interactions/broker.js";
 import {
@@ -31,6 +37,25 @@ import type { McpManager } from "../mcp/manager.js";
 import type { EventHub } from "./events.js";
 import { AgentBusyError, RunCoordinator } from "./run-coordinator.js";
 import { projectTranscript } from "./transcript.js";
+
+function validatePromptImages(
+  images: readonly ImageContent[] | undefined,
+): ImageContent[] {
+  if (!images) return [];
+  if (images.length > MAX_CHAT_IMAGES) throw new Error("Too many images");
+  let totalBytes = 0;
+  return images.map((image) => {
+    const mimeType = normalizeChatImageMimeType(image.mimeType);
+    if (!mimeType) throw new Error("Image type is invalid");
+    const bytes = Buffer.from(image.data, "base64");
+    if (bytes.length < 1 || bytes.toString("base64") !== image.data)
+      throw new Error("Image data is invalid");
+    totalBytes += bytes.length;
+    if (totalBytes > MAX_CHAT_IMAGE_BYTES)
+      throw new Error("Images are too large");
+    return { type: "image", data: image.data, mimeType };
+  });
+}
 
 function heartbeatFileGuidance(agentDir: string): string {
   const path = join(agentDir, "HEARTBEAT.md");
@@ -352,9 +377,14 @@ export class PiService {
     );
   }
 
-  async prompt(id: string, message: string): Promise<string> {
+  async prompt(
+    id: string,
+    message: string,
+    images?: ImageContent[],
+  ): Promise<string> {
     const text = message.trim();
-    if (text.length < 1 || text.length > 100_000)
+    const promptImages = validatePromptImages(images);
+    if ((text.length < 1 && promptImages.length < 1) || text.length > 100_000)
       throw new Error("Message is invalid");
     if (!this.coordinator.isIdle) throw new AgentBusyError();
     await this.switchConversation(id);
@@ -370,7 +400,9 @@ export class PiService {
             status: "running",
           });
           try {
-            await this.runtime.session.prompt(text);
+            if (promptImages.length > 0)
+              await this.runtime.session.prompt(text, { images: promptImages });
+            else await this.runtime.session.prompt(text);
             this.events.publish("run_status", {
               runId,
               sessionId: id,
