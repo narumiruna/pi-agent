@@ -73,7 +73,7 @@ E2E 不應呼叫真實 Pocket ID、OpenAI 或其他付費服務，避免 CI 依�
 - [x] 實作 Chat、conversation 與 model-selection specs，涵蓋初始 composer、streaming、reload persistence、對話隔離、整列選取、取消與確認；4 個 chat tests 與 1 個 settings test 通過，並以 transcript、current model 與 mock-captured model id 驗證。
 - [x] 實作 Heartbeat 與 Library specs，涵蓋 `HEARTBEAT.md` quiet run history、`SYSTEM.md` persistence 與 template create/delete；兩個 focused runs 通過 reload 後 UI state、SQLite history 與隔離 runtime 檔案 assertions。
 - [x] 實作 provider failure recovery、mobile navigation、keyboard dialog 操作、overflow assertion 與 axe scan；focused runs 已驗證 failed run 後成功 retry、390×844 navigation、radio focus/keyboard activation、無水平 overflow，以及登入、Chat、Settings dialog、Heartbeat 零 serious/critical violations。
-- [ ] 更新 `.github/workflows/ci.yaml` 增加獨立 E2E matrix job，使用 fresh PostgreSQL service、安裝 Chromium dependencies，分別以空 `DATABASE_URL` 與 dedicated PostgreSQL database 執行相同 suites；以兩個 matrix checks 通過驗證。
+- [x] 更新 `.github/workflows/ci.yaml` 增加獨立 E2E matrix job，使用 fresh PostgreSQL service、安裝 Chromium dependencies，分別以空 `DATABASE_URL` 與 dedicated PostgreSQL database 執行相同 suites；PR #6 的 `e2e (sqlite)` 與 `e2e (postgres)` checks 分別於 1m33s 與 1m32s 通過，`verify` 亦於 1m36s 通過。
 - [x] 更新 `justfile` 與 `README.md`，提供 `just e2e`、artifact 位置、port override、SQLite 預設與 `E2E_DATABASE_URL` PostgreSQL 用法；`just --list`、`just e2e` 與對 fresh `pi_agent_e2e` database 的 `just e2e-postgres` 均已通過。
 - [x] 執行 `npm run ci`、SQLite E2E、PostgreSQL E2E、`just smoke` 與 `just postgres-smoke`，再檢查測試無 arbitrary sleep、無真實 secrets、無外部 network、無 production test seam 與無使用者資料路徑；最終結果為 Vitest 134 passed/5 skipped、兩種 storage 各 13 E2E passed、兩種 smoke passed、production dependency audit 0 vulnerabilities，且 static-import、path、secret、network 與 lifecycle review 無未解 blocker。
 
@@ -96,7 +96,7 @@ E2E 不應呼叫真實 Pocket ID、OpenAI 或其他付費服務，避免 CI 依�
 
 - [x] Production build 的完整 owner journey 已由 Playwright 驗證，證據為 OIDC、model、chat、Heartbeat 與 Library suites 在 SQLite 與 PostgreSQL 各 13 tests 通過。
 - [x] 初始對話與整列模型選取 regression 已由真實 browser interaction 驗證，且測試只透過可見 control 與公開 HTTP contract 操作產品。
-- [ ] SQLite 與 PostgreSQL parity 已由 GitHub Actions matrix 的兩個成功 checks 驗證。
+- [x] SQLite 與 PostgreSQL parity 已由 PR #6 GitHub Actions 的 `e2e (sqlite)` 與 `e2e (postgres)` 兩個成功 checks 驗證。
 - [x] 測試不接觸使用者 `.env`、`~/.pi/agent`、現有 database 或非 localhost network，證據為 `.local/e2e/` containment guards、`PI_OFFLINE=1`、dedicated database-name guard 與 final security review。
 - [x] OIDC 與 model mocks 驗證 protocol-relevant input，而不只回傳固定成功 response，證據為 PKCE negative case、nonce/issuer/audience owner login、authorization/model/message capture、held SSE 與 one-shot failure recovery。
 - [x] Mobile keyboard flow 與 serious/critical accessibility scan已通過，證據為 390×844 Playwright project、explicit keyboard activation、overflow assertion 與 axe scans。
