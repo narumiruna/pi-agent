@@ -14,6 +14,17 @@ build:
 dev:
     npm run dev
 
+# Run locally with this repository as the agent's writable workspace.
+dogfood:
+    APP_ORIGIN=http://localhost:5173 \
+        HOST=127.0.0.1 \
+        AUTH_MODE=disabled \
+        PI_CODING_AGENT_DIR="$PWD/.local/pi-agent" \
+        DATA_DIR="$PWD/.local/data" \
+        WORKSPACE="$PWD" \
+        AGENT_TOOLS=read,grep,find,ls,write,edit,bash \
+        npm run dev
+
 # Build and run the application with the current environment.
 run: build
     npm start
