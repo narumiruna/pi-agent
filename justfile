@@ -34,6 +34,17 @@ fix:
 ci:
     npm run ci
 
+# Run browser E2E tests with isolated SQLite data.
+e2e:
+    npm run test:e2e
+
+# Run browser E2E tests with a dedicated PostgreSQL database.
+e2e-postgres:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    : "${E2E_DATABASE_URL:?Set E2E_DATABASE_URL to a fresh database whose name contains e2e}"
+    npm run test:e2e
+
 # Build the container image.
 docker-build:
     docker build -t pi-agent:local .

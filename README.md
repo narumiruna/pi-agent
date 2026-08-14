@@ -259,6 +259,26 @@ The test suite runs PostgreSQL storage contracts when `TEST_POSTGRES_URL` is set
 TEST_POSTGRES_URL=postgresql://pi-agent:password@localhost:5432/pi-agent npm test
 ```
 
+Install Chromium once, then run the production-build E2E suite with isolated SQLite data.
+
+```sh
+npx playwright install chromium
+just e2e
+```
+
+The E2E harness uses deterministic local OIDC and OpenAI-compatible mocks, writes only under `.local/e2e/`, and never reads `.env` or `~/.pi/agent`.
+
+Use a fresh dedicated PostgreSQL database whose name contains `e2e` for parity testing because the harness drops its application tables before startup.
+
+```sh
+E2E_DATABASE_URL=postgresql://pi-agent:password@localhost:5432/pi_agent_e2e \
+  just e2e-postgres
+```
+
+Override `E2E_APP_PORT` and `E2E_MOCK_PORT` when the default ports `39110` and `39111` are unavailable.
+
+Failure traces, screenshots, videos, and the HTML report are written under `.local/e2e/`.
+
 ## Operational limits
 
 Only one process may write a given `/app/.pi/agent` directory, and a runtime lock rejects a second process.
