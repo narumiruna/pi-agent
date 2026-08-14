@@ -17,6 +17,7 @@ function appWith(overrides: Partial<ApiServices> = {}) {
       modelRuntime: { getProviders: () => [] },
       models: () => [],
       providerAccess: async () => [],
+      providerAuthTask: () => undefined,
       providerLoginPending: false,
       events: { replayAfter: () => [], subscribe: () => () => undefined },
     },
@@ -87,6 +88,7 @@ describe("API contracts", () => {
         activeSession: { model: undefined, thinkingLevel: "off" },
         modelRuntime: { getProviders: () => [] },
         providerAccess: async () => [],
+        providerAuthTask: () => undefined,
         providerLoginPending: false,
         models: () => [
           {
@@ -129,6 +131,7 @@ describe("API contracts", () => {
         activeSession: { model: current, thinkingLevel: "off" },
         models: () => [current],
         providerAccess: async () => [],
+        providerAuthTask: () => undefined,
         providerLoginPending: false,
       } as never,
     });
@@ -178,6 +181,7 @@ describe("API contracts", () => {
         },
         models: () => [],
         providerAccess,
+        providerAuthTask: () => undefined,
         providerLoginPending: false,
       } as never,
     });
@@ -198,6 +202,46 @@ describe("API contracts", () => {
       ],
     });
     expect(JSON.stringify(body)).not.toContain("private-key");
+  });
+
+  test("returns a recoverable provider-auth task without credential secrets", async () => {
+    const app = appWith({
+      pi: {
+        providerAuthTask: () => ({
+          providerId: "openai-codex",
+          providerName: "OpenAI Codex",
+          phase: "waiting",
+          method: "device_code",
+          userCode: "ABCD-1234",
+          verificationUri: "https://auth.openai.com/codex/device",
+          expiresAt: Date.now() + 900_000,
+        }),
+      } as never,
+    });
+
+    const response = await app.request("/api/provider-auth");
+    const body = await response.text();
+
+    expect(response.status).toBe(200);
+    expect(JSON.parse(body)).toMatchObject({
+      providerId: "openai-codex",
+      phase: "waiting",
+      userCode: "ABCD-1234",
+    });
+    expect(body).not.toContain("access-secret");
+    expect(body).not.toContain("refresh-secret");
+  });
+
+  test("dismisses a terminal provider-auth task", async () => {
+    const dismissProviderAuthTask = vi.fn();
+    const app = appWith({ pi: { dismissProviderAuthTask } as never });
+
+    const response = await app.request("/api/provider-auth", {
+      method: "DELETE",
+    });
+
+    expect(response.status).toBe(204);
+    expect(dismissProviderAuthTask).toHaveBeenCalledOnce();
   });
 
   test("accepts an API key without returning or publishing the secret", async () => {
@@ -233,16 +277,30 @@ describe("API contracts", () => {
     expect(providerLogin).not.toHaveBeenCalled();
   });
 
-  test("cancels the active authentication flow", async () => {
-    const cancelProviderLogin = vi.fn();
+  test("waits for the active authentication flow to stop before confirming cancellation", async () => {
+    let finishCancellation: (() => void) | undefined;
+    const cancelProviderLogin = vi.fn(
+      () =>
+        new Promise<void>((resolve) => {
+          finishCancellation = resolve;
+        }),
+    );
     const app = appWith({ pi: { cancelProviderLogin } as never });
 
-    const response = await app.request("/api/providers/login/cancel", {
-      method: "POST",
+    let responseSettled = false;
+    const pendingResponse = Promise.resolve(
+      app.request("/api/providers/login/cancel", { method: "POST" }),
+    ).then((response) => {
+      responseSettled = true;
+      return response;
     });
+    await vi.waitFor(() => expect(cancelProviderLogin).toHaveBeenCalledOnce());
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(responseSettled).toBe(false);
 
+    finishCancellation?.();
+    const response = await pendingResponse;
     expect(response.status).toBe(200);
-    expect(cancelProviderLogin).toHaveBeenCalledOnce();
   });
 
   test("classifies an aborted provider login as cancellation", async () => {

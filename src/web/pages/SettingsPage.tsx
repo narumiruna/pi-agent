@@ -48,7 +48,13 @@ function sourceLabel(
   }
 }
 
-export function SettingsPage({ session }: { session: SessionInfo }) {
+export function SettingsPage({
+  chooseModelRequest = 0,
+  session,
+}: {
+  chooseModelRequest?: number;
+  session: SessionInfo;
+}) {
   const { t, i18n } = useTranslation();
   const [data, setData] = useState<ModelData>();
   const [error, setError] = useState<string>();
@@ -66,12 +72,16 @@ export function SettingsPage({ session }: { session: SessionInfo }) {
   }, []);
 
   useEffect(() => {
-    void load()
-      .then((result) => {
-        if (result.authPending) setAccessOpen(true);
-      })
-      .catch((reason) => setError(errorMessage(reason)));
+    void load().catch((reason) => setError(errorMessage(reason)));
   }, [load]);
+
+  useEffect(() => {
+    if (chooseModelRequest > 0) {
+      setAccessOpen(false);
+      setModelOpen(true);
+      void load();
+    }
+  }, [chooseModelRequest, load]);
 
   const run = async (
     key: string,
@@ -272,16 +282,28 @@ export function SettingsPage({ session }: { session: SessionInfo }) {
                         )}
                       </div>
                     </div>
-                    {provider.status.disconnectable && (
-                      <Button
-                        color="red"
-                        variant="ghost"
-                        disabled={Boolean(pending)}
-                        onClick={() => setDisconnectProvider(provider)}
-                      >
-                        {t("disconnect")}
-                      </Button>
-                    )}
+                    <Flex gap="2">
+                      {provider.auth.oauth &&
+                        provider.status.credentialType === "oauth" && (
+                          <Button
+                            variant="ghost"
+                            disabled={Boolean(pending)}
+                            onClick={() => void login(provider, "oauth")}
+                          >
+                            {t("reconnect")}
+                          </Button>
+                        )}
+                      {provider.status.disconnectable && (
+                        <Button
+                          color="red"
+                          variant="ghost"
+                          disabled={Boolean(pending)}
+                          onClick={() => setDisconnectProvider(provider)}
+                        >
+                          {t("disconnect")}
+                        </Button>
+                      )}
+                    </Flex>
                   </div>
                 ))}
               </div>

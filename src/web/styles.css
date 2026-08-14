@@ -595,6 +595,79 @@ input:focus-visible,
   width: min(92vw, 620px);
 }
 
+.providerAuthDialog {
+  width: min(92vw, 560px);
+}
+
+.providerAuthDialog > p {
+  margin: -8px 0 20px;
+}
+
+.providerAuthFlow,
+.authMethodStep,
+.manualAuthStep {
+  display: grid;
+  gap: 14px;
+}
+
+.authMethodStep [role="radiogroup"] {
+  display: grid;
+  gap: 10px;
+}
+
+.authMethodText {
+  display: grid;
+  gap: 3px;
+}
+
+.authMethodStep small {
+  display: block;
+  color: var(--muted);
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
+.deviceCodePanel {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px 14px;
+  padding: 18px;
+  border: 1px solid color-mix(in srgb, var(--accent) 38%, var(--line));
+  border-radius: 9px;
+  background: color-mix(in srgb, var(--accent) 6%, var(--surface));
+}
+
+.deviceCodePanel > span:first-child {
+  grid-column: 1 / -1;
+}
+
+.deviceCodePanel [role="status"] {
+  min-width: 0;
+}
+
+.deviceCodePanel code {
+  display: block;
+  color: var(--ink);
+  font-size: clamp(24px, 8vw, 36px);
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  line-height: 1.15;
+  overflow-wrap: anywhere;
+}
+
+.providerAuthState {
+  min-height: 72px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--muted);
+}
+
+.providerAuthActions {
+  margin-top: 22px;
+}
+
 .accessDialog > p,
 .modelDialog > p {
   margin: -8px 0 18px;
@@ -796,6 +869,21 @@ input:focus-visible,
     align-items: flex-start;
     flex-direction: column;
     gap: 6px;
+  }
+
+  .deviceCodePanel {
+    grid-template-columns: 1fr;
+  }
+
+  .deviceCodePanel > button,
+  .providerAuthFlow > a,
+  .providerAuthActions,
+  .providerAuthActions > button {
+    width: 100%;
+  }
+
+  .providerAuthActions {
+    flex-direction: column-reverse;
   }
 }
 

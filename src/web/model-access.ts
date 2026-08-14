@@ -26,6 +26,19 @@ export interface ProviderOption {
   };
 }
 
+export interface ProviderAuthTask {
+  providerId: string;
+  providerName: string;
+  phase: "cancelled" | "failed" | "starting" | "succeeded" | "waiting";
+  method?: string;
+  message?: string;
+  url?: string;
+  userCode?: string;
+  verificationUri?: string;
+  expiresAt?: number;
+  error?: "login_failed";
+}
+
 export interface ModelData {
   current?: ModelOption;
   thinkingLevel: string;
