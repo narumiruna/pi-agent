@@ -111,23 +111,27 @@ export function ModelPickerDialog({
             {filtered.length === 0 ? (
               <Text color="gray">{t("noMatchingModels")}</Text>
             ) : (
-              filtered.map((model) => (
-                <div className="modelChoice" key={valueFor(model)}>
+              filtered.map((model) => {
+                const value = valueFor(model);
+                return (
                   <RadioGroup.Item
                     aria-label={`${model.name}, ${model.provider}`}
-                    value={valueFor(model)}
-                  />
-                  <span>
-                    <strong>{model.name}</strong>
-                    <small>
-                      {model.provider} · {model.id}
-                    </small>
-                  </span>
-                </div>
-              ))
+                    className={`modelChoice${selectedValue === value ? " selected" : ""}`}
+                    key={value}
+                    value={value}
+                  >
+                    <span className="modelChoiceText">
+                      <strong>{model.name}</strong>
+                      <small>
+                        {model.provider} · {model.id}
+                      </small>
+                    </span>
+                  </RadioGroup.Item>
+                );
+              })
             )}
           </RadioGroup.Root>
-          <Flex justify="end" gap="3">
+          <Flex className="modelDialogActions" justify="end" gap="3">
             <Button
               color="gray"
               variant="soft"

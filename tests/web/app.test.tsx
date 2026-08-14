@@ -189,7 +189,6 @@ describe("web application", () => {
         });
       return new Response(
         JSON.stringify({
-          current: { provider: "anthropic", id: "old", name: "Old model" },
           thinkingLevel: "off",
           thinkingLevels: ["off"],
           authPending: false,
@@ -214,7 +213,12 @@ describe("web application", () => {
     await user.click(
       await screen.findByRole("button", { name: /change model/i }),
     );
-    await user.click(screen.getByRole("radio", { name: /New model/i }));
+    const applyModel = screen.getByRole("button", {
+      name: /use this model/i,
+    });
+    expect(applyModel).toBeDisabled();
+    await user.click(screen.getByText("New model"));
+    expect(applyModel).toBeEnabled();
     expect(fetch).not.toHaveBeenCalledWith(
       "/api/model",
       expect.objectContaining({ method: "PUT" }),
@@ -226,7 +230,7 @@ describe("web application", () => {
     );
 
     await user.click(screen.getByRole("button", { name: /change model/i }));
-    await user.click(screen.getByRole("radio", { name: /New model/i }));
+    await user.click(screen.getByText("New model"));
     await user.click(screen.getByRole("button", { name: /use this model/i }));
     await waitFor(() =>
       expect(fetch).toHaveBeenCalledWith(
@@ -674,11 +678,15 @@ describe("web application", () => {
       </Theme>,
     );
 
-    expect(screen.getByRole("radio", { name: /device code/i })).toBeChecked();
+    const methods = screen.getAllByRole("radio");
+    expect(methods[0]).toHaveAccessibleName(/^device code$/i);
+    expect(methods[0]).toBeChecked();
     expect(screen.getByText(/recommended for Docker/i)).toBeVisible();
-    await userEvent
-      .setup()
-      .click(screen.getByRole("button", { name: /continue/i }));
+    const primaryAction = screen.getByRole("button", {
+      name: /continue with device code/i,
+    });
+    expect(primaryAction).toBeVisible();
+    await userEvent.setup().click(primaryAction);
     expect(fetch).toHaveBeenCalledWith(
       "/api/interactions/method",
       expect.objectContaining({
