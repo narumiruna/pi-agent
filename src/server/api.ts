@@ -328,8 +328,8 @@ export function registerApi<E extends ApiEnv>(
       }
     },
   );
-  app.post("/api/providers/login/cancel", (context) => {
-    services.pi.cancelProviderLogin();
+  app.post("/api/providers/login/cancel", async (context) => {
+    await services.pi.cancelProviderLogin();
     return context.json({ ok: true });
   });
   app.post("/api/providers/:id/logout", async (context) => {

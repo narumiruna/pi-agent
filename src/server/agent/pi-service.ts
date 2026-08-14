@@ -88,6 +88,7 @@ export class PiService {
   readonly packageManager: DefaultPackageManager;
   private readonly runtime: AgentSessionRuntime;
   private providerLoginAbort: AbortController | undefined;
+  private providerLoginSettled: Promise<void> | undefined;
   private currentProviderAuthTask: ProviderAuthTask | undefined;
   private unsubscribe?: () => void;
 
@@ -415,6 +416,13 @@ export class PiService {
     this.events.publish("provider_auth", task);
   }
 
+  private activeProviderAuthTask(): ProviderAuthTask | undefined {
+    const task = this.currentProviderAuthTask;
+    return task?.phase === "starting" || task?.phase === "waiting"
+      ? task
+      : undefined;
+  }
+
   private finishProviderAuthTask(
     task: ProviderAuthTask,
     phase: "cancelled" | "failed" | "succeeded",
@@ -444,8 +452,7 @@ export class PiService {
         ? "choose_method"
         : task.method;
     this.publishProviderAuthTask({
-      providerId: task.providerId,
-      providerName: task.providerName,
+      ...task,
       phase: "waiting",
       ...(method ? { method } : {}),
       message: prompt.message,
@@ -481,10 +488,8 @@ export class PiService {
       return;
     }
     this.publishProviderAuthTask({
-      providerId: task.providerId,
-      providerName: task.providerName,
+      ...task,
       phase: "waiting",
-      ...(task.method ? { method: task.method } : {}),
       message: event.message,
       ...(event.type === "info" && event.links?.[0]
         ? { url: event.links[0].url }
@@ -545,7 +550,12 @@ export class PiService {
     if (this.providerLoginAbort)
       throw new Error("Provider authentication is already in progress");
     const abort = new AbortController();
+    let settleProviderLogin: () => void = () => undefined;
+    const providerLoginSettled = new Promise<void>((resolve) => {
+      settleProviderLogin = resolve;
+    });
     this.providerLoginAbort = abort;
+    this.providerLoginSettled = providerLoginSettled;
     if (type === "oauth")
       this.publishProviderAuthTask({
         providerId,
@@ -571,10 +581,10 @@ export class PiService {
     };
     try {
       await this.modelRuntime.login(providerId, type, interaction);
-      const task = this.currentProviderAuthTask;
+      const task = this.activeProviderAuthTask();
       if (task) this.finishProviderAuthTask(task, "succeeded");
     } catch (error) {
-      const task = this.currentProviderAuthTask;
+      const task = this.activeProviderAuthTask();
       if (task)
         this.finishProviderAuthTask(
           task,
@@ -586,16 +596,21 @@ export class PiService {
     } finally {
       if (this.providerLoginAbort === abort)
         this.providerLoginAbort = undefined;
+      if (this.providerLoginSettled === providerLoginSettled)
+        this.providerLoginSettled = undefined;
+      settleProviderLogin();
     }
   }
 
-  cancelProviderLogin(): void {
+  async cancelProviderLogin(): Promise<void> {
     const abort = this.providerLoginAbort;
     if (!abort) return;
-    const task = this.currentProviderAuthTask;
+    const settled = this.providerLoginSettled;
+    const task = this.activeProviderAuthTask();
     if (task) this.finishProviderAuthTask(task, "cancelled");
     abort.abort(new DOMException("Authentication cancelled", "AbortError"));
     this.interactions.cancelAll();
+    await settled;
   }
 
   async providerLogout(providerId: string): Promise<void> {
@@ -664,7 +679,7 @@ export class PiService {
   }
 
   async dispose(): Promise<void> {
-    this.cancelProviderLogin();
+    await this.cancelProviderLogin();
     this.unsubscribe?.();
     await this.settingsManager.flush();
     this.heartbeatSession.dispose();

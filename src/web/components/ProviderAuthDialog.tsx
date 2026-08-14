@@ -54,6 +54,7 @@ export function ProviderAuthDialog({
   );
   const [copiedCode, setCopiedCode] = useState<string>();
   const [now, setNow] = useState(() => Date.now());
+  const [retrying, setRetrying] = useState(false);
   const completed = useRef(false);
   useEffect(() => {
     setValue(defaultInteractionValue(interaction));
@@ -98,9 +99,20 @@ export function ProviderAuthDialog({
     }
     onDismiss();
   };
-  const retry = () => {
-    onDismiss();
-    onRetry(task.providerId);
+  const retry = async () => {
+    if (retrying) return;
+    setRetrying(true);
+    try {
+      if (active) {
+        await api("/api/providers/login/cancel", mutation("POST"));
+        onInteractionClose();
+      }
+      onRetry(task.providerId);
+    } catch {
+      return;
+    } finally {
+      setRetrying(false);
+    }
   };
   const chooseModel = () => {
     onDismiss();
@@ -261,7 +273,9 @@ export function ProviderAuthDialog({
                 <Button color="gray" variant="soft" onClick={onDismiss}>
                   {t("close")}
                 </Button>
-                <Button onClick={retry}>{t("tryAgain")}</Button>
+                <Button disabled={retrying} onClick={() => void retry()}>
+                  {t("tryAgain")}
+                </Button>
               </>
             )}
             {task.phase === "succeeded" && (

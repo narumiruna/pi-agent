@@ -841,6 +841,62 @@ describe("web application", () => {
     expect(screen.getByRole("button", { name: /try again/i })).toBeVisible();
   });
 
+  test("cancels an expired device login before retrying", async () => {
+    let finishCancellation: ((response: Response) => void) | undefined;
+    vi.mocked(fetch).mockImplementation((input) => {
+      if (String(input) === "/api/providers/login/cancel")
+        return new Promise<Response>((resolve) => {
+          finishCancellation = resolve;
+        });
+      throw new Error(`Unexpected request: ${String(input)}`);
+    });
+    const onDismiss = vi.fn();
+    const onRetry = vi.fn();
+
+    render(
+      <Theme>
+        <ProviderAuthDialog
+          task={{
+            providerId: "openai-codex",
+            providerName: "OpenAI Codex",
+            phase: "waiting",
+            method: "device_code",
+            userCode: "EXPIRED-1",
+            verificationUri: "https://auth.openai.com/codex/device",
+            expiresAt: Date.now() - 1,
+          }}
+          onChooseModel={() => undefined}
+          onDismiss={onDismiss}
+          onInteractionClose={() => undefined}
+          onRetry={onRetry}
+        />
+      </Theme>,
+    );
+
+    const click = userEvent
+      .setup()
+      .click(screen.getByRole("button", { name: /try again/i }));
+    await waitFor(() =>
+      expect(fetch).toHaveBeenCalledWith(
+        "/api/providers/login/cancel",
+        expect.objectContaining({ method: "POST" }),
+      ),
+    );
+    expect(onRetry).not.toHaveBeenCalled();
+    expect(onDismiss).not.toHaveBeenCalled();
+    expect(screen.getByRole("button", { name: /try again/i })).toBeDisabled();
+
+    finishCancellation?.(
+      new Response(JSON.stringify({ ok: true }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      }),
+    );
+    await click;
+    await waitFor(() => expect(onRetry).toHaveBeenCalledWith("openai-codex"));
+    expect(onDismiss).not.toHaveBeenCalled();
+  });
+
   test("keeps cancelled authentication recoverable", () => {
     render(
       <Theme>

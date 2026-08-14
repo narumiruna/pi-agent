@@ -277,16 +277,30 @@ describe("API contracts", () => {
     expect(providerLogin).not.toHaveBeenCalled();
   });
 
-  test("cancels the active authentication flow", async () => {
-    const cancelProviderLogin = vi.fn();
+  test("waits for the active authentication flow to stop before confirming cancellation", async () => {
+    let finishCancellation: (() => void) | undefined;
+    const cancelProviderLogin = vi.fn(
+      () =>
+        new Promise<void>((resolve) => {
+          finishCancellation = resolve;
+        }),
+    );
     const app = appWith({ pi: { cancelProviderLogin } as never });
 
-    const response = await app.request("/api/providers/login/cancel", {
-      method: "POST",
+    let responseSettled = false;
+    const pendingResponse = Promise.resolve(
+      app.request("/api/providers/login/cancel", { method: "POST" }),
+    ).then((response) => {
+      responseSettled = true;
+      return response;
     });
+    await vi.waitFor(() => expect(cancelProviderLogin).toHaveBeenCalledOnce());
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(responseSettled).toBe(false);
 
+    finishCancellation?.();
+    const response = await pendingResponse;
     expect(response.status).toBe(200);
-    expect(cancelProviderLogin).toHaveBeenCalledOnce();
   });
 
   test("classifies an aborted provider login as cancellation", async () => {

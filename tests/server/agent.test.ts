@@ -286,6 +286,57 @@ describe("provider access", () => {
     expect(notify).not.toHaveBeenCalled();
   });
 
+  test("preserves the browser authorization URL across a manual-code prompt", async () => {
+    let answerPrompt: ((value: string) => void) | undefined;
+    const prompt = vi.fn(
+      () =>
+        new Promise<string>((resolve) => {
+          answerPrompt = resolve;
+        }),
+    );
+    const service = Object.create(PiService.prototype) as PiService;
+    Object.defineProperties(service, {
+      events: { value: new EventHub() },
+      modelRuntime: {
+        value: {
+          getProviders: () => [{ id: "openai-codex", name: "OpenAI Codex" }],
+          login: async (
+            _provider: string,
+            _type: string,
+            auth: AuthInteraction,
+          ) => {
+            auth.notify({
+              type: "auth_url",
+              url: "https://auth.openai.com/oauth/authorize",
+              instructions: "Complete login in your browser.",
+            });
+            await auth.prompt({
+              type: "manual_code",
+              message: "Paste the authorization code or redirect URL",
+              placeholder: "http://localhost:1455/auth/callback",
+            });
+          },
+        },
+      },
+      interactions: {
+        value: { prompt, notify: vi.fn(), cancelAll: vi.fn() },
+      },
+    });
+
+    const pending = service.providerLogin("openai-codex", "oauth");
+    await vi.waitFor(() =>
+      expect(service.providerAuthTask()).toMatchObject({
+        phase: "waiting",
+        method: "browser",
+        message: "Paste the authorization code or redirect URL",
+        url: "https://auth.openai.com/oauth/authorize",
+      }),
+    );
+
+    answerPrompt?.("authorization-code");
+    await pending;
+  });
+
   test("keeps a safe terminal authentication state for failure and cancellation", async () => {
     const login = vi.fn(async () => {
       throw new Error("token exchange failed: access-secret");
@@ -361,6 +412,36 @@ describe("provider access", () => {
     await pending;
   });
 
+  test("does not overwrite a completed OAuth task when an API-key login fails", async () => {
+    const login = vi.fn(async (_provider: string, type: string) => {
+      if (type === "api_key") throw new Error("Invalid API key");
+    });
+    const service = Object.create(PiService.prototype) as PiService;
+    Object.defineProperties(service, {
+      events: { value: new EventHub() },
+      modelRuntime: {
+        value: {
+          getProviders: () => [
+            { id: "openai-codex", name: "OpenAI Codex" },
+            { id: "anthropic", name: "Anthropic" },
+          ],
+          login,
+        },
+      },
+      interactions: {
+        value: { prompt: vi.fn(), notify: vi.fn(), cancelAll: vi.fn() },
+      },
+    });
+
+    await service.providerLogin("openai-codex", "oauth");
+    const completedTask = service.providerAuthTask();
+    await expect(
+      service.providerLogin("anthropic", "api_key", "invalid-key"),
+    ).rejects.toThrow("Invalid API key");
+
+    expect(service.providerAuthTask()).toEqual(completedTask);
+  });
+
   test("uses a submitted API key for the first secret prompt without publishing it", async () => {
     const prompt = vi.fn();
     const login = vi.fn(
@@ -417,6 +498,52 @@ describe("provider access", () => {
       /not found/i,
     );
     expect(logout).not.toHaveBeenCalled();
+  });
+
+  test("waits for provider cleanup before cancellation completes", async () => {
+    let finishLogin: (() => void) | undefined;
+    let signal: AbortSignal | undefined;
+    const service = Object.create(PiService.prototype) as PiService;
+    Object.defineProperties(service, {
+      events: { value: new EventHub() },
+      modelRuntime: {
+        value: {
+          getProviders: () => [{ id: "openai-codex", name: "OpenAI Codex" }],
+          login: async (
+            _provider: string,
+            _type: string,
+            auth: AuthInteraction,
+          ) => {
+            signal = auth.signal;
+            await new Promise<void>((resolve) => {
+              finishLogin = resolve;
+            });
+            if (auth.signal?.aborted) throw auth.signal.reason;
+          },
+        },
+      },
+      interactions: {
+        value: { prompt: vi.fn(), notify: vi.fn(), cancelAll: vi.fn() },
+      },
+    });
+
+    const login = service.providerLogin("openai-codex", "oauth");
+    await vi.waitFor(() => expect(signal).toBeDefined());
+    let cancellationFinished = false;
+    const cancellation = Promise.resolve(service.cancelProviderLogin()).then(
+      () => {
+        cancellationFinished = true;
+      },
+    );
+
+    await vi.waitFor(() => expect(signal?.aborted).toBe(true));
+    await Promise.resolve();
+    expect(cancellationFinished).toBe(false);
+
+    finishLogin?.();
+    await expect(login).rejects.toMatchObject({ name: "AbortError" });
+    await cancellation;
+    expect(service.providerLoginPending).toBe(false);
   });
 
   test("serializes authentication and releases the flow after cancellation", async () => {
