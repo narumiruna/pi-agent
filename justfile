@@ -2,106 +2,59 @@
 default:
     @just --list
 
-# Install dependencies.
+# Install exact dependencies.
 install:
-    npm install
+    npm ci
 
-# Build the TypeScript project.
-build:
-    npm run build
-
-# Run the development server and Vite client.
+# Start the normal development servers.
 dev:
     npm run dev
 
-# Run locally with this repository as the agent's writable workspace.
+# Start locally with this repository as Pi's writable workspace.
 dogfood:
-    APP_ORIGIN=http://localhost:5173 \
+    APP_ORIGIN="${APP_ORIGIN:-http://localhost:3100}" \
         HOST=127.0.0.1 \
         AUTH_MODE=disabled \
         PI_CODING_AGENT_DIR="$PWD/.local/pi-agent" \
         DATA_DIR="$PWD/.local/data" \
         WORKSPACE="$PWD" \
         AGENT_TOOLS=read,grep,find,ls,write,edit,bash \
-        npm run dev
+        npx concurrently \
+            "tsx watch src/server/index.ts" \
+            "vite --host 0.0.0.0 --port 3100 --strictPort"
 
-# Build and run the application with the current environment.
-run: build
-    npm start
-
-# Run tests once.
+# Run unit and integration tests.
 test:
     npm test
 
-# Check formatting and lint rules.
-check:
-    npm run check
-
-# Apply Biome formatting and safe lint fixes.
-fix:
-    npm exec -- biome check --write .
-
-# Run the same checks used by CI and the pre-commit hook.
+# Run the complete verification gate.
 ci:
     npm run ci
 
-# Run browser E2E tests with isolated SQLite data.
+# Run browser tests with SQLite.
 e2e:
     npm run test:e2e
 
-# Run browser E2E tests with a dedicated PostgreSQL database.
+# Run browser tests with PostgreSQL.
 e2e-postgres:
-    #!/usr/bin/env bash
-    set -euo pipefail
-    : "${E2E_DATABASE_URL:?Set E2E_DATABASE_URL to a fresh database whose name contains e2e}"
-    npm run test:e2e
+    : "${E2E_DATABASE_URL:?Set E2E_DATABASE_URL}"; npm run test:e2e
 
-# Build the container image.
-docker-build:
-    docker build -t pi-agent:local .
-
-# Start Pi Agent using Compose and .env.
+# Build and start the SQLite stack.
 up:
-    docker compose up -d --build
+    docker compose up -d --build --remove-orphans
 
-# Stop Pi Agent.
+# Stop the SQLite stack.
 down:
-    docker compose down
+    docker compose down --remove-orphans
 
-# Start the SQLite Compose stack using .env.
-compose-up: up
-
-# Stop the SQLite Compose stack.
-compose-down: down
-
-# Show recent SQLite Compose logs without following.
-compose-logs:
+# Show recent SQLite logs.
+logs:
     docker compose logs --tail=200
 
-# Start the PostgreSQL Compose stack using .env.
+# Build and start the PostgreSQL stack.
 postgres-up:
-    docker compose -f compose.yaml -f compose.postgres.yaml up -d --build
+    docker compose -f compose.yaml -f compose.postgres.yaml up -d --build --remove-orphans
 
-# Stop the PostgreSQL Compose stack.
+# Stop the PostgreSQL stack.
 postgres-down:
-    docker compose -f compose.yaml -f compose.postgres.yaml down
-
-# Build and smoke-test the SQLite container stack.
-smoke:
-    #!/usr/bin/env bash
-    set -euo pipefail
-    export APP_ORIGIN=http://localhost:39100 AUTH_MODE=disabled PORT=39100
-    trap 'docker compose -p pi-agent-smoke down -v >/dev/null 2>&1 || true' EXIT
-    docker compose -p pi-agent-smoke up -d --build
-    for _ in $(seq 1 60); do docker compose -p pi-agent-smoke exec -T agent node -e "fetch('http://127.0.0.1:3000/health/ready').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))" && exit 0; sleep 1; done
-    exit 1
-
-# Build and smoke-test the PostgreSQL container stack.
-postgres-smoke:
-    #!/usr/bin/env bash
-    set -euo pipefail
-    export APP_ORIGIN=http://localhost:39101 AUTH_MODE=disabled PORT=39101 POSTGRES_PASSWORD=smoke-password
-    trap 'docker compose -p pi-agent-postgres-smoke -f compose.yaml -f compose.postgres.yaml down -v >/dev/null 2>&1 || true' EXIT
-    docker compose -p pi-agent-postgres-smoke -f compose.yaml -f compose.postgres.yaml up -d --build
-    for _ in $(seq 1 60); do docker compose -p pi-agent-postgres-smoke -f compose.yaml -f compose.postgres.yaml exec -T agent node -e "fetch('http://127.0.0.1:3000/health/ready').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))" && exit 0; sleep 1; done
-    exit 1
+    docker compose -f compose.yaml -f compose.postgres.yaml down --remove-orphans
