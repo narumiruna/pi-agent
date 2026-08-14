@@ -252,7 +252,7 @@ export class PiService {
 
   async listConversations(): Promise<ConversationSummary[]> {
     const sessions = await this.nativeSessions();
-    return sessions.map((session) => ({
+    const conversations = sessions.map((session) => ({
       id: session.id,
       ...(session.name ? { name: session.name } : {}),
       createdAt: session.created.toISOString(),
@@ -260,6 +260,19 @@ export class PiService {
       messageCount: session.messageCount,
       active: session.id === this.activeSessionId,
     }));
+    if (!conversations.some((conversation) => conversation.active)) {
+      const active = this.activeSession;
+      const timestamp = new Date().toISOString();
+      conversations.unshift({
+        id: active.sessionId,
+        ...(active.sessionName ? { name: active.sessionName } : {}),
+        createdAt: timestamp,
+        modifiedAt: timestamp,
+        messageCount: active.messages.length,
+        active: true,
+      });
+    }
+    return conversations;
   }
 
   async createConversation(): Promise<string> {
