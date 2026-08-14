@@ -98,6 +98,44 @@ The image runs as UID and GID `10001`, so Linux bind-mounted directories must be
 sudo chown -R 10001:10001 ./data/pi/agent ./data/app
 ```
 
+## Models and providers
+
+Open Settings and select **Add access**.
+
+Choose **Subscriptions** for provider sign-in, or choose **API keys** to save a key through Pi's native login flow.
+
+For OpenAI Codex, a ChatGPT Plus or Pro subscription is required.
+
+Choose **Device code login** for Docker and remote servers, copy the displayed code, select **Open OpenAI**, and finish authorization in the OpenAI page.
+
+Device-code status remains in the authentication dialog and can be restored after a browser refresh while the server process and login remain active.
+
+Browser login remains available, but its localhost callback may not reach the container.
+
+If that callback fails, paste the final redirect URL or authorization code into the authentication dialog.
+
+Cancelling sign-in stops the pending Pi authentication flow without removing a previously valid credential.
+
+Use **Reconnect** beside a stored subscription when its token is no longer valid or you need to change accounts.
+
+Provider credentials are saved by Pi in `/app/.pi/agent/auth.json`, so the agent directory must be writable and persistent.
+
+After adding access, select **Change model**, preview an available model, and confirm **Use this model**.
+
+The selected model is applied to both Web chat and heartbeat, while the thinking menu only shows levels supported by that model.
+
+For non-interactive deployment, you may instead mount an existing `auth.json` or pass a provider environment variable through Compose, such as `ANTHROPIC_API_KEY`.
+
+Settings identifies environment and `models.json` credentials as externally managed and does not offer to remove them.
+
+Only credentials stored in Pi's `auth.json` can be disconnected from Settings, and removal requires confirmation.
+
+Custom providers and models use `/app/.pi/agent/models.json` in Pi's native format.
+
+After subscription sign-in succeeds, choose **Choose a model** to review the available models.
+
+Pi Agent never switches the current model automatically after authentication.
+
 ## Data and database
 
 `/app/data/app.db` stores Web login sessions and heartbeat run summaries when `DATABASE_URL` is absent.

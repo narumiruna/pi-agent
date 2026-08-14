@@ -362,6 +362,120 @@ input:focus-visible,
   border-bottom: 1px solid var(--line);
 }
 
+.settingsPage {
+  gap: 42px;
+}
+
+.settingsHeader,
+.settingsSection,
+.accessKeyStep {
+  display: grid;
+  gap: 14px;
+}
+
+.settingsHeader p,
+.sectionHeading p,
+.modelSummaryText p,
+.accessIdentity p {
+  margin: 3px 0 0;
+}
+
+.settingsLoading {
+  min-height: 180px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  color: var(--muted);
+}
+
+.settingsSection {
+  gap: 8px;
+}
+
+.sectionHeading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 24px;
+  padding-bottom: 12px;
+}
+
+.modelSummary {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 16px;
+  padding: 18px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: var(--surface);
+}
+
+.modelSignal {
+  width: 42px;
+  height: 42px;
+  display: grid;
+  place-items: center;
+  border: 1px solid color-mix(in srgb, var(--accent) 34%, var(--line));
+  border-radius: 50%;
+  color: var(--accent);
+  font-family: Georgia, serif;
+  font-size: 22px;
+}
+
+.modelSummaryText {
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+
+.modelSummaryText > * {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.compactRow {
+  min-height: 68px;
+}
+
+.accessList {
+  border-top: 1px solid var(--line);
+}
+
+.accessRow {
+  min-height: 74px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 14px 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.accessIdentity {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: 86px minmax(0, 1fr);
+  align-items: start;
+  gap: 14px;
+}
+
+.accessEmpty {
+  min-height: 156px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
+  gap: 8px;
+  padding: 22px 0;
+  border-block: 1px solid var(--line);
+}
+
+.accessEmpty p {
+  margin: 0 0 8px;
+}
+
 .riskNotice,
 .inlineNotice {
   padding: 13px 15px;
@@ -420,7 +534,26 @@ input:focus-visible,
   right: 20px;
   bottom: 20px;
   max-width: 420px;
-  cursor: pointer;
+}
+
+.embeddedNotification {
+  margin: 14px 0;
+}
+
+.authNotificationBody {
+  min-width: 0;
+  display: grid;
+  gap: 9px;
+  overflow-wrap: anywhere;
+}
+
+.authNotificationLink {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--accent);
+  font-size: 13px;
+  font-weight: 500;
 }
 
 .dialogOverlay {
@@ -455,6 +588,170 @@ input:focus-visible,
   margin: 0 0 16px;
   font-size: 19px;
   font-weight: 600;
+}
+
+.accessDialog,
+.modelDialog {
+  width: min(92vw, 620px);
+}
+
+.providerAuthDialog {
+  width: min(92vw, 560px);
+}
+
+.providerAuthDialog > p {
+  margin: -8px 0 20px;
+}
+
+.providerAuthFlow,
+.authMethodStep,
+.manualAuthStep {
+  display: grid;
+  gap: 14px;
+}
+
+.authMethodStep [role="radiogroup"] {
+  display: grid;
+  gap: 10px;
+}
+
+.authMethodText {
+  display: grid;
+  gap: 3px;
+}
+
+.authMethodStep small {
+  display: block;
+  color: var(--muted);
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
+.deviceCodePanel {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px 14px;
+  padding: 18px;
+  border: 1px solid color-mix(in srgb, var(--accent) 38%, var(--line));
+  border-radius: 9px;
+  background: color-mix(in srgb, var(--accent) 6%, var(--surface));
+}
+
+.deviceCodePanel > span:first-child {
+  grid-column: 1 / -1;
+}
+
+.deviceCodePanel [role="status"] {
+  min-width: 0;
+}
+
+.deviceCodePanel code {
+  display: block;
+  color: var(--ink);
+  font-size: clamp(24px, 8vw, 36px);
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  line-height: 1.15;
+  overflow-wrap: anywhere;
+}
+
+.providerAuthState {
+  min-height: 72px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--muted);
+}
+
+.providerAuthActions {
+  margin-top: 22px;
+}
+
+.accessDialog > p,
+.modelDialog > p {
+  margin: -8px 0 18px;
+}
+
+.providerSearch {
+  margin-top: 18px;
+}
+
+.providerChoices,
+.modelChoices {
+  max-height: min(44vh, 420px);
+  display: grid;
+  gap: 2px;
+  margin: 12px 0 18px;
+  overflow-y: auto;
+  border-block: 1px solid var(--line);
+}
+
+.providerChoice {
+  width: 100%;
+  min-height: 62px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 10px 8px;
+  border: 0;
+  border-bottom: 1px solid var(--line);
+  color: var(--ink);
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+}
+
+.providerChoice:hover,
+.modelChoice:hover {
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+}
+
+.providerChoice:disabled {
+  opacity: 0.55;
+  cursor: wait;
+}
+
+.providerChoice span,
+.modelChoice span {
+  min-width: 0;
+  display: grid;
+  gap: 3px;
+}
+
+.providerChoice small,
+.modelChoice small {
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+
+.accessKeyStep {
+  padding-top: 20px;
+}
+
+.accessKeyStep > button:first-child {
+  justify-self: start;
+}
+
+.providerFilters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 12px 0 0;
+  margin: 0;
+  border: 0;
+}
+
+.modelChoice {
+  min-height: 60px;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 12px;
+  padding: 10px 8px;
+  border-bottom: 1px solid var(--line);
+  cursor: pointer;
 }
 
 .mobileMenu,
@@ -531,6 +828,62 @@ input:focus-visible,
   .listRow {
     align-items: flex-start;
     flex-direction: column;
+  }
+
+  .settingsPage {
+    gap: 34px;
+  }
+
+  .sectionHeading,
+  .accessRow {
+    align-items: flex-start;
+  }
+
+  .sectionHeading {
+    flex-direction: column;
+  }
+
+  .sectionHeading > button,
+  .modelSummary > button {
+    width: 100%;
+  }
+
+  .modelSummary {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  .modelSummary > button {
+    grid-column: 1 / -1;
+  }
+
+  .accessRow {
+    flex-direction: column;
+  }
+
+  .accessIdentity {
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
+
+  .providerChoice {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .deviceCodePanel {
+    grid-template-columns: 1fr;
+  }
+
+  .deviceCodePanel > button,
+  .providerAuthFlow > a,
+  .providerAuthActions,
+  .providerAuthActions > button {
+    width: 100%;
+  }
+
+  .providerAuthActions {
+    flex-direction: column-reverse;
   }
 }
 

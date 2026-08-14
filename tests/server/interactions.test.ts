@@ -54,6 +54,60 @@ describe("InteractionBroker", () => {
     expect(published).not.toHaveBeenCalled();
   });
 
+  test("classifies a cancelled authentication prompt without retaining it", async () => {
+    const events = new EventHub();
+    const broker = new InteractionBroker(events);
+    const prompt = broker.prompt({ type: "text", message: "Code" });
+    const replayed: unknown[] = [];
+    broker.replayPending((data) => replayed.push(data));
+
+    broker.respond((replayed[0] as { id: string }).id);
+
+    await expect(prompt).rejects.toMatchObject({ name: "AbortError" });
+    expect(broker.pendingCount).toBe(0);
+  });
+
+  test("marks provider authentication prompts for dedicated Web routing", async () => {
+    const events = new EventHub();
+    const broker = new InteractionBroker(events);
+    const published: unknown[] = [];
+    events.subscribe((event) => published.push(event.data));
+
+    const pending = broker.prompt(
+      {
+        type: "select",
+        message: "Select login method",
+        options: [{ id: "device_code", label: "Device code" }],
+      },
+      "provider_auth",
+    );
+
+    expect(published[0]).toMatchObject({
+      kind: "select",
+      scope: "provider_auth",
+      title: "Select login method",
+    });
+    const id = (published[0] as { id: string }).id;
+    broker.respond(id, "device_code");
+    await expect(pending).resolves.toBe("device_code");
+  });
+
+  test("replays the active request for clients that connect after it starts", async () => {
+    const events = new EventHub();
+    const broker = new InteractionBroker(events);
+    const pending = broker.request("secret", { title: "API key" });
+
+    const replayed: unknown[] = [];
+    expect(broker.replayPending((data) => replayed.push(data))).toBe(1);
+    expect(replayed).toEqual([
+      expect.objectContaining({ kind: "secret", title: "API key" }),
+    ]);
+
+    const id = (replayed[0] as { id: string }).id;
+    broker.respond(id, "sk-secret");
+    await pending;
+  });
+
   test("does not expose secret responses in events", async () => {
     const events = new EventHub();
     const broker = new InteractionBroker(events);

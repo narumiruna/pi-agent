@@ -10,6 +10,7 @@ export type InteractionKind =
   | "text";
 
 interface PendingInteraction {
+  data: Record<string, unknown> & { id: string; kind: InteractionKind };
   resolve: (value: string | undefined) => void;
   timer?: ReturnType<typeof setTimeout>;
   removeAbort?: () => void;
@@ -24,15 +25,21 @@ export class InteractionBroker {
     return this.pending.size;
   }
 
+  replayPending(publish: (data: Record<string, unknown>) => void): number {
+    for (const interaction of this.pending.values()) publish(interaction.data);
+    return this.pending.size;
+  }
+
   request(
     kind: InteractionKind,
     payload: Record<string, unknown>,
     options: { timeout?: number; signal?: AbortSignal } = {},
   ): Promise<string | undefined> {
     const id = crypto.randomUUID();
+    const data = { id, kind, ...payload, timeout: options.timeout };
     let published = false;
     const promise = new Promise<string | undefined>((resolve) => {
-      const entry: PendingInteraction = { resolve };
+      const entry: PendingInteraction = { data, resolve };
       const finish = () => {
         const current = this.pending.get(id);
         if (!current) return;
@@ -58,12 +65,7 @@ export class InteractionBroker {
       }
     });
     if (this.pending.has(id)) {
-      this.events.publish("interaction", {
-        id,
-        kind,
-        ...payload,
-        timeout: options.timeout,
-      });
+      this.events.publish("interaction", data);
       published = true;
     }
     return promise;
@@ -80,13 +82,14 @@ export class InteractionBroker {
     return true;
   }
 
-  async prompt(prompt: AuthPrompt): Promise<string> {
+  async prompt(prompt: AuthPrompt, scope?: "provider_auth"): Promise<string> {
     const kind: InteractionKind =
       prompt.type === "manual_code" ? "text" : prompt.type;
     const value = await this.request(
       kind,
       {
         title: prompt.message,
+        ...(scope ? { scope } : {}),
         ...(prompt.type === "select" ? { options: prompt.options } : {}),
         ...(prompt.type !== "select" && prompt.placeholder
           ? { placeholder: prompt.placeholder }
@@ -95,7 +98,10 @@ export class InteractionBroker {
       prompt.signal ? { signal: prompt.signal } : {},
     );
     if (value === undefined)
-      throw new Error("Authentication interaction was cancelled");
+      throw new DOMException(
+        "Authentication interaction was cancelled",
+        "AbortError",
+      );
     return value;
   }
 

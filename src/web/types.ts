@@ -50,6 +50,7 @@ export interface HeartbeatRun {
 export interface InteractionEvent {
   id: string;
   kind: "confirm" | "editor" | "input" | "secret" | "select" | "text";
+  scope?: "provider_auth";
   title?: string;
   message?: string;
   options?: Array<string | { id: string; label: string; description?: string }>;
