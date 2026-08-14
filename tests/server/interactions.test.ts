@@ -67,6 +67,31 @@ describe("InteractionBroker", () => {
     expect(broker.pendingCount).toBe(0);
   });
 
+  test("marks provider authentication prompts for dedicated Web routing", async () => {
+    const events = new EventHub();
+    const broker = new InteractionBroker(events);
+    const published: unknown[] = [];
+    events.subscribe((event) => published.push(event.data));
+
+    const pending = broker.prompt(
+      {
+        type: "select",
+        message: "Select login method",
+        options: [{ id: "device_code", label: "Device code" }],
+      },
+      "provider_auth",
+    );
+
+    expect(published[0]).toMatchObject({
+      kind: "select",
+      scope: "provider_auth",
+      title: "Select login method",
+    });
+    const id = (published[0] as { id: string }).id;
+    broker.respond(id, "device_code");
+    await expect(pending).resolves.toBe("device_code");
+  });
+
   test("replays the active request for clients that connect after it starts", async () => {
     const events = new EventHub();
     const broker = new InteractionBroker(events);

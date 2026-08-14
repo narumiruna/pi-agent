@@ -283,6 +283,13 @@ export function registerApi<E extends ApiEnv>(
       providers: await services.pi.providerAccess(),
     });
   });
+  app.get("/api/provider-auth", (context) =>
+    context.json(services.pi.providerAuthTask() ?? null),
+  );
+  app.delete("/api/provider-auth", (context) => {
+    services.pi.dismissProviderAuthTask();
+    return context.body(null, 204);
+  });
   app.put("/api/model", tbValidator("json", ModelBody), async (context) => {
     try {
       const body = context.req.valid("json");

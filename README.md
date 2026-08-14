@@ -102,7 +102,21 @@ sudo chown -R 10001:10001 ./data/pi/agent ./data/app
 
 Open Settings and select **Add access**.
 
-Choose **Subscription or account** for provider OAuth, or choose **API key** to save a key through Pi's native login flow.
+Choose **Subscriptions** for provider sign-in, or choose **API keys** to save a key through Pi's native login flow.
+
+For OpenAI Codex, a ChatGPT Plus or Pro subscription is required.
+
+Choose **Device code login** for Docker and remote servers, copy the displayed code, select **Open OpenAI**, and finish authorization in the OpenAI page.
+
+Device-code status remains in the authentication dialog and can be restored after a browser refresh while the server process and login remain active.
+
+Browser login remains available, but its localhost callback may not reach the container.
+
+If that callback fails, paste the final redirect URL or authorization code into the authentication dialog.
+
+Cancelling sign-in stops the pending Pi authentication flow without removing a previously valid credential.
+
+Use **Reconnect** beside a stored subscription when its token is no longer valid or you need to change accounts.
 
 Provider credentials are saved by Pi in `/app/.pi/agent/auth.json`, so the agent directory must be writable and persistent.
 
@@ -118,9 +132,9 @@ Only credentials stored in Pi's `auth.json` can be disconnected from Settings, a
 
 Custom providers and models use `/app/.pi/agent/models.json` in Pi's native format.
 
-OAuth opens the provider URL when possible and always displays the URL or device code for recovery.
+After subscription sign-in succeeds, choose **Choose a model** to review the available models.
 
-A provider's localhost callback may be unreachable inside Docker, so use the displayed manual code, redirect URL, or device-code path when prompted.
+Pi Agent never switches the current model automatically after authentication.
 
 ## Data and database
 

@@ -3,6 +3,7 @@ export type WebEventType =
   | "message_delta"
   | "notification"
   | "package_progress"
+  | "provider_auth"
   | "run_status"
   | "tool_status";
 

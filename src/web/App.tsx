@@ -9,6 +9,8 @@ import {
 } from "./components/AuthNotification.js";
 import { InteractionDialog } from "./components/InteractionDialog.js";
 import { Navigation, type Page } from "./components/Navigation.js";
+import { ProviderAuthDialog } from "./components/ProviderAuthDialog.js";
+import type { ProviderAuthTask } from "./model-access.js";
 import { ChatPage } from "./pages/ChatPage.js";
 import { HeartbeatPage } from "./pages/HeartbeatPage.js";
 import { LibraryPage } from "./pages/LibraryPage.js";
@@ -35,6 +37,8 @@ export function App() {
   const [eventsConnectedFor, setEventsConnectedFor] = useState<string>();
   const [liveTools, setLiveTools] = useState<LiveTool[]>([]);
   const [interaction, setInteraction] = useState<InteractionEvent>();
+  const [providerAuth, setProviderAuth] = useState<ProviderAuthTask>();
+  const [chooseModelRequest, setChooseModelRequest] = useState(0);
   const [notification, setNotification] = useState<AuthNotificationData>();
   const [dark, setDark] = useState(
     () => window.matchMedia?.("(prefers-color-scheme: dark)").matches ?? false,
@@ -63,8 +67,12 @@ export function App() {
   useEffect(() => {
     void api<SessionInfo>("/api/session")
       .then(async (result) => {
+        const [authTask] = await Promise.all([
+          api<ProviderAuthTask | null>("/api/provider-auth"),
+          loadConversations(),
+        ]);
+        setProviderAuth(authTask ?? undefined);
         setSession(result);
-        await loadConversations();
       })
       .catch((reason) => {
         if (reason instanceof ApiError && reason.status === 401)
@@ -123,9 +131,11 @@ export function App() {
       });
     });
     source.addEventListener("interaction", (raw) => {
-      const event = JSON.parse(
-        (raw as MessageEvent).data,
-      ) as InteractionEvent & { kind: string };
+      const event = JSON.parse((raw as MessageEvent).data) as {
+        id: string;
+        kind: string;
+        scope?: "provider_auth";
+      };
       if (event.kind === "dismiss") {
         setInteraction((current) =>
           current?.id === event.id ? undefined : current,
@@ -140,25 +150,17 @@ export function App() {
     });
     source.addEventListener("notification", (raw) => {
       const event = JSON.parse((raw as MessageEvent).data) as {
-        type?: string;
         message?: string;
         statusText?: string;
-        url?: string;
-        instructions?: string;
-        verificationUri?: string;
-        userCode?: string;
       };
-      const url = event.url ?? event.verificationUri;
-      const message = [event.instructions, event.message]
-        .filter(Boolean)
-        .join(" — ");
-      if (url) window.open(url, "_blank", "noopener,noreferrer");
-      if (message || event.statusText)
-        setNotification({
-          message: message || event.statusText || "Authentication updated",
-          ...(url ? { url } : {}),
-          ...(event.userCode ? { code: event.userCode } : {}),
-        });
+      const message = event.message ?? event.statusText;
+      if (message) setNotification({ message });
+    });
+    source.addEventListener("provider_auth", (raw) => {
+      const event = JSON.parse((raw as MessageEvent).data) as
+        | ProviderAuthTask
+        | { phase: "dismissed" };
+      setProviderAuth(event.phase === "dismissed" ? undefined : event);
     });
     source.addEventListener("reset", () => setRefresh((value) => value + 1));
     source.onerror = () => {
@@ -251,12 +253,53 @@ export function App() {
             )}
             {page === "heartbeat" && <HeartbeatPage refresh={refresh} />}
             {page === "library" && <LibraryPage />}
-            {page === "settings" && <SettingsPage session={session} />}
+            {page === "settings" && (
+              <SettingsPage
+                chooseModelRequest={chooseModelRequest}
+                session={session}
+              />
+            )}
           </main>
           <InteractionDialog
-            authNotification={notification?.url ? notification : undefined}
-            interaction={interaction}
+            interaction={
+              interaction?.scope === "provider_auth" ? undefined : interaction
+            }
             onClose={() => setInteraction(undefined)}
+          />
+          <ProviderAuthDialog
+            interaction={
+              interaction?.scope === "provider_auth" ? interaction : undefined
+            }
+            task={providerAuth}
+            onChooseModel={() => {
+              setPage("settings");
+              setChooseModelRequest((value) => value + 1);
+            }}
+            onDismiss={() => {
+              void api("/api/provider-auth", mutation("DELETE")).catch(
+                () => undefined,
+              );
+              setProviderAuth(undefined);
+            }}
+            onInteractionClose={() => setInteraction(undefined)}
+            onRetry={(providerId) => {
+              setProviderAuth({
+                providerId,
+                providerName: providerAuth?.providerName ?? providerId,
+                phase: "starting",
+              });
+              void api(
+                `/api/providers/${providerId}/login`,
+                mutation("POST", { type: "oauth" }),
+              ).catch(() =>
+                setProviderAuth({
+                  providerId,
+                  providerName: providerAuth?.providerName ?? providerId,
+                  phase: "failed",
+                  error: "login_failed",
+                }),
+              );
+            }}
           />
         </div>
       )}

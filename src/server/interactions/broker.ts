@@ -82,13 +82,14 @@ export class InteractionBroker {
     return true;
   }
 
-  async prompt(prompt: AuthPrompt): Promise<string> {
+  async prompt(prompt: AuthPrompt, scope?: "provider_auth"): Promise<string> {
     const kind: InteractionKind =
       prompt.type === "manual_code" ? "text" : prompt.type;
     const value = await this.request(
       kind,
       {
         title: prompt.message,
+        ...(scope ? { scope } : {}),
         ...(prompt.type === "select" ? { options: prompt.options } : {}),
         ...(prompt.type !== "select" && prompt.placeholder
           ? { placeholder: prompt.placeholder }

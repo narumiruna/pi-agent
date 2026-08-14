@@ -3,6 +3,7 @@ import { join, sep } from "node:path";
 import type { ThinkingLevel } from "@earendil-works/pi-agent-core";
 import type {
   Api,
+  AuthEvent,
   AuthInteraction,
   AuthPrompt,
   CredentialInfo,
@@ -40,6 +41,26 @@ export interface ConversationSummary {
   active: boolean;
 }
 
+export type ProviderAuthPhase =
+  | "cancelled"
+  | "failed"
+  | "starting"
+  | "succeeded"
+  | "waiting";
+
+export interface ProviderAuthTask {
+  providerId: string;
+  providerName: string;
+  phase: ProviderAuthPhase;
+  method?: string;
+  message?: string;
+  url?: string;
+  userCode?: string;
+  verificationUri?: string;
+  expiresAt?: number;
+  error?: "login_failed";
+}
+
 export interface ProviderAccess {
   id: string;
   name: string;
@@ -67,6 +88,7 @@ export class PiService {
   readonly packageManager: DefaultPackageManager;
   private readonly runtime: AgentSessionRuntime;
   private providerLoginAbort: AbortController | undefined;
+  private currentProviderAuthTask: ProviderAuthTask | undefined;
   private unsubscribe?: () => void;
 
   private constructor(
@@ -376,6 +398,100 @@ export class PiService {
     return Boolean(this.providerLoginAbort);
   }
 
+  providerAuthTask(): ProviderAuthTask | undefined {
+    return this.currentProviderAuthTask
+      ? { ...this.currentProviderAuthTask }
+      : undefined;
+  }
+
+  dismissProviderAuthTask(): void {
+    if (this.providerLoginPending) return;
+    this.currentProviderAuthTask = undefined;
+    this.events.publish("provider_auth", { phase: "dismissed" });
+  }
+
+  private publishProviderAuthTask(task: ProviderAuthTask): void {
+    this.currentProviderAuthTask = task;
+    this.events.publish("provider_auth", task);
+  }
+
+  private finishProviderAuthTask(
+    task: ProviderAuthTask,
+    phase: "cancelled" | "failed" | "succeeded",
+  ): void {
+    this.publishProviderAuthTask({
+      providerId: task.providerId,
+      providerName: task.providerName,
+      phase,
+      ...(phase === "failed" ? { error: "login_failed" as const } : {}),
+    });
+  }
+
+  private providerName(providerId: string): string {
+    return (
+      this.modelRuntime
+        .getProviders()
+        .find((provider) => provider.id === providerId)?.name ?? providerId
+    );
+  }
+
+  private updateProviderAuthPrompt(prompt: AuthPrompt): void {
+    const task = this.currentProviderAuthTask;
+    if (!task) return;
+    const method =
+      prompt.type === "select" &&
+      prompt.options.some((option) => option.id === "device_code")
+        ? "choose_method"
+        : task.method;
+    this.publishProviderAuthTask({
+      providerId: task.providerId,
+      providerName: task.providerName,
+      phase: "waiting",
+      ...(method ? { method } : {}),
+      message: prompt.message,
+    });
+  }
+
+  private updateProviderAuthEvent(event: AuthEvent): void {
+    const task = this.currentProviderAuthTask;
+    if (!task) return;
+    if (event.type === "device_code") {
+      this.publishProviderAuthTask({
+        providerId: task.providerId,
+        providerName: task.providerName,
+        phase: "waiting",
+        method: "device_code",
+        userCode: event.userCode,
+        verificationUri: event.verificationUri,
+        ...(event.expiresInSeconds
+          ? { expiresAt: Date.now() + event.expiresInSeconds * 1_000 }
+          : {}),
+      });
+      return;
+    }
+    if (event.type === "auth_url") {
+      this.publishProviderAuthTask({
+        providerId: task.providerId,
+        providerName: task.providerName,
+        phase: "waiting",
+        method: "browser",
+        url: event.url,
+        ...(event.instructions ? { message: event.instructions } : {}),
+      });
+      return;
+    }
+    this.publishProviderAuthTask({
+      providerId: task.providerId,
+      providerName: task.providerName,
+      phase: "waiting",
+      ...(task.method ? { method: task.method } : {}),
+      message: event.message,
+      ...(event.type === "info" && event.links?.[0]
+        ? { url: event.links[0].url }
+        : {}),
+    });
+  }
+
   async providerAccess(): Promise<ProviderAccess[]> {
     const credentials = new Map<string, CredentialInfo>(
       (await this.modelRuntime.listCredentials()).map((credential) => [
@@ -430,6 +546,12 @@ export class PiService {
       throw new Error("Provider authentication is already in progress");
     const abort = new AbortController();
     this.providerLoginAbort = abort;
+    if (type === "oauth")
+      this.publishProviderAuthTask({
+        providerId,
+        providerName: this.providerName(providerId),
+        phase: "starting",
+      });
     let submittedKey = apiKey;
     const interaction: AuthInteraction = {
       signal: abort.signal,
@@ -439,12 +561,28 @@ export class PiService {
           submittedKey = undefined;
           return Promise.resolve(key);
         }
-        return this.interactions.prompt(prompt);
+        this.updateProviderAuthPrompt(prompt);
+        return this.interactions.prompt(
+          prompt,
+          type === "oauth" ? "provider_auth" : undefined,
+        );
       },
-      notify: (event) => this.interactions.notify(event),
+      notify: (event) => this.updateProviderAuthEvent(event),
     };
     try {
       await this.modelRuntime.login(providerId, type, interaction);
+      const task = this.currentProviderAuthTask;
+      if (task) this.finishProviderAuthTask(task, "succeeded");
+    } catch (error) {
+      const task = this.currentProviderAuthTask;
+      if (task)
+        this.finishProviderAuthTask(
+          task,
+          abort.signal.aborted ? "cancelled" : "failed",
+        );
+      if (abort.signal.aborted)
+        throw new DOMException("Authentication cancelled", "AbortError");
+      throw error;
     } finally {
       if (this.providerLoginAbort === abort)
         this.providerLoginAbort = undefined;
@@ -454,6 +592,8 @@ export class PiService {
   cancelProviderLogin(): void {
     const abort = this.providerLoginAbort;
     if (!abort) return;
+    const task = this.currentProviderAuthTask;
+    if (task) this.finishProviderAuthTask(task, "cancelled");
     abort.abort(new DOMException("Authentication cancelled", "AbortError"));
     this.interactions.cancelAll();
   }
