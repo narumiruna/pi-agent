@@ -21,6 +21,7 @@ interface Props {
   refresh: number;
   delta: string;
   running: boolean;
+  inputDisabled: boolean;
   liveTools: LiveTool[];
   eventsConnected: boolean;
   onRunning: (running: boolean) => void;
@@ -31,6 +32,7 @@ export function ChatPage({
   refresh,
   delta,
   running,
+  inputDisabled,
   liveTools,
   eventsConnected,
   onRunning,
@@ -57,7 +59,14 @@ export function ChatPage({
   }, [messages, delta]);
 
   const send = async () => {
-    if (!conversationId || !draft.trim() || running || !eventsConnected) return;
+    if (
+      !conversationId ||
+      !draft.trim() ||
+      running ||
+      inputDisabled ||
+      !eventsConnected
+    )
+      return;
     const message = draft.trim();
     setDraft("");
     setMessages((current) => [
@@ -86,7 +95,7 @@ export function ChatPage({
 
   return (
     <section className="chatPage" aria-label={t("chat")}>
-      <ScrollArea className="messageScroll">
+      <ScrollArea className="messageScroll" tabIndex={0}>
         <div className="messageColumn">
           {messages.length === 0 && !delta ? (
             <div className="emptyState">
@@ -156,7 +165,9 @@ export function ChatPage({
             aria-label={t("messagePlaceholder")}
             placeholder={t("messagePlaceholder")}
             value={draft}
-            disabled={!conversationId || running || !eventsConnected}
+            disabled={
+              !conversationId || running || inputDisabled || !eventsConnected
+            }
             onChange={(event) => setDraft(event.target.value)}
             onKeyDown={(event) => {
               if (event.key === "Enter" && !event.shiftKey) {
@@ -175,7 +186,10 @@ export function ChatPage({
                 <IconButton
                   aria-label={t("send")}
                   disabled={
-                    !conversationId || !draft.trim() || !eventsConnected
+                    !conversationId ||
+                    !draft.trim() ||
+                    inputDisabled ||
+                    !eventsConnected
                   }
                   onClick={() => void send()}
                 >

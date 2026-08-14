@@ -3,6 +3,7 @@ import { Button, Flex, RadioGroup, Text, TextField } from "@radix-ui/themes";
 import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import type { ModelOption } from "../model-access.js";
+import { DialogPortal } from "./DialogPortal.js";
 
 interface Props {
   current?: ModelOption;
@@ -57,7 +58,7 @@ export function ModelPickerDialog({
 
   return (
     <Dialog.Root open={open} onOpenChange={onOpenChange}>
-      <Dialog.Portal>
+      <DialogPortal>
         <Dialog.Overlay className="dialogOverlay" />
         <Dialog.Content
           className="dialogContent modelDialog"
@@ -119,6 +120,12 @@ export function ModelPickerDialog({
                     className={`modelChoice${selectedValue === value ? " selected" : ""}`}
                     key={value}
                     value={value}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter" || event.key === " ") {
+                        event.preventDefault();
+                        setSelectedValue(value);
+                      }
+                    }}
                   >
                     <span className="modelChoiceText">
                       <strong>{model.name}</strong>
@@ -140,6 +147,7 @@ export function ModelPickerDialog({
               {t("cancel")}
             </Button>
             <Button
+              highContrast
               disabled={!selected || pending}
               onClick={() =>
                 selected &&
@@ -152,7 +160,7 @@ export function ModelPickerDialog({
             </Button>
           </Flex>
         </Dialog.Content>
-      </Dialog.Portal>
+      </DialogPortal>
     </Dialog.Root>
   );
 }

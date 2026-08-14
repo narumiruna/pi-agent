@@ -13,12 +13,17 @@
     "dev": "concurrently \"tsx watch src/server/index.ts\" \"vite\"",
     "start": "node dist/server/index.js",
     "check": "biome ci .",
+    "check:e2e": "tsc -p tsconfig.e2e.json --noEmit",
+    "e2e:server": "tsx tests/e2e/support/server.ts",
     "test": "vitest run",
-    "ci": "npm run check && npm test && npm run build",
+    "test:e2e": "npm run build && playwright test",
+    "ci": "npm run check && npm run check:e2e && npm test && npm run build",
     "prepare": "husky"
   },
   "devDependencies": {
+    "@axe-core/playwright": "^4.13.0",
     "@biomejs/biome": "^2.5.7",
+    "@playwright/test": "^1.62.1",
     "@testing-library/jest-dom": "^7.0.1",
     "@testing-library/react": "^16.3.2",
     "@testing-library/user-event": "^14.6.4",

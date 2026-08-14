@@ -31,8 +31,9 @@ function DocumentEditor({
   label: string;
 }) {
   const { t } = useTranslation();
-  const [content, setContent] = useState("");
+  const [content, setContent] = useState<string>();
   useEffect(() => {
+    setContent(undefined);
     void api<{ content: string }>(`/api/documents/${kind}`).then((result) =>
       setContent(result.content),
     );
@@ -42,14 +43,17 @@ function DocumentEditor({
       <Heading size="4">{label}</Heading>
       <TextArea
         rows={14}
-        value={content}
+        value={content ?? ""}
+        disabled={content === undefined}
         onChange={(event) => setContent(event.target.value)}
         aria-label={label}
       />
       <Button
-        onClick={() =>
-          void api(`/api/documents/${kind}`, mutation("PUT", { content }))
-        }
+        disabled={content === undefined}
+        onClick={() => {
+          if (content !== undefined)
+            void api(`/api/documents/${kind}`, mutation("PUT", { content }));
+        }}
       >
         {t("save")}
       </Button>
@@ -65,6 +69,7 @@ export function LibraryPage() {
   const [templateContent, setTemplateContent] = useState("");
   const [source, setSource] = useState("");
   const [trusted, setTrusted] = useState(false);
+  const [loaded, setLoaded] = useState(false);
   const [mcp, setMcp] = useState('{\n  "mcpServers": {}\n}\n');
   const [mcpError, setMcpError] = useState<string>();
   const [mcpDiagnostics, setMcpDiagnostics] = useState<
@@ -85,6 +90,7 @@ export function LibraryPage() {
     setPackages(packageData);
     setMcp(`${JSON.stringify(mcpData, null, 2)}\n`);
     setMcpDiagnostics(diagnostics.mcp);
+    setLoaded(true);
   }, []);
   useEffect(() => void load(), [load]);
 
@@ -256,6 +262,7 @@ export function LibraryPage() {
             rows={20}
             className="codeEditor"
             value={mcp}
+            disabled={!loaded}
             onChange={(event) => setMcp(event.target.value)}
             aria-label={t("mcp")}
           />
@@ -268,7 +275,9 @@ export function LibraryPage() {
               {diagnostic.server}: {diagnostic.message}
             </div>
           ))}
-          <Button onClick={() => void saveMcp()}>{t("save")}</Button>
+          <Button disabled={!loaded} onClick={() => void saveMcp()}>
+            {t("save")}
+          </Button>
         </Tabs.Content>
       </Tabs.Root>
     </section>

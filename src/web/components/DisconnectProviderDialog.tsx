@@ -2,6 +2,7 @@ import * as Dialog from "@radix-ui/react-dialog";
 import { Button, Flex, Text } from "@radix-ui/themes";
 import { useTranslation } from "react-i18next";
 import type { ProviderOption } from "../model-access.js";
+import { DialogPortal } from "./DialogPortal.js";
 
 interface Props {
   currentProvider?: string;
@@ -25,7 +26,7 @@ export function DisconnectProviderDialog({
   const currentModelAffected = provider.id === currentProvider;
   return (
     <Dialog.Root open={open} onOpenChange={onOpenChange}>
-      <Dialog.Portal>
+      <DialogPortal>
         <Dialog.Overlay className="dialogOverlay" />
         <Dialog.Content
           className="dialogContent"
@@ -62,7 +63,7 @@ export function DisconnectProviderDialog({
             </Button>
           </Flex>
         </Dialog.Content>
-      </Dialog.Portal>
+      </DialogPortal>
     </Dialog.Root>
   );
 }

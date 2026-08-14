@@ -17,6 +17,7 @@ import {
 } from "@radix-ui/themes";
 import { useTranslation } from "react-i18next";
 import type { Conversation } from "../types.js";
+import { DialogPortal } from "./DialogPortal.js";
 
 export type Page = "chat" | "heartbeat" | "library" | "settings";
 
@@ -25,6 +26,7 @@ interface Props {
   conversations: Conversation[];
   activeId?: string;
   mobileOpen: boolean;
+  newPending: boolean;
   onMobileOpen: (open: boolean) => void;
   onPage: (page: Page) => void;
   onConversation: (id: string) => void;
@@ -77,6 +79,7 @@ function NavContent(props: Props) {
             size="1"
             variant="ghost"
             aria-label={t("newConversation")}
+            disabled={props.newPending}
             onClick={props.onNew}
           >
             <PlusIcon />
@@ -88,6 +91,8 @@ function NavContent(props: Props) {
           {props.conversations.map((conversation) => (
             <button
               type="button"
+              aria-label={conversation.name ?? conversation.id}
+              title={conversation.name ?? conversation.id}
               key={conversation.id}
               className={
                 props.activeId === conversation.id
@@ -100,7 +105,7 @@ function NavContent(props: Props) {
                 props.onMobileOpen(false);
               }}
             >
-              {conversation.name || conversation.id.slice(0, 8)}
+              {conversation.name || conversation.id.slice(-8)}
             </button>
           ))}
         </div>
@@ -126,7 +131,7 @@ export function Navigation(props: Props) {
             <HamburgerMenuIcon />
           </IconButton>
         </Dialog.Trigger>
-        <Dialog.Portal>
+        <DialogPortal>
           <Dialog.Overlay className="dialogOverlay" />
           <Dialog.Content className="mobileNavigation">
             <Dialog.Title className="srOnly">{t("menu")}</Dialog.Title>
@@ -141,7 +146,7 @@ export function Navigation(props: Props) {
             </Dialog.Close>
             <NavContent {...props} />
           </Dialog.Content>
-        </Dialog.Portal>
+        </DialogPortal>
       </Dialog.Root>
     </>
   );

@@ -10,6 +10,8 @@ const resources = {
       library: "Library",
       settings: "Settings",
       newConversation: "New conversation",
+      conversationCreateFailed:
+        "Could not create a conversation. Your previous conversation is still available.",
       emptyConversation: "Start with a clear request.",
       messagePlaceholder: "Ask Pi anything…",
       send: "Send",
@@ -173,6 +175,7 @@ const resources = {
       library: "資源庫",
       settings: "設定",
       newConversation: "新增對話",
+      conversationCreateFailed: "無法建立新對話，原本的對話仍可使用。",
       emptyConversation: "從一個清楚的需求開始。",
       messagePlaceholder: "交代 Pi 一件事…",
       send: "傳送",

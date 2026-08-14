@@ -58,6 +58,102 @@ describe("web application", () => {
     expect(window.localStorage.getItem("pi-agent-language")).toBe("zh-TW");
   });
 
+  test("preserves the active conversation when creating another fails", async () => {
+    HTMLElement.prototype.scrollIntoView = vi.fn();
+    class FakeEventSource {
+      static instances: FakeEventSource[] = [];
+      onerror: (() => void) | null = null;
+      onopen: (() => void) | null = null;
+
+      constructor() {
+        FakeEventSource.instances.push(this);
+      }
+
+      addEventListener(): void {}
+      close(): void {}
+    }
+    vi.stubGlobal("EventSource", FakeEventSource);
+    let finishCreate: ((response: Response) => void) | undefined;
+    vi.mocked(fetch).mockImplementation(async (input, init) => {
+      const url = String(input);
+      if (url === "/api/session")
+        return new Response(
+          JSON.stringify({
+            authenticated: true,
+            authDisabled: false,
+            tools: [],
+          }),
+          { status: 200, headers: { "content-type": "application/json" } },
+        );
+      if (url === "/api/provider-auth")
+        return new Response("null", {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        });
+      if (url === "/api/conversations" && init?.method === "POST")
+        return new Promise<Response>((resolve) => {
+          finishCreate = resolve;
+        });
+      if (url === "/api/conversations")
+        return new Response(
+          JSON.stringify([
+            {
+              id: "existing-conversation",
+              createdAt: new Date(0).toISOString(),
+              modifiedAt: new Date(0).toISOString(),
+              messageCount: 0,
+              active: true,
+            },
+          ]),
+          { status: 200, headers: { "content-type": "application/json" } },
+        );
+      if (url === "/api/conversations/existing-conversation")
+        return new Response(
+          JSON.stringify({
+            messages: [
+              {
+                id: "existing-message",
+                role: "user",
+                text: "Existing message",
+                timestamp: 0,
+              },
+            ],
+          }),
+          {
+            status: 200,
+            headers: { "content-type": "application/json" },
+          },
+        );
+      throw new Error(`Unexpected request: ${url}`);
+    });
+    const user = userEvent.setup();
+
+    render(<App />);
+    const create = await screen.findByRole("button", {
+      name: /new conversation/i,
+    });
+    expect(await screen.findByText("Existing message")).toBeVisible();
+    await user.click(create);
+    expect(create).toBeDisabled();
+    expect(screen.getByLabelText(/Ask Pi anything/i)).toBeDisabled();
+    expect(screen.getByText("Existing message")).toBeVisible();
+    finishCreate?.(
+      new Response(JSON.stringify({ error: { code: "internal_error" } }), {
+        status: 500,
+        headers: { "content-type": "application/json" },
+      }),
+    );
+
+    expect(
+      await screen.findByText(/previous conversation is still available/i),
+    ).toBeVisible();
+    expect(create).toBeEnabled();
+    FakeEventSource.instances.at(-1)?.onopen?.();
+    await waitFor(() =>
+      expect(screen.getByLabelText(/Ask Pi anything/i)).toBeEnabled(),
+    );
+  });
+
   test("adds an API key through a focused access flow", async () => {
     vi.mocked(fetch).mockImplementation(async (input, init) => {
       if (String(input) === "/api/models") {

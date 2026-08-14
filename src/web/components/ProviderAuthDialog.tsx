@@ -18,6 +18,7 @@ import { useTranslation } from "react-i18next";
 import { api, mutation } from "../api.js";
 import type { ProviderAuthTask } from "../model-access.js";
 import type { InteractionEvent } from "../types.js";
+import { DialogPortal } from "./DialogPortal.js";
 
 interface Props {
   interaction?: InteractionEvent;
@@ -135,7 +136,7 @@ export function ProviderAuthDialog({
 
   return (
     <Dialog.Root open onOpenChange={(open) => !open && void cancel()}>
-      <Dialog.Portal>
+      <DialogPortal>
         <Dialog.Overlay className="dialogOverlay" />
         <Dialog.Content
           className="dialogContent providerAuthDialog"
@@ -175,6 +176,12 @@ export function ProviderAuthDialog({
                           className={`authMethodOption${value === option.id ? " selected" : ""}`}
                           key={option.id}
                           value={option.id}
+                          onKeyDown={(event) => {
+                            if (event.key === "Enter" || event.key === " ") {
+                              event.preventDefault();
+                              setValue(option.id);
+                            }
+                          }}
                         >
                           <span className="authMethodText">
                             <strong>{label}</strong>
@@ -322,7 +329,7 @@ export function ProviderAuthDialog({
             )}
           </Flex>
         </Dialog.Content>
-      </Dialog.Portal>
+      </DialogPortal>
     </Dialog.Root>
   );
 }
