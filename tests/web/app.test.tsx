@@ -102,6 +102,80 @@ describe("web application", () => {
     expect(window.localStorage.getItem("pi-agent-language")).toBe("zh-TW");
   });
 
+  test("opens Files and confirms before leaving a dirty editor", async () => {
+    HTMLElement.prototype.scrollIntoView = vi.fn();
+    class FakeEventSource {
+      onerror: (() => void) | null = null;
+      onopen: (() => void) | null = null;
+      addEventListener(): void {}
+      close(): void {}
+    }
+    vi.stubGlobal("EventSource", FakeEventSource);
+    vi.mocked(fetch).mockImplementation(async (input) => {
+      const url = String(input);
+      const json = (value: unknown) =>
+        new Response(JSON.stringify(value), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        });
+      if (url === "/api/session")
+        return json({ authenticated: true, authDisabled: false, tools: [] });
+      if (url === "/api/provider-auth") return json(null);
+      if (url === "/api/conversations" || url === "/api/commands")
+        return json([]);
+      if (url === "/api/workspace/entries?path=")
+        return json({
+          path: "",
+          entries: [
+            {
+              path: "notes.txt",
+              name: "notes.txt",
+              kind: "file",
+              modifiedAt: 1,
+              size: 5,
+            },
+          ],
+          truncated: false,
+          writable: true,
+        });
+      if (url === "/api/workspace/file?path=notes.txt")
+        return json({
+          path: "notes.txt",
+          name: "notes.txt",
+          kind: "file",
+          modifiedAt: 1,
+          size: 5,
+          revision: "revision",
+          downloadable: true,
+          editable: true,
+          writable: true,
+          content: "notes",
+        });
+      throw new Error(`Unexpected request: ${url}`);
+    });
+    const user = userEvent.setup();
+
+    render(<App />);
+
+    await user.click(await screen.findByRole("button", { name: "Files" }));
+    expect(screen.getByRole("heading", { name: "Files" })).toBeVisible();
+    await user.click(
+      await screen.findByRole("button", { name: /notes\.txt/i }),
+    );
+    await user.type(
+      await screen.findByLabelText("Contents of notes.txt"),
+      " changed",
+    );
+    await user.click(screen.getByRole("button", { name: "Chat" }));
+    expect(screen.getByText("Discard unsaved changes?")).toBeVisible();
+    await user.click(screen.getByRole("button", { name: "Cancel" }));
+    expect(screen.getByRole("heading", { name: "Files" })).toBeVisible();
+
+    await user.click(screen.getByRole("button", { name: "Chat" }));
+    await user.click(screen.getByRole("button", { name: "Discard changes" }));
+    expect(await screen.findByRole("region", { name: "Chat" })).toBeVisible();
+  });
+
   test("expands heartbeat failure diagnostics", async () => {
     vi.mocked(fetch).mockImplementation(async (input) => {
       const url = String(input);

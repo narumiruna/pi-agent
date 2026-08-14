@@ -26,7 +26,10 @@ import {
 import type { McpManager } from "./mcp/manager.js";
 import type { ResourceService } from "./resources/service.js";
 import type { AppStore, WebSessionRecord } from "./storage/types.js";
+import { WorkspaceError } from "./workspace/errors.js";
+import { MAX_WORKSPACE_PATH_LENGTH } from "./workspace/policy.js";
 import { searchWorkspace } from "./workspace/search.js";
+import type { WorkspaceService } from "./workspace/service.js";
 
 export interface ApiEnv extends Env {
   Variables: { session?: WebSessionRecord };
@@ -38,6 +41,7 @@ export interface ApiServices {
   pi: PiService;
   interactions: InteractionBroker;
   resources: ResourceService;
+  workspace: WorkspaceService;
   mcp: McpManager;
   heartbeat: HeartbeatScheduler;
 }
@@ -126,6 +130,35 @@ const PackageBody = Type.Object({
 const McpBody = Type.Object({
   mcpServers: Type.Record(Type.String(), Type.Unknown()),
 });
+const WorkspacePathQuery = Type.Object(
+  {
+    path: Type.Optional(Type.String({ maxLength: MAX_WORKSPACE_PATH_LENGTH })),
+  },
+  { additionalProperties: false },
+);
+const WorkspaceWriteBody = Type.Object(
+  {
+    path: Type.String({ minLength: 1, maxLength: MAX_WORKSPACE_PATH_LENGTH }),
+    content: Type.String({ maxLength: 1_000_000 }),
+    revision: Type.Optional(Type.String({ minLength: 1, maxLength: 100 })),
+  },
+  { additionalProperties: false },
+);
+const WorkspaceRenameBody = Type.Object(
+  {
+    path: Type.String({ minLength: 1, maxLength: MAX_WORKSPACE_PATH_LENGTH }),
+    name: Type.String({ minLength: 1, maxLength: 255 }),
+    revision: Type.String({ minLength: 1, maxLength: 100 }),
+  },
+  { additionalProperties: false },
+);
+const WorkspaceDeleteBody = Type.Object(
+  {
+    path: Type.String({ minLength: 1, maxLength: MAX_WORKSPACE_PATH_LENGTH }),
+    revision: Type.String({ minLength: 1, maxLength: 100 }),
+  },
+  { additionalProperties: false },
+);
 
 function documentKind(value: string): "append" | "heartbeat" | "system" {
   if (value === "append" || value === "heartbeat" || value === "system")
@@ -149,6 +182,46 @@ function errorResponse<E extends Env, P extends string, I extends Input>(
   if (/active conversation|active chat run|already|in progress/i.test(message))
     return context.json(apiError("conflict"), 409);
   return context.json(apiError("bad_request"), 400);
+}
+
+function workspaceErrorResponse<
+  E extends Env,
+  P extends string,
+  I extends Input,
+>(context: Context<E, P, I>, error: unknown) {
+  if (error instanceof DOMException && error.name === "AbortError") {
+    return context.json(apiError("cancelled"), 400);
+  }
+  if (!(error instanceof WorkspaceError)) throw error;
+  const params = { reason: error.reason };
+  switch (error.status) {
+    case 403:
+      return context.json(apiError("forbidden", params), 403);
+    case 404:
+      return context.json(apiError("not_found", params), 404);
+    case 409:
+      return context.json(apiError("conflict", params), 409);
+    case 413:
+      return context.json(apiError("bad_request", params), 413);
+    case 415:
+      return context.json(apiError("bad_request", params), 415);
+    default:
+      return context.json(apiError("bad_request", params), 400);
+  }
+}
+
+function attachmentHeader(name: string): string {
+  const normalized = Buffer.from(name, "utf8").toString("utf8");
+  const fallback =
+    normalized
+      .replace(/[\r\n"\\]/g, "_")
+      .replace(/[^\x20-\x7e]/g, "_")
+      .slice(0, 120) || "download";
+  const encoded = encodeURIComponent(normalized).replace(
+    /[!'()*]/g,
+    (value) => `%${value.charCodeAt(0).toString(16).toUpperCase()}`,
+  );
+  return `attachment; filename="${fallback}"; filename*=UTF-8''${encoded}`;
 }
 
 export function registerApi<E extends ApiEnv>(
@@ -596,9 +669,114 @@ export function registerApi<E extends ApiEnv>(
     } catch (error) {
       if (context.req.raw.signal.aborted)
         return context.json(apiError("cancelled"), 400);
-      return errorResponse(context, error);
+      return workspaceErrorResponse(context, error);
     }
   });
+  app.get(
+    "/api/workspace/entries",
+    tbValidator("query", WorkspacePathQuery, (result, context) => {
+      if (!result.success) return context.json(apiError("bad_request"), 400);
+    }),
+    async (context) => {
+      try {
+        return context.json(
+          await services.workspace.listDirectory(
+            context.req.valid("query").path ?? "",
+            context.req.raw.signal,
+          ),
+        );
+      } catch (error) {
+        return workspaceErrorResponse(context, error);
+      }
+    },
+  );
+  app.get(
+    "/api/workspace/file",
+    tbValidator("query", WorkspacePathQuery, (result, context) => {
+      if (!result.success) return context.json(apiError("bad_request"), 400);
+    }),
+    async (context) => {
+      const path = context.req.valid("query").path;
+      if (!path) return context.json(apiError("bad_request"), 400);
+      try {
+        return context.json(
+          await services.workspace.inspectFile(path, context.req.raw.signal),
+        );
+      } catch (error) {
+        return workspaceErrorResponse(context, error);
+      }
+    },
+  );
+  app.put(
+    "/api/workspace/file",
+    tbValidator("json", WorkspaceWriteBody, (result, context) => {
+      if (!result.success) return context.json(apiError("bad_request"), 400);
+    }),
+    async (context) => {
+      const body = context.req.valid("json");
+      try {
+        return context.json(
+          await services.workspace.writeFile(body),
+          body.revision === undefined ? 201 : 200,
+        );
+      } catch (error) {
+        return workspaceErrorResponse(context, error);
+      }
+    },
+  );
+  app.patch(
+    "/api/workspace/file",
+    tbValidator("json", WorkspaceRenameBody, (result, context) => {
+      if (!result.success) return context.json(apiError("bad_request"), 400);
+    }),
+    async (context) => {
+      try {
+        return context.json(
+          await services.workspace.renameFile(context.req.valid("json")),
+        );
+      } catch (error) {
+        return workspaceErrorResponse(context, error);
+      }
+    },
+  );
+  app.delete(
+    "/api/workspace/file",
+    tbValidator("json", WorkspaceDeleteBody, (result, context) => {
+      if (!result.success) return context.json(apiError("bad_request"), 400);
+    }),
+    async (context) => {
+      try {
+        await services.workspace.deleteFile(context.req.valid("json"));
+        return context.body(null, 204);
+      } catch (error) {
+        return workspaceErrorResponse(context, error);
+      }
+    },
+  );
+  app.get(
+    "/api/workspace/download",
+    tbValidator("query", WorkspacePathQuery, (result, context) => {
+      if (!result.success) return context.json(apiError("bad_request"), 400);
+    }),
+    async (context) => {
+      const path = context.req.valid("query").path;
+      if (!path) return context.json(apiError("bad_request"), 400);
+      try {
+        const download = await services.workspace.downloadFile(
+          path,
+          context.req.raw.signal,
+        );
+        return context.body(download.stream, 200, {
+          "content-disposition": attachmentHeader(download.name),
+          "content-length": String(download.size),
+          "content-type": "application/octet-stream",
+          "x-content-type-options": "nosniff",
+        });
+      } catch (error) {
+        return workspaceErrorResponse(context, error);
+      }
+    },
+  );
   app.get("/api/diagnostics", (context) =>
     context.json({
       ...services.pi.diagnostics(),

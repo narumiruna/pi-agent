@@ -1,37 +1,16 @@
-import { opendir, realpath } from "node:fs/promises";
-import { join, relative, resolve, sep } from "node:path";
+import { opendir } from "node:fs/promises";
+import type { WorkspaceMatch } from "../../shared/contracts.js";
+import { WorkspaceError } from "./errors.js";
+import {
+  createOperationGuard,
+  createWorkspaceBoundary,
+  isHiddenWorkspaceEntry,
+  resolveWorkspaceTarget,
+  type WorkspaceTarget,
+} from "./policy.js";
 
-const EXCLUDED_DIRECTORIES = new Set([
-  ".git",
-  ".hg",
-  ".local",
-  ".pi",
-  ".ssh",
-  ".svn",
-  "dist",
-  "node_modules",
-]);
 const MAX_SCANNED_ENTRIES = 10_000;
 const MAX_RESULTS = 50;
-
-export interface WorkspaceMatch {
-  path: string;
-  directory: boolean;
-}
-
-function isSensitiveName(name: string): boolean {
-  const lower = name.toLowerCase();
-  return (
-    lower === ".env" ||
-    lower.startsWith(".env.") ||
-    lower === "auth.json" ||
-    lower === "credentials.json" ||
-    lower === "id_rsa" ||
-    lower === "id_ed25519" ||
-    lower.endsWith(".pem") ||
-    lower.endsWith(".key")
-  );
-}
 
 function fuzzyScore(path: string, rawQuery: string): number | undefined {
   const value = path.toLowerCase();
@@ -69,52 +48,60 @@ export async function searchWorkspace(
 ): Promise<WorkspaceMatch[]> {
   const query = rawQuery.trim().replaceAll("\\", "/");
   if (query.length < 1 || query.length > 200 || query.includes("\0")) return [];
-  const root = await realpath(resolve(workspace));
-  const excludedPaths = await Promise.all(
-    (options.excludePaths ?? []).map(async (path) => {
-      const resolved = resolve(path);
-      return realpath(resolved).catch(() => resolved);
-    }),
+  const boundary = await createWorkspaceBoundary(
+    workspace,
+    options.excludePaths ?? [],
   );
-  const isExcluded = (path: string) =>
-    excludedPaths.some(
-      (excluded) => path === excluded || path.startsWith(`${excluded}${sep}`),
-    );
+  const guard = createOperationGuard(options.signal);
   const requestedLimit = options.limit ?? 20;
   const limit = Math.max(1, Math.min(MAX_RESULTS, requestedLimit));
   const matches: Array<WorkspaceMatch & { score: number }> = [];
-  const directories = [root];
+  const directories = [""];
   let scanned = 0;
 
   while (directories.length > 0 && scanned < MAX_SCANNED_ENTRIES) {
-    if (options.signal?.aborted) throw options.signal.reason;
-    const directory = directories.shift() as string;
+    guard();
+    const path = directories.shift() as string;
+    let directory: WorkspaceTarget;
+    try {
+      directory = await resolveWorkspaceTarget(boundary, path, "directory");
+    } catch (error) {
+      if (path && error instanceof WorkspaceError && error.status === 404) {
+        continue;
+      }
+      throw error;
+    }
     let handle: Awaited<ReturnType<typeof opendir>>;
     try {
-      handle = await opendir(directory);
+      handle = await opendir(directory.absolute);
     } catch {
       continue;
     }
     for await (const entry of handle) {
-      if (options.signal?.aborted) throw options.signal.reason;
+      guard();
       scanned += 1;
       if (scanned > MAX_SCANNED_ENTRIES) break;
       if (
         entry.isSymbolicLink() ||
-        isSensitiveName(entry.name) ||
-        (entry.isDirectory() &&
-          EXCLUDED_DIRECTORIES.has(entry.name.toLowerCase()))
-      )
+        isHiddenWorkspaceEntry(entry.name, entry.isDirectory())
+      ) {
         continue;
-      const absolute = join(directory, entry.name);
-      if (isExcluded(absolute)) continue;
-      const path = relative(root, absolute).split(sep).join("/");
-      if (!path || path.startsWith("../") || path === "..") continue;
-      if (entry.isDirectory()) directories.push(absolute);
-      else if (!entry.isFile()) continue;
-      const score = fuzzyScore(path, query);
-      if (score !== undefined)
-        matches.push({ path, directory: entry.isDirectory(), score });
+      }
+      const childPath = path ? `${path}/${entry.name}` : entry.name;
+      let child: WorkspaceTarget;
+      try {
+        child = await resolveWorkspaceTarget(boundary, childPath, "either");
+      } catch (error) {
+        if (error instanceof WorkspaceError && error.status === 404) continue;
+        throw error;
+      }
+      const directory = child.stat.isDirectory();
+      if (directory) directories.push(childPath);
+      else if (!child.stat.isFile()) continue;
+      const score = fuzzyScore(childPath, query);
+      if (score !== undefined) {
+        matches.push({ path: childPath, directory, score });
+      }
     }
   }
 

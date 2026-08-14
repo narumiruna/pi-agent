@@ -1,4 +1,4 @@
-import { describe, expect, test } from "vitest";
+import { describe, expect, test, vi } from "vitest";
 import { createApp } from "../../src/server/app.js";
 import type { AppConfig } from "../../src/server/config.js";
 import type {
@@ -57,6 +57,33 @@ const disabledConfig: AppConfig = {
   auth: { mode: "disabled" },
 };
 
+function apiServices(workspace: object) {
+  return {
+    pi: {
+      activeSession: { model: undefined, thinkingLevel: "off" },
+      commands: () => [],
+      diagnostics: () => ({}),
+      models: () => [],
+      preferences: () => ({
+        steeringMode: "all",
+        followUpMode: "all",
+        autoCompaction: true,
+        autoRetry: true,
+        activeTools: ["read"],
+        availableTools: [],
+      }),
+      providerAccess: async () => [],
+      providerAuthTask: () => undefined,
+      providerLoginPending: false,
+    },
+    interactions: { replayPending: () => 0 },
+    resources: {},
+    workspace,
+    mcp: { diagnostics: () => [] },
+    heartbeat: {},
+  } as never;
+}
+
 describe("HTTP authentication boundary", () => {
   test("keeps health endpoints public and protects the API", async () => {
     const app = createApp({
@@ -101,5 +128,98 @@ describe("HTTP authentication boundary", () => {
     expect(await response.json()).toEqual({
       error: { code: "origin_mismatch" },
     });
+  });
+
+  test("protects workspace reads when authentication is required", async () => {
+    const listDirectory = vi.fn(async () => ({
+      path: "",
+      entries: [],
+      truncated: false,
+      writable: true,
+    }));
+    const app = createApp({
+      config: { ...disabledConfig, auth: { mode: "oidc" } as never },
+      store: new Store(),
+      services: apiServices({ listDirectory }),
+    });
+
+    const response = await app.request("/api/workspace/entries");
+
+    expect(response.status).toBe(401);
+    expect(listDirectory).not.toHaveBeenCalled();
+  });
+
+  test("rejects cross-origin workspace writes before touching the service", async () => {
+    const writeFile = vi.fn();
+    const app = createApp({
+      config: disabledConfig,
+      store: new Store(),
+      services: apiServices({ writeFile }),
+    });
+
+    const response = await app.request("/api/workspace/file", {
+      method: "PUT",
+      headers: {
+        origin: "https://evil.example",
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({ path: "file.txt", content: "private" }),
+    });
+
+    expect(response.status).toBe(403);
+    expect(writeFile).not.toHaveBeenCalled();
+  });
+
+  test("accepts an escaped one-megabyte workspace write body", async () => {
+    const writeFile = vi.fn(async () => ({
+      path: "file.txt",
+      name: "file.txt",
+      kind: "file",
+      modifiedAt: 1,
+      size: 1_000_000,
+      revision: "revision",
+      editable: true,
+      writable: true,
+      content: "",
+    }));
+    const app = createApp({
+      config: disabledConfig,
+      store: new Store(),
+      services: apiServices({ writeFile }),
+    });
+    const content = "\u0001".repeat(1_000_000);
+
+    const response = await app.request("/api/workspace/file", {
+      method: "PUT",
+      headers: {
+        origin: disabledConfig.appOrigin,
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({ path: "file.txt", content }),
+    });
+
+    expect(response.status).toBe(201);
+    expect(writeFile).toHaveBeenCalledWith({ path: "file.txt", content });
+  });
+
+  test("rejects workspace write bodies above the dedicated limit", async () => {
+    const writeFile = vi.fn();
+    const app = createApp({
+      config: disabledConfig,
+      store: new Store(),
+      services: apiServices({ writeFile }),
+    });
+
+    const response = await app.request("/api/workspace/file", {
+      method: "PUT",
+      headers: {
+        origin: disabledConfig.appOrigin,
+        "content-type": "application/json",
+      },
+      body: "x".repeat(6_100_001),
+    });
+
+    expect(response.status).toBe(413);
+    expect(writeFile).not.toHaveBeenCalled();
   });
 });

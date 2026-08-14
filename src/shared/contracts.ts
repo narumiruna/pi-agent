@@ -38,6 +38,39 @@ export type ErrorCode =
   | "provider_not_configured"
   | "unauthorized";
 
+export type WorkspaceFileReason = "binary" | "read_only" | "too_large";
+
+export interface WorkspaceEntry {
+  path: string;
+  name: string;
+  kind: "directory" | "file";
+  modifiedAt: number;
+  size?: number;
+}
+
+export interface WorkspaceDirectory {
+  path: string;
+  entries: WorkspaceEntry[];
+  truncated: boolean;
+  writable: boolean;
+}
+
+export interface WorkspaceFile extends WorkspaceEntry {
+  kind: "file";
+  size: number;
+  revision: string;
+  downloadable: boolean;
+  editable: boolean;
+  writable: boolean;
+  content?: string;
+  reason?: WorkspaceFileReason;
+}
+
+export interface WorkspaceMatch {
+  path: string;
+  directory: boolean;
+}
+
 export type QueueMode = "all" | "one-at-a-time";
 
 export interface ExtensionWidget {

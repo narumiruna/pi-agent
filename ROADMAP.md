@@ -65,20 +65,20 @@ Pi package 仍是 prompt、skill 與 extension 的共同安裝來源，不建立
 
 `Files` 只管理設定的 `WORKSPACE`，預設 container 路徑為 `/workspace`。
 
-- [ ] 提供 lazy directory tree、檔案搜尋與 breadcrumb navigation。
-- [ ] 提供文字檔預覽、建立、編輯、重新命名、下載與刪除。
-- [ ] 使用 atomic write，並以 revision 或 mtime 防止 stale browser 覆寫較新的檔案。
-- [ ] 對單檔讀取、目錄項目數、搜尋結果、檔案大小與請求時間設定上限。
-- [ ] Binary、超大檔案與不支援的 encoding 只提供 metadata 或下載，不載入 editor。
-- [ ] 預設隱藏 `.git`、dependency output、credential-like files 與 private Pi directories。
-- [ ] 不讓 browser 傳入 server absolute path，也不提供 unrestricted shell endpoint。
-- [ ] File picker 與 chat 的 `@file` autocomplete 共用同一個 workspace containment service。
+- [x] 提供 lazy directory tree、檔案搜尋與 breadcrumb navigation。
+- [x] 提供文字檔預覽、建立、編輯、重新命名、下載與刪除。
+- [x] 使用 atomic write，並以 revision 或 mtime 防止 stale browser 覆寫較新的檔案。
+- [x] 對單檔讀取、目錄項目數、搜尋結果、檔案大小與請求時間設定上限。
+- [x] Binary、超大檔案與不支援的 encoding 只提供 metadata 或下載，不載入 editor。
+- [x] 預設隱藏 `.git`、dependency output、credential-like files 與 private Pi directories。
+- [x] 不讓 browser 傳入 server absolute path，也不提供 unrestricted shell endpoint。
+- [x] File picker 與 chat 的 `@file` autocomplete 共用同一個 workspace containment service。
 
 ### Phase 2 驗收條件
 
-- [ ] Traversal、symlink、case-sensitive path、Unicode path、binary file 與 concurrent write 都有 Vitest coverage。
-- [ ] 390px viewport 可以瀏覽、預覽與編輯檔案，且不產生水平頁面溢位。
-- [ ] Files API 永遠不回傳 host absolute path、credential content 或 agent authentication path。
+- [x] Traversal、symlink、case-sensitive path、Unicode path、binary file 與 concurrent write 都有 Vitest coverage。
+- [x] 390px viewport 可以瀏覽、預覽與編輯檔案，且不產生水平頁面溢位。
+- [x] Files API 永遠不回傳 host absolute path、credential content 或 agent authentication path。
 
 ## Phase 3：Prompts
 
