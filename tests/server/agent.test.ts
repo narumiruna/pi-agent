@@ -4,6 +4,7 @@ import { EventHub } from "../../src/server/agent/events.js";
 import { PiService } from "../../src/server/agent/pi-service.js";
 import { RunCoordinator } from "../../src/server/agent/run-coordinator.js";
 import { projectTranscript } from "../../src/server/agent/transcript.js";
+import { InteractionBroker } from "../../src/server/interactions/broker.js";
 
 describe("RunCoordinator", () => {
   test("allows exactly one run and becomes reusable after failure", async () => {
@@ -500,6 +501,52 @@ describe("provider access", () => {
     expect(logout).not.toHaveBeenCalled();
   });
 
+  test("cancels provider authentication without dismissing extension input", async () => {
+    const events = new EventHub();
+    const interactions = new InteractionBroker(events);
+    const service = Object.create(PiService.prototype) as PiService;
+    Object.defineProperties(service, {
+      events: { value: events },
+      modelRuntime: {
+        value: {
+          getProviders: () => [{ id: "openai-codex", name: "OpenAI Codex" }],
+          login: async (
+            _provider: string,
+            _type: string,
+            auth: AuthInteraction,
+          ) => {
+            await auth.prompt({
+              type: "text",
+              message: "Provider authorization code",
+            });
+          },
+        },
+      },
+      interactions: { value: interactions },
+    });
+
+    const extensionInput = interactions.request("input", {
+      title: "Extension input",
+    });
+    const providerLogin = service.providerLogin("openai-codex", "oauth");
+    await vi.waitFor(() => expect(interactions.pendingCount).toBe(2));
+
+    const cancellation = service.cancelProviderLogin();
+    await expect(providerLogin).rejects.toMatchObject({ name: "AbortError" });
+    await cancellation;
+    expect(interactions.pendingCount).toBe(1);
+
+    const replayed: Array<{ id: string; title?: string }> = [];
+    interactions.replayPending((data) =>
+      replayed.push(data as { id: string; title?: string }),
+    );
+    expect(replayed).toEqual([
+      expect.objectContaining({ title: "Extension input" }),
+    ]);
+    interactions.respond(replayed[0].id, "keep-running");
+    await expect(extensionInput).resolves.toBe("keep-running");
+  });
+
   test("waits for provider cleanup before cancellation completes", async () => {
     let finishLogin: (() => void) | undefined;
     let signal: AbortSignal | undefined;
@@ -583,7 +630,7 @@ describe("provider access", () => {
 
     service.cancelProviderLogin();
     await expect(first).rejects.toMatchObject({ name: "AbortError" });
-    expect(cancelAll).toHaveBeenCalledOnce();
+    expect(cancelAll).not.toHaveBeenCalled();
     expect(service.providerLoginPending).toBe(false);
   });
 });

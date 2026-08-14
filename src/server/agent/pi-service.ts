@@ -573,7 +573,7 @@ export class PiService {
         }
         this.updateProviderAuthPrompt(prompt);
         return this.interactions.prompt(
-          prompt,
+          { ...prompt, signal: abort.signal },
           type === "oauth" ? "provider_auth" : undefined,
         );
       },
@@ -609,7 +609,6 @@ export class PiService {
     const task = this.activeProviderAuthTask();
     if (task) this.finishProviderAuthTask(task, "cancelled");
     abort.abort(new DOMException("Authentication cancelled", "AbortError"));
-    this.interactions.cancelAll();
     await settled;
   }
 
