@@ -37,6 +37,30 @@ test("keeps navigation and model selection keyboard operable at 390px", async ({
   await menu.click();
   await page.getByRole("button", { name: "Chat" }).click();
   await expect(page.getByRole("region", { name: "Chat" })).toBeVisible();
+  const template = await page.request.put("/api/templates/mobile-command", {
+    data: { content: "A mobile command" },
+    headers: { origin: appOrigin },
+  });
+  expect(template.ok()).toBe(true);
+  const reload = await page.request.post("/api/reload", {
+    headers: { origin: appOrigin },
+  });
+  expect(reload.ok()).toBe(true);
+  await page.reload();
+  const composer = page.getByLabel("Ask Pi anything…");
+  await composer.fill("/mobile");
+  await expect(
+    page.getByRole("option", { name: /mobile-command/ }),
+  ).toBeVisible();
+  await composer.press("Escape");
+  await expect(
+    page.getByRole("option", { name: /mobile-command/ }),
+  ).toHaveCount(0);
+  const removeTemplate = await page.request.delete(
+    "/api/templates/mobile-command",
+    { headers: { origin: appOrigin } },
+  );
+  expect(removeTemplate.ok()).toBe(true);
   expect(
     await page.evaluate(
       () => document.documentElement.scrollWidth <= window.innerWidth,

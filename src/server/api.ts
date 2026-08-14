@@ -10,8 +10,8 @@ import {
   CHAT_IMAGE_MIME_TYPES,
   MAX_CHAT_IMAGE_BASE64_LENGTH,
   MAX_CHAT_IMAGES,
+  type WebEvent,
 } from "../shared/contracts.js";
-import type { WebEvent } from "./agent/events.js";
 import type { PiService } from "./agent/pi-service.js";
 import { AgentBusyError } from "./agent/run-coordinator.js";
 import type { AppConfig } from "./config.js";
@@ -26,6 +26,7 @@ import {
 import type { McpManager } from "./mcp/manager.js";
 import type { ResourceService } from "./resources/service.js";
 import type { AppStore, WebSessionRecord } from "./storage/types.js";
+import { searchWorkspace } from "./workspace/search.js";
 
 export interface ApiEnv extends Env {
   Variables: { session?: WebSessionRecord };
@@ -61,6 +62,41 @@ const MessageBody = Type.Object({
 });
 const RenameBody = Type.Object({
   name: Type.String({ minLength: 1, maxLength: 120 }),
+});
+const ComposerBody = Type.Object({
+  text: Type.String({ maxLength: 100_000 }),
+});
+const AgentSettingsBody = Type.Object({
+  steeringMode: Type.Optional(
+    Type.Union([Type.Literal("all"), Type.Literal("one-at-a-time")]),
+  ),
+  followUpMode: Type.Optional(
+    Type.Union([Type.Literal("all"), Type.Literal("one-at-a-time")]),
+  ),
+  autoCompaction: Type.Optional(Type.Boolean()),
+  autoRetry: Type.Optional(Type.Boolean()),
+  activeTools: Type.Optional(
+    Type.Array(Type.String({ minLength: 1, maxLength: 200 }), {
+      minItems: 1,
+      maxItems: 100,
+    }),
+  ),
+});
+const TreeNavigationBody = Type.Object({
+  targetId: Type.String({ minLength: 1, maxLength: 200 }),
+  summarize: Type.Optional(Type.Boolean()),
+  customInstructions: Type.Optional(Type.String({ maxLength: 10_000 })),
+  label: Type.Optional(Type.String({ maxLength: 120 })),
+});
+const ForkBody = Type.Object({
+  targetId: Type.String({ minLength: 1, maxLength: 200 }),
+  position: Type.Union([Type.Literal("at"), Type.Literal("before")]),
+});
+const CompactBody = Type.Object({
+  customInstructions: Type.Optional(Type.String({ maxLength: 10_000 })),
+});
+const ImportBody = Type.Object({
+  content: Type.String({ minLength: 1, maxLength: 5_000_000 }),
 });
 const InteractionBody = Type.Object({
   value: Type.Optional(Type.String({ maxLength: 1_000_000 })),
@@ -110,7 +146,7 @@ function errorResponse<E extends Env, P extends string, I extends Input>(
     return context.json(apiError("not_found"), 404);
   if (/no API key|provider is not configured/i.test(message))
     return context.json(apiError("provider_not_configured"), 400);
-  if (/active conversation|already|in progress/i.test(message))
+  if (/active conversation|active chat run|already|in progress/i.test(message))
     return context.json(apiError("conflict"), 409);
   return context.json(apiError("bad_request"), 400);
 }
@@ -127,6 +163,70 @@ export function registerApi<E extends ApiEnv>(
   app.post("/api/conversations", async (context) =>
     context.json({ id: await services.pi.createConversation() }, 201),
   );
+  app.post(
+    "/api/conversations/import",
+    tbValidator("json", ImportBody),
+    async (context) => {
+      try {
+        const id = await services.pi.importConversation(
+          context.req.valid("json").content,
+        );
+        return context.json({ id }, 201);
+      } catch (error) {
+        return errorResponse(context, error);
+      }
+    },
+  );
+  app.post("/api/conversations/:id/activate", async (context) => {
+    try {
+      await services.pi.activateConversation(context.req.param("id"));
+      return context.json({ ok: true });
+    } catch (error) {
+      return errorResponse(context, error);
+    }
+  });
+  app.get("/api/conversations/:id/state", (context) => {
+    try {
+      return context.json(
+        services.pi.conversationState(context.req.param("id")),
+      );
+    } catch (error) {
+      return errorResponse(context, error);
+    }
+  });
+  app.put(
+    "/api/conversations/:id/draft",
+    tbValidator("json", ComposerBody),
+    (context) => {
+      try {
+        services.pi.setComposerDraft(
+          context.req.param("id"),
+          context.req.valid("json").text,
+        );
+        return context.json({ ok: true });
+      } catch (error) {
+        return errorResponse(context, error);
+      }
+    },
+  );
+  app.get("/api/conversations/:id/export/:format", async (context) => {
+    try {
+      const format = context.req.param("format");
+      if (format !== "html" && format !== "jsonl")
+        return context.json(apiError("not_found"), 404);
+      const exported = await services.pi.exportConversation(
+        context.req.param("id"),
+        format,
+      );
+      return context.body(Uint8Array.from(exported.content), 200, {
+        "content-type": exported.contentType,
+        "content-disposition": `attachment; filename="${exported.fileName}"`,
+        "x-content-type-options": "nosniff",
+      });
+    } catch (error) {
+      return errorResponse(context, error);
+    }
+  });
   app.get("/api/conversations/:id", async (context) => {
     try {
       return context.json({
@@ -176,10 +276,103 @@ export function registerApi<E extends ApiEnv>(
       }
     },
   );
-  app.post("/api/runs/abort", async (context) => {
-    await services.pi.abort();
-    return context.json({ ok: true });
+  app.post(
+    "/api/conversations/:id/steer",
+    tbValidator("json", MessageBody),
+    async (context) => {
+      try {
+        const body = context.req.valid("json");
+        await services.pi.steer(
+          context.req.param("id"),
+          body.message,
+          body.images,
+        );
+        return context.json({ queued: true }, 202);
+      } catch (error) {
+        return errorResponse(context, error);
+      }
+    },
+  );
+  app.post(
+    "/api/conversations/:id/follow-up",
+    tbValidator("json", MessageBody),
+    async (context) => {
+      try {
+        const body = context.req.valid("json");
+        await services.pi.followUp(
+          context.req.param("id"),
+          body.message,
+          body.images,
+        );
+        return context.json({ queued: true }, 202);
+      } catch (error) {
+        return errorResponse(context, error);
+      }
+    },
+  );
+  app.delete("/api/conversations/:id/queue", (context) => {
+    try {
+      return context.json(services.pi.clearQueue(context.req.param("id")));
+    } catch (error) {
+      return errorResponse(context, error);
+    }
   });
+  app.post(
+    "/api/conversations/:id/tree/navigate",
+    tbValidator("json", TreeNavigationBody),
+    async (context) => {
+      try {
+        const { targetId, ...options } = context.req.valid("json");
+        return context.json(
+          await services.pi.navigateConversationTree(
+            context.req.param("id"),
+            targetId,
+            options,
+          ),
+        );
+      } catch (error) {
+        return errorResponse(context, error);
+      }
+    },
+  );
+  app.post(
+    "/api/conversations/:id/fork",
+    tbValidator("json", ForkBody),
+    async (context) => {
+      try {
+        const body = context.req.valid("json");
+        return context.json(
+          await services.pi.forkConversation(
+            context.req.param("id"),
+            body.targetId,
+            body.position,
+          ),
+          201,
+        );
+      } catch (error) {
+        return errorResponse(context, error);
+      }
+    },
+  );
+  app.post(
+    "/api/conversations/:id/compact",
+    tbValidator("json", CompactBody),
+    async (context) => {
+      try {
+        return context.json(
+          await services.pi.compactConversation(
+            context.req.param("id"),
+            context.req.valid("json").customInstructions,
+          ),
+        );
+      } catch (error) {
+        return errorResponse(context, error);
+      }
+    },
+  );
+  app.post("/api/runs/abort", async (context) =>
+    context.json({ ok: true, queue: await services.pi.abort() }),
+  );
 
   app.get("/api/events", (context) =>
     streamSSE(context, async (stream) => {
@@ -191,6 +384,7 @@ export function registerApi<E extends ApiEnv>(
       const queued: WebEvent[] = [];
       let live = false;
       let close = () => undefined;
+      let writes = Promise.resolve();
       const writeEvent = (event: WebEvent) =>
         stream.writeSSE({
           id: String(event.id),
@@ -199,13 +393,14 @@ export function registerApi<E extends ApiEnv>(
         });
       const unsubscribe = services.pi.events.subscribe((event) => {
         if (!live) queued.push(event);
-        else void writeEvent(event).catch(close);
+        else {
+          writes = writes.then(() => writeEvent(event));
+          void writes.catch(close);
+        }
       });
-      if (!rawCursor) {
-        services.interactions.replayPending((data) =>
-          queued.push({ id: initialCursor, type: "interaction", data }),
-        );
-      }
+      services.interactions.replayPending((data) =>
+        queued.push({ id: initialCursor, type: "interaction", data }),
+      );
       try {
         if (replay === undefined) {
           await stream.writeSSE({
@@ -292,6 +487,7 @@ export function registerApi<E extends ApiEnv>(
         ? getSupportedThinkingLevels(activeModel)
         : ["off"],
       authPending: services.pi.providerLoginPending,
+      agent: services.pi.preferences(),
       models: services.pi.models().map((model) => ({
         id: model.id,
         name: model.name,
@@ -362,7 +558,47 @@ export function registerApi<E extends ApiEnv>(
       return errorResponse(context, error);
     }
   });
+  app.put(
+    "/api/agent-settings",
+    tbValidator("json", AgentSettingsBody),
+    (context) => {
+      try {
+        return context.json(
+          services.pi.setPreferences(context.req.valid("json")),
+        );
+      } catch (error) {
+        return errorResponse(context, error);
+      }
+    },
+  );
+  app.post("/api/reload", async (context) => {
+    try {
+      await services.pi.reload();
+      return context.json({ ok: true });
+    } catch (error) {
+      return errorResponse(context, error);
+    }
+  });
   app.get("/api/commands", (context) => context.json(services.pi.commands()));
+  app.get("/api/workspace/files", async (context) => {
+    const query = context.req.query("q") ?? "";
+    const rawLimit = Number(context.req.query("limit") ?? "20");
+    if (!Number.isInteger(rawLimit))
+      return context.json(apiError("bad_request"), 400);
+    try {
+      return context.json(
+        await searchWorkspace(services.config.workspace, query, {
+          excludePaths: [services.config.agentDir, services.config.dataDir],
+          limit: rawLimit,
+          signal: context.req.raw.signal,
+        }),
+      );
+    } catch (error) {
+      if (context.req.raw.signal.aborted)
+        return context.json(apiError("cancelled"), 400);
+      return errorResponse(context, error);
+    }
+  });
   app.get("/api/diagnostics", (context) =>
     context.json({
       ...services.pi.diagnostics(),
@@ -496,12 +732,23 @@ export function registerApi<E extends ApiEnv>(
     }
   });
 
-  app.get("/api/heartbeat", async (context) =>
-    context.json({
+  app.get("/api/heartbeat", async (context) => {
+    const runs = await services.store.listHeartbeatRuns(25);
+    return context.json({
       config: services.heartbeat.status(),
-      runs: await services.store.listHeartbeatRuns(25),
-    }),
-  );
+      runs: runs.map((run) => ({
+        ...run,
+        ...(run.details
+          ? {}
+          : {
+              details: services.pi.heartbeatRunDetails(
+                run.startedAt,
+                run.finishedAt,
+              ),
+            }),
+      })),
+    });
+  });
   app.post("/api/heartbeat/run", async (context) => {
     try {
       await services.heartbeat.runNow();

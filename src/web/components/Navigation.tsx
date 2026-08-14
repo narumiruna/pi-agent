@@ -94,6 +94,7 @@ function NavContent(props: Props) {
               aria-label={conversation.name ?? conversation.id}
               title={conversation.name ?? conversation.id}
               key={conversation.id}
+              disabled={props.newPending}
               className={
                 props.activeId === conversation.id
                   ? "conversationItem active"

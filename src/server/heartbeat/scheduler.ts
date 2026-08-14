@@ -2,6 +2,7 @@ import type { EventHub } from "../agent/events.js";
 import type { RunCoordinator } from "../agent/run-coordinator.js";
 import type {
   AppStore,
+  HeartbeatRunDetails,
   HeartbeatRunRecord,
   HeartbeatRunUpdate,
 } from "../storage/types.js";
@@ -16,11 +17,27 @@ interface HeartbeatStore
     | "listHeartbeatRuns"
   > {}
 
+export interface HeartbeatAgentResult {
+  response: string;
+  details?: HeartbeatRunDetails;
+}
+
+export class HeartbeatExecutionError extends Error {
+  constructor(
+    message: string,
+    readonly details: HeartbeatRunDetails,
+    cause?: unknown,
+  ) {
+    super(message, { cause });
+    this.name = "HeartbeatExecutionError";
+  }
+}
+
 export interface HeartbeatSchedulerOptions {
   load: () => Promise<HeartbeatConfig>;
   coordinator: RunCoordinator;
   events: EventHub;
-  runAgent: (prompt: string) => Promise<string>;
+  runAgent: (prompt: string) => Promise<string | HeartbeatAgentResult>;
   abortAgent?: () => Promise<void>;
   store: HeartbeatStore;
   now?: () => number;
@@ -93,17 +110,25 @@ export class HeartbeatScheduler {
         });
         let update: HeartbeatRunUpdate;
         try {
-          const response = await this.options.runAgent(this.config?.body ?? "");
+          const result = await this.options.runAgent(this.config?.body ?? "");
+          const response =
+            typeof result === "string" ? result : result.response;
           update = {
             finishedAt: this.now(),
             status: response === "HEARTBEAT_OK" ? "quiet" : "attention",
             summary: summarize(response),
+            ...(typeof result === "string" || !result.details
+              ? {}
+              : { details: result.details }),
           };
         } catch (error) {
           update = {
             finishedAt: this.now(),
             status: "error",
             error: error instanceof Error ? error.message : "Heartbeat failed",
+            ...(error instanceof HeartbeatExecutionError
+              ? { details: error.details }
+              : {}),
           };
         }
         await this.options.store.finishHeartbeatRun(id, update);

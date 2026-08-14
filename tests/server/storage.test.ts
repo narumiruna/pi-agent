@@ -1,6 +1,7 @@
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { DatabaseSync } from "node:sqlite";
 import { afterEach, describe, expect, test } from "vitest";
 import { acquireRuntimeLock } from "../../src/server/runtime-lock.js";
 import { PostgresStore } from "../../src/server/storage/postgres.js";
@@ -106,6 +107,18 @@ function storageContract(name: string, createStore: () => Promise<AppStore>) {
         status: "attention",
         finishedAt: 20,
         summary: "Needs review",
+        details: {
+          response: "The full response",
+          tools: [
+            {
+              id: "tool-1",
+              name: "bash",
+              input: "curl weather.example",
+              output: "connection refused",
+              isError: true,
+            },
+          ],
+        },
       });
       await store.createHeartbeatRun({
         id: "run-2",
@@ -114,10 +127,12 @@ function storageContract(name: string, createStore: () => Promise<AppStore>) {
       });
 
       expect(await store.latestHeartbeatRun()).toMatchObject({ id: "run-2" });
-      expect((await store.listHeartbeatRuns(10)).map((run) => run.id)).toEqual([
-        "run-2",
-        "run-1",
-      ]);
+      const runs = await store.listHeartbeatRuns(10);
+      expect(runs.map((run) => run.id)).toEqual(["run-2", "run-1"]);
+      expect(runs[1]?.details).toMatchObject({
+        response: "The full response",
+        tools: [{ output: "connection refused", isError: true }],
+      });
     });
   });
 }
@@ -130,6 +145,41 @@ storageContract("SQLite store", async () => {
     await rm(directory, { force: true, recursive: true });
   });
   return store;
+});
+
+test("migrates an existing SQLite heartbeat table for run details", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "pi-agent-store-migration-"));
+  const path = join(directory, "app.db");
+  const legacy = new DatabaseSync(path);
+  legacy.exec(`
+    CREATE TABLE heartbeat_runs (
+      id TEXT PRIMARY KEY,
+      started_at INTEGER NOT NULL,
+      finished_at INTEGER,
+      status TEXT NOT NULL,
+      summary TEXT,
+      error TEXT
+    );
+  `);
+  legacy.close();
+  const store = new SqliteStore(path);
+  cleanups.push(async () => {
+    await store.close();
+    await rm(directory, { force: true, recursive: true });
+  });
+
+  await store.migrate();
+  await store.createHeartbeatRun({
+    id: "detailed",
+    startedAt: 1,
+    status: "running",
+    details: { response: "diagnostic" },
+  });
+
+  await expect(store.latestHeartbeatRun()).resolves.toMatchObject({
+    id: "detailed",
+    details: { response: "diagnostic" },
+  });
 });
 
 const postgresUrl = process.env.TEST_POSTGRES_URL;

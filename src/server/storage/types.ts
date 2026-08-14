@@ -20,6 +20,21 @@ export type HeartbeatRunStatus =
   | "running"
   | "stopped";
 
+export interface HeartbeatToolDetail {
+  id: string;
+  name: string;
+  input?: string;
+  output?: string;
+  diff?: string;
+  isError: boolean;
+}
+
+export interface HeartbeatRunDetails {
+  response?: string;
+  reasoning?: string;
+  tools?: HeartbeatToolDetail[];
+}
+
 export interface HeartbeatRunRecord {
   id: string;
   startedAt: number;
@@ -27,6 +42,7 @@ export interface HeartbeatRunRecord {
   status: HeartbeatRunStatus;
   summary?: string;
   error?: string;
+  details?: HeartbeatRunDetails;
 }
 
 export type HeartbeatRunUpdate = Omit<

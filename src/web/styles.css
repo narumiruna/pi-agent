@@ -193,6 +193,11 @@ input:focus-visible,
   font-size: 13px;
 }
 
+.conversationItem:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
 .workspace {
   position: relative;
   min-width: 0;
@@ -233,6 +238,14 @@ input:focus-visible,
   padding: 16px 18px;
   border-radius: 9px;
   background: color-mix(in srgb, var(--accent) 8%, var(--surface));
+}
+
+.message.custom,
+.message.status,
+.message.bash {
+  padding: 12px 14px;
+  border-left: 3px solid var(--line);
+  background: color-mix(in srgb, var(--surface) 72%, transparent);
 }
 
 .messageRole {
@@ -303,12 +316,59 @@ input:focus-visible,
   padding-top: 8px;
 }
 
+.thinkingBlock {
+  grid-column: 2;
+  padding: 8px 12px;
+  border-left: 2px solid var(--line);
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.thinkingBlock summary {
+  cursor: pointer;
+  font-weight: 500;
+}
+
+.toolOutput,
+.toolDiff {
+  max-height: 360px;
+  margin: 8px 0 0;
+  padding: 10px;
+  overflow: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  background: var(--canvas);
+  color: var(--ink);
+  font:
+    12px / 1.5 "IBM Plex Mono",
+    ui-monospace,
+    monospace;
+}
+
+.toolDiff span {
+  display: block;
+  min-height: 1.5em;
+}
+
+.toolDiff .added {
+  color: var(--green-11, #247a52);
+  background: color-mix(in srgb, var(--green-9, #299764) 10%, transparent);
+}
+
+.toolDiff .removed {
+  color: var(--red-11, #b83a3a);
+  background: color-mix(in srgb, var(--red-9, #ce2c31) 10%, transparent);
+}
+
 .composerWrap {
   padding: 12px 0 22px;
   background: var(--canvas);
 }
 
 .composer {
+  position: relative;
   padding: 10px;
   border: 1px solid var(--line);
   border-radius: 10px;
@@ -355,6 +415,85 @@ input:focus-visible,
 
 .composer [role="alert"] {
   margin: 0 4px 6px;
+}
+
+.extensionWidget,
+.messageQueue,
+.extensionStatuses {
+  margin: 0 3px 8px;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--canvas);
+  color: var(--muted);
+  font:
+    12px / 1.5 "IBM Plex Mono",
+    ui-monospace,
+    monospace;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.extensionStatuses {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px 14px;
+}
+
+.messageQueue {
+  display: grid;
+  gap: 5px;
+  max-height: 150px;
+  overflow: auto;
+}
+
+.composerSuggestions {
+  position: absolute;
+  z-index: 8;
+  right: 10px;
+  bottom: calc(100% - 54px);
+  left: 10px;
+  max-height: min(320px, 45vh);
+  padding: 4px;
+  overflow: auto;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: var(--surface);
+  box-shadow: 0 12px 32px rgb(0 0 0 / 16%);
+}
+
+.composerSuggestions button {
+  width: 100%;
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 10px;
+  border: 0;
+  border-radius: 4px;
+  color: var(--ink);
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+}
+
+.composerSuggestions button:hover,
+.composerSuggestions button.selected {
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+}
+
+.composerSuggestions small {
+  color: var(--muted);
+  text-align: right;
+}
+
+.sessionFooter {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  padding: 5px 3px 0;
+  color: var(--muted);
+  font-size: 11px;
 }
 
 .emptyState,
@@ -564,6 +703,54 @@ input:focus-visible,
   color: var(--danger);
 }
 
+.heartbeatRunSummary,
+.heartbeatRunDetailContent {
+  display: grid;
+  gap: 10px;
+}
+
+.heartbeatRunDetails {
+  max-width: min(700px, 68vw);
+}
+
+.heartbeatRunDetails > summary {
+  width: fit-content;
+  cursor: pointer;
+  color: var(--accent);
+  font-weight: 500;
+}
+
+.heartbeatRunDetailContent {
+  margin-top: 10px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--surface);
+}
+
+.heartbeatRunDetailContent section {
+  min-width: 0;
+}
+
+.heartbeatRunDetailContent section + section {
+  padding-top: 10px;
+  border-top: 1px solid var(--line);
+}
+
+.heartbeatRunDetailContent section.toolError {
+  padding-left: 10px;
+  border-left: 3px solid var(--danger);
+}
+
+.heartbeatRunDetailContent pre {
+  max-height: 360px;
+  margin: 6px 0 0;
+  overflow: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font: 12px / 1.5 var(--code-font);
+}
+
 .toolChips {
   display: flex;
   flex-wrap: wrap;
@@ -651,6 +838,76 @@ input:focus-visible,
 .accessDialog,
 .modelDialog {
   width: min(92vw, 620px);
+}
+
+.conversationPanel {
+  width: min(94vw, 760px);
+  display: grid;
+  gap: 18px;
+}
+
+.conversationPanel > p {
+  margin: -10px 0 0;
+}
+
+.conversationStats {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.conversationStats > div {
+  min-width: 0;
+  display: grid;
+  gap: 3px;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+}
+
+.conversationPanelSection {
+  display: grid;
+  gap: 10px;
+}
+
+.sessionTreeScroll {
+  height: min(300px, 38vh);
+  border-block: 1px solid var(--line);
+}
+
+.sessionTree {
+  display: grid;
+  padding-block: 4px;
+}
+
+.sessionTreeItem {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: 120px minmax(0, 1fr);
+  gap: 8px;
+  padding-block: 7px;
+  padding-right: 8px;
+  border: 0;
+  color: var(--ink);
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+}
+
+.sessionTreeItem:hover,
+.sessionTreeItem.selected {
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+}
+
+.sessionTreeItem small {
+  overflow: hidden;
+  color: var(--muted);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.toolToggles code {
+  cursor: pointer;
 }
 
 .providerAuthDialog {
@@ -941,8 +1198,21 @@ input:focus-visible,
     gap: 4px;
   }
 
-  .toolRow {
+  .toolRow,
+  .thinkingBlock {
     grid-column: 1;
+  }
+
+  .conversationStats {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .sessionTreeItem {
+    grid-template-columns: 88px minmax(0, 1fr);
+  }
+
+  .composer > .rt-Flex {
+    flex-wrap: wrap;
   }
 
   .pageColumn {

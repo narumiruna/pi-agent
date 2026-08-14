@@ -9,23 +9,37 @@ import {
 
 function appWith(overrides: Partial<ApiServices> = {}) {
   const app = new Hono<ApiEnv>();
+  const pi = {
+    activeSession: { model: undefined, thinkingLevel: "off" },
+    modelRuntime: { getProviders: () => [] },
+    models: () => [],
+    preferences: () => ({
+      steeringMode: "all",
+      followUpMode: "all",
+      autoCompaction: true,
+      autoRetry: true,
+      activeTools: ["read"],
+      availableTools: [{ name: "read", description: "Read files" }],
+    }),
+    providerAccess: async () => [],
+    providerAuthTask: () => undefined,
+    providerLoginPending: false,
+    events: { replayAfter: () => [], subscribe: () => () => undefined },
+    ...overrides.pi,
+  };
   const services = {
-    config: { agentDir: "/tmp/agent" },
-    store: { listHeartbeatRuns: async () => [] },
-    pi: {
-      activeSession: { model: undefined, thinkingLevel: "off" },
-      modelRuntime: { getProviders: () => [] },
-      models: () => [],
-      providerAccess: async () => [],
-      providerAuthTask: () => undefined,
-      providerLoginPending: false,
-      events: { replayAfter: () => [], subscribe: () => () => undefined },
+    config: {
+      agentDir: "/tmp/agent",
+      dataDir: "/tmp/data",
+      workspace: "/tmp",
     },
+    store: { listHeartbeatRuns: async () => [] },
     interactions: { replayPending: () => 0 },
     resources: {},
     mcp: { diagnostics: () => [] },
     heartbeat: {},
     ...overrides,
+    pi,
   } as unknown as ApiServices;
   registerApi(app, services);
   return app;
@@ -50,6 +64,233 @@ describe("API contracts", () => {
     expect(response.status).toBe(202);
     expect(await response.json()).toEqual({ runId: "run-1" });
     expect(prompt).toHaveBeenCalledWith("session", "", [image]);
+  });
+
+  test("enriches older heartbeat runs with native session diagnostics", async () => {
+    const heartbeatRunDetails = vi.fn(() => ({
+      response: "Weather lookup failed",
+      tools: [{ id: "tool-1", name: "bash", output: "timeout", isError: true }],
+    }));
+    const app = appWith({
+      pi: { heartbeatRunDetails } as never,
+      heartbeat: { status: () => ({ enabled: true }) } as never,
+      store: {
+        listHeartbeatRuns: async () => [
+          {
+            id: "run",
+            startedAt: 10,
+            finishedAt: 20,
+            status: "attention" as const,
+            summary: "Needs review",
+          },
+        ],
+      } as never,
+    });
+
+    const response = await app.request("/api/heartbeat");
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({
+      runs: [
+        {
+          id: "run",
+          details: {
+            response: "Weather lookup failed",
+            tools: [{ output: "timeout" }],
+          },
+        },
+      ],
+    });
+    expect(heartbeatRunDetails).toHaveBeenCalledWith(10, 20);
+  });
+
+  test("queues steering input for an active conversation run", async () => {
+    const steer = vi.fn(async () => undefined);
+    const app = appWith({ pi: { steer } as never });
+
+    const response = await app.request("/api/conversations/session/steer", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ message: "Change direction" }),
+    });
+
+    expect(response.status).toBe(202);
+    expect(await response.json()).toEqual({ queued: true });
+    expect(steer).toHaveBeenCalledWith(
+      "session",
+      "Change direction",
+      undefined,
+    );
+  });
+
+  test("queues follow-up input for an active conversation run", async () => {
+    const followUp = vi.fn(async () => undefined);
+    const app = appWith({ pi: { followUp } as never });
+
+    const response = await app.request("/api/conversations/session/follow-up", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ message: "Run tests next" }),
+    });
+
+    expect(response.status).toBe(202);
+    expect(followUp).toHaveBeenCalledWith(
+      "session",
+      "Run tests next",
+      undefined,
+    );
+  });
+
+  test("returns native conversation state without server paths", async () => {
+    const conversationState = vi.fn(() => ({
+      sessionId: "session",
+      running: false,
+      queue: { sessionId: "session", steering: [], followUp: [] },
+      preferences: {
+        steeringMode: "all",
+        followUpMode: "all",
+        autoCompaction: true,
+        autoRetry: true,
+        activeTools: ["read"],
+        availableTools: [{ name: "read", description: "Read" }],
+      },
+      stats: {
+        userMessages: 1,
+        assistantMessages: 1,
+        toolCalls: 0,
+        toolResults: 0,
+        totalMessages: 2,
+        tokens: {
+          input: 1,
+          output: 1,
+          cacheRead: 0,
+          cacheWrite: 0,
+          total: 2,
+        },
+        cost: 0,
+      },
+      tree: [],
+      leafId: null,
+      treeTruncated: false,
+      extensionUi: {
+        sessionId: "session",
+        statuses: [],
+        widgets: [],
+        editorText: "",
+        workingVisible: true,
+        toolsExpanded: false,
+      },
+    }));
+    const app = appWith({ pi: { conversationState } as never });
+
+    const response = await app.request("/api/conversations/session/state");
+    const body = await response.text();
+
+    expect(response.status).toBe(200);
+    expect(body).not.toContain("/tmp/");
+    expect(JSON.parse(body)).toMatchObject({ sessionId: "session" });
+  });
+
+  test("updates native agent settings", async () => {
+    const setPreferences = vi.fn(() => ({ steeringMode: "one-at-a-time" }));
+    const app = appWith({ pi: { setPreferences } as never });
+
+    const response = await app.request("/api/agent-settings", {
+      method: "PUT",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ steeringMode: "one-at-a-time" }),
+    });
+
+    expect(response.status).toBe(200);
+    expect(setPreferences).toHaveBeenCalledWith({
+      steeringMode: "one-at-a-time",
+    });
+  });
+
+  test("exports with a safe attachment name and no server path", async () => {
+    const exportConversation = vi.fn(async () => ({
+      content: Buffer.from("session"),
+      contentType: "application/x-ndjson; charset=utf-8",
+      fileName: "conversation-session.jsonl",
+    }));
+    const app = appWith({ pi: { exportConversation } as never });
+
+    const response = await app.request(
+      "/api/conversations/session/export/jsonl",
+    );
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get("content-disposition")).toBe(
+      'attachment; filename="conversation-session.jsonl"',
+    );
+    expect(response.headers.get("content-disposition")).not.toContain("/tmp");
+    expect(await response.text()).toBe("session");
+  });
+
+  test("imports JSONL content without accepting a server path", async () => {
+    const importConversation = vi.fn(async () => "imported");
+    const app = appWith({ pi: { importConversation } as never });
+
+    const response = await app.request("/api/conversations/import", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        content:
+          '{"type":"session","version":3,"id":"imported","timestamp":"2026-01-01T00:00:00Z","cwd":"/hidden"}\n',
+      }),
+    });
+
+    expect(response.status).toBe(201);
+    expect(importConversation).toHaveBeenCalledWith(
+      expect.stringContaining("imported"),
+    );
+    expect(await response.json()).toEqual({ id: "imported" });
+  });
+
+  test("uses native tree, fork, and compaction operations", async () => {
+    const navigateConversationTree = vi.fn(async () => ({ cancelled: false }));
+    const forkConversation = vi.fn(async () => ({ id: "forked" }));
+    const compactConversation = vi.fn(async () => ({
+      summary: "summary",
+      tokensBefore: 100,
+    }));
+    const app = appWith({
+      pi: {
+        navigateConversationTree,
+        forkConversation,
+        compactConversation,
+      } as never,
+    });
+
+    const navigation = await app.request(
+      "/api/conversations/session/tree/navigate",
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ targetId: "entry" }),
+      },
+    );
+    const fork = await app.request("/api/conversations/session/fork", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ targetId: "entry", position: "at" }),
+    });
+    const compact = await app.request("/api/conversations/session/compact", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({}),
+    });
+
+    expect(navigation.status).toBe(200);
+    expect(fork.status).toBe(201);
+    expect(compact.status).toBe(200);
+    expect(navigateConversationTree).toHaveBeenCalledWith(
+      "session",
+      "entry",
+      {},
+    );
+    expect(forkConversation).toHaveBeenCalledWith("session", "entry", "at");
+    expect(compactConversation).toHaveBeenCalledWith("session", undefined);
   });
 
   test("replays pending interactions when an SSE client connects", async () => {

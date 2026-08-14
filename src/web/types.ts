@@ -1,4 +1,25 @@
-import type { ChatImage } from "../shared/contracts.js";
+import type {
+  AgentActivity,
+  AgentQueueState,
+  AgentStats,
+  ChatImage,
+  ConversationAgentState,
+  ExtensionUiSnapshot,
+  LiveToolState,
+  SessionTreeItem,
+  ThinkingState,
+} from "../shared/contracts.js";
+
+export type {
+  AgentActivity,
+  AgentQueueState,
+  AgentStats,
+  ConversationAgentState,
+  ExtensionUiSnapshot,
+  LiveToolState,
+  SessionTreeItem,
+  ThinkingState,
+};
 
 export interface SessionInfo {
   authenticated: boolean;
@@ -16,19 +37,21 @@ export interface Conversation {
   active: boolean;
 }
 
+export interface TranscriptToolResult {
+  text: string;
+  diff?: string;
+  images?: TranscriptImage[];
+  isError: boolean;
+}
+
 export interface TranscriptTool {
   id: string;
   name: string;
   arguments: unknown;
+  result?: TranscriptToolResult;
 }
 
-export interface LiveTool {
-  id: string;
-  name: string;
-  status: "done" | "error" | "running";
-  args?: unknown;
-  result?: unknown;
-}
+export type LiveTool = LiveToolState;
 
 export interface TranscriptImage extends ChatImage {
   id: string;
@@ -36,13 +59,30 @@ export interface TranscriptImage extends ChatImage {
 
 export interface TranscriptMessage {
   id: string;
-  role: "assistant" | "tool" | "user";
+  role: "assistant" | "bash" | "custom" | "status" | "tool" | "user";
   text: string;
   timestamp: number;
+  label?: string;
+  thinking?: string;
   images?: TranscriptImage[];
   tools?: TranscriptTool[];
   toolName?: string;
   isError?: boolean;
+}
+
+export interface HeartbeatToolDetail {
+  id: string;
+  name: string;
+  input?: string;
+  output?: string;
+  diff?: string;
+  isError: boolean;
+}
+
+export interface HeartbeatRunDetails {
+  response?: string;
+  reasoning?: string;
+  tools?: HeartbeatToolDetail[];
 }
 
 export interface HeartbeatRun {
@@ -52,6 +92,7 @@ export interface HeartbeatRun {
   status: "attention" | "error" | "quiet" | "running" | "stopped";
   summary?: string;
   error?: string;
+  details?: HeartbeatRunDetails;
 }
 
 export interface InteractionEvent {

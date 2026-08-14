@@ -1,17 +1,10 @@
-export type WebEventType =
-  | "interaction"
-  | "message_delta"
-  | "notification"
-  | "package_progress"
-  | "provider_auth"
-  | "run_status"
-  | "tool_status";
+import type {
+  WebEvent,
+  WebEventDataMap,
+  WebEventType,
+} from "../../shared/contracts.js";
 
-export interface WebEvent<T = unknown> {
-  id: number;
-  type: WebEventType;
-  data: T;
-}
+export type { WebEvent, WebEventType } from "../../shared/contracts.js";
 
 export type EventListener = (event: WebEvent) => void;
 
@@ -29,8 +22,14 @@ export class EventHub {
     return this.nextId - 1;
   }
 
-  publish<T>(type: WebEventType, data: T): WebEvent<T> {
-    const event: WebEvent<T> = { id: this.nextId++, type, data };
+  publish<Type extends WebEventType>(
+    type: Type,
+    data: WebEventDataMap[Type],
+  ): Extract<WebEvent, { type: Type }> {
+    const event = { id: this.nextId++, type, data } as Extract<
+      WebEvent,
+      { type: Type }
+    >;
     this.events.push(event);
     if (this.events.length > this.capacity)
       this.events.splice(0, this.events.length - this.capacity);

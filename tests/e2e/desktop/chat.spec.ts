@@ -55,6 +55,32 @@ test("streams the first conversation and restores it after reload", async ({
   ).toBeVisible();
 });
 
+test("queues steering while a response is running", async ({
+  page,
+  request,
+}) => {
+  await page.goto("/");
+  const initial = `E2E_HOLD initial ${Date.now()}`;
+  await send(page, initial);
+  await expect(page.locator("article.streaming")).toBeVisible();
+
+  const composer = page.getByLabel("Ask Pi anything…");
+  await composer.fill("steering guidance");
+  await page.getByRole("button", { name: "Steer" }).click();
+  await expect(
+    page.getByRole("region", { name: "Queued messages" }),
+  ).toContainText("steering guidance");
+
+  const release = await request.post(`${mockOrigin}/__control/release`);
+  expect(release.ok()).toBe(true);
+  await expect(
+    page.getByText("steering guidance", { exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByText(/E2E e2e-(primary|secondary): steering guidance/),
+  ).toBeVisible();
+});
+
 test("keeps new and existing conversations isolated", async ({ page }) => {
   await page.goto("/");
   const oldMessage = `old conversation ${Date.now()}`;

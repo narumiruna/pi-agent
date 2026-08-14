@@ -10,11 +10,12 @@ import {
   Flex,
   IconButton,
   ScrollArea,
+  Select,
   Text,
   TextArea,
   Tooltip,
 } from "@radix-ui/themes";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -26,17 +27,54 @@ import {
   normalizeChatImageMimeType,
 } from "../../shared/contracts.js";
 import { api, mutation } from "../api.js";
-import type { LiveTool, TranscriptImage, TranscriptMessage } from "../types.js";
+import { ConversationPanel } from "../components/ConversationPanel.js";
+import type {
+  AgentActivity,
+  AgentQueueState,
+  ConversationAgentState,
+  ExtensionUiSnapshot,
+  LiveTool,
+  TranscriptImage,
+  TranscriptMessage,
+  TranscriptTool,
+} from "../types.js";
 
 interface Props {
   conversationId?: string;
   refresh: number;
   delta: string;
+  thinking: string;
   running: boolean;
   inputDisabled: boolean;
   liveTools: LiveTool[];
+  queue?: AgentQueueState;
+  activity?: AgentActivity;
+  agentState?: ConversationAgentState;
+  extensionUi?: ExtensionUiSnapshot;
+  editorCommand?: {
+    sequence: number;
+    text: string;
+    mode: "append" | "replace";
+  };
   eventsConnected: boolean;
   onRunning: (running: boolean) => void;
+  onConversationChanged: (id: string) => Promise<void>;
+  onStateChanged: () => void;
+  onChooseModel: () => void;
+}
+
+interface CommandSuggestion {
+  name: string;
+  description?: string;
+  source: "extension" | "prompt" | "skill";
+}
+
+interface ComposerSuggestion {
+  id: string;
+  label: string;
+  description?: string;
+  kind: "command" | "file";
+  value: string;
 }
 
 function localId(): string {
@@ -83,44 +121,295 @@ function imageSource(image: ChatImage): string {
   return `data:${image.mimeType};base64,${image.data}`;
 }
 
+function fuzzyScore(value: string, query: string): number | undefined {
+  const normalized = value.toLowerCase();
+  const normalizedQuery = query.toLowerCase();
+  if (!normalizedQuery) return 0;
+  if (normalized.startsWith(normalizedQuery)) return 1;
+  const included = normalized.indexOf(normalizedQuery);
+  if (included >= 0) return 2 + included / 1_000;
+  let queryIndex = 0;
+  let gap = 0;
+  let previous = -1;
+  for (const [index, character] of [...normalized].entries()) {
+    if (character !== normalizedQuery[queryIndex]) continue;
+    if (previous >= 0) gap += index - previous - 1;
+    previous = index;
+    queryIndex += 1;
+    if (queryIndex === normalizedQuery.length) return 3 + gap / 1_000;
+  }
+  return undefined;
+}
+
+function keyedLines(lines: string[]): Array<{ id: string; line: string }> {
+  const counts = new Map<string, number>();
+  return lines.map((line) => {
+    const count = (counts.get(line) ?? 0) + 1;
+    counts.set(line, count);
+    return { id: `${line}-${count}`, line };
+  });
+}
+
+function DiffBlock({ diff }: { diff: string }) {
+  return (
+    <pre className="toolDiff">
+      {keyedLines(diff.split("\n")).map(({ id, line }) => (
+        <span
+          className={
+            line.startsWith("+")
+              ? "added"
+              : line.startsWith("-")
+                ? "removed"
+                : undefined
+          }
+          key={id}
+        >
+          {line}
+          {"\n"}
+        </span>
+      ))}
+    </pre>
+  );
+}
+
+function ToolBlock({
+  tool,
+  expanded,
+}: {
+  tool: TranscriptTool;
+  expanded: boolean;
+}) {
+  return (
+    <details
+      className={tool.result?.isError ? "toolRow error" : "toolRow"}
+      open={expanded || undefined}
+    >
+      <summary>
+        {tool.name}
+        {tool.result ? (tool.result.isError ? " · error" : " · done") : ""}
+      </summary>
+      <Code>{JSON.stringify(tool.arguments, null, 2)}</Code>
+      {tool.result?.diff && <DiffBlock diff={tool.result.diff} />}
+      {tool.result?.text && (
+        <pre className="toolOutput">{tool.result.text}</pre>
+      )}
+      {tool.result?.images && (
+        <div className="messageImages">
+          {tool.result.images.map((image) => (
+            <img alt="Tool result" key={image.id} src={imageSource(image)} />
+          ))}
+        </div>
+      )}
+    </details>
+  );
+}
+
 export function ChatPage({
   conversationId,
   refresh,
   delta,
+  thinking,
   running,
   inputDisabled,
   liveTools,
+  queue,
+  activity,
+  agentState,
+  extensionUi,
+  editorCommand,
   eventsConnected,
   onRunning,
+  onConversationChanged,
+  onStateChanged,
+  onChooseModel,
 }: Props) {
   const { t } = useTranslation();
   const [messages, setMessages] = useState<TranscriptMessage[]>([]);
   const [draft, setDraft] = useState("");
   const [images, setImages] = useState<TranscriptImage[]>([]);
   const [imageError, setImageError] = useState<string>();
+  const [delivery, setDelivery] = useState<"follow-up" | "steer">("steer");
+  const [commands, setCommands] = useState<CommandSuggestion[]>([]);
+  const [fileSuggestions, setFileSuggestions] = useState<
+    Array<{ path: string; directory: boolean }>
+  >([]);
+  const [suggestionIndex, setSuggestionIndex] = useState(0);
+  const [dismissedSuggestionDraft, setDismissedSuggestionDraft] =
+    useState<string>();
+  const [historyIndex, setHistoryIndex] = useState(-1);
+  const composing = useRef(false);
+  const followingOutput = useRef(true);
+  const loadedDraftFor = useRef<string>();
+  const latestDraft = useRef("");
+  const draftSyncEnabled = useRef(false);
+  const draftSync = useRef<Promise<unknown>>(Promise.resolve());
   const end = useRef<HTMLDivElement>(null);
   const imageInput = useRef<HTMLInputElement>(null);
   useEffect(() => {
+    void api<CommandSuggestion[]>("/api/commands")
+      .then(setCommands)
+      .catch(() => setCommands([]));
+  }, []);
+  useEffect(() => {
     void refresh;
-    if (!conversationId) return setMessages([]);
+    if (!conversationId) {
+      setMessages([]);
+      return;
+    }
+    const abort = new AbortController();
     void api<{ messages: TranscriptMessage[] }>(
       `/api/conversations/${conversationId}`,
-    ).then((data) => setMessages(data.messages));
+      { signal: abort.signal },
+    )
+      .then((data) => setMessages(data.messages))
+      .catch(() => undefined);
+    return () => abort.abort();
   }, [conversationId, refresh]);
   useEffect(() => {
-    void conversationId;
-    setImages([]);
-    setImageError(undefined);
-  }, [conversationId]);
+    if (
+      !conversationId ||
+      extensionUi?.sessionId !== conversationId ||
+      loadedDraftFor.current === conversationId
+    )
+      return;
+    loadedDraftFor.current = conversationId;
+    setDraft(extensionUi.editorText);
+  }, [conversationId, extensionUi]);
+  useEffect(() => {
+    if (!editorCommand) return;
+    setDraft((current) =>
+      editorCommand.mode === "append"
+        ? `${current}${editorCommand.text}`
+        : editorCommand.text,
+    );
+  }, [editorCommand]);
+  latestDraft.current = draft;
+  draftSyncEnabled.current =
+    Boolean(conversationId) && agentState?.sessionId === conversationId;
+  const enqueueDraftSync = useCallback((id: string, text: string) => {
+    draftSync.current = draftSync.current
+      .catch(() => undefined)
+      .then(() =>
+        api(`/api/conversations/${id}/draft`, mutation("PUT", { text })),
+      )
+      .catch(() => undefined);
+  }, []);
+  useEffect(() => {
+    if (!conversationId || agentState?.sessionId !== conversationId) return;
+    const timer = window.setTimeout(
+      () => enqueueDraftSync(conversationId, draft),
+      150,
+    );
+    return () => window.clearTimeout(timer);
+  }, [agentState?.sessionId, conversationId, draft, enqueueDraftSync]);
+  useEffect(
+    () => () => {
+      if (conversationId && draftSyncEnabled.current)
+        enqueueDraftSync(conversationId, latestDraft.current);
+    },
+    [conversationId, enqueueDraftSync],
+  );
+
+  const commandMatch = draft.match(/^\/([^\s]*)$/);
+  const fileMatch = draft.match(/(?:^|\s)@([^\s@]*)$/);
+  useEffect(() => {
+    const query = fileMatch?.[1];
+    if (!query) {
+      setFileSuggestions([]);
+      return;
+    }
+    setFileSuggestions([]);
+    const abort = new AbortController();
+    const timer = window.setTimeout(() => {
+      void api<Array<{ path: string; directory: boolean }>>(
+        `/api/workspace/files?q=${encodeURIComponent(query)}&limit=20`,
+        { signal: abort.signal },
+      )
+        .then(setFileSuggestions)
+        .catch(() => {
+          if (!abort.signal.aborted) setFileSuggestions([]);
+        });
+    }, 150);
+    return () => {
+      window.clearTimeout(timer);
+      abort.abort();
+    };
+  }, [fileMatch?.[1]]);
+
+  const suggestions = useMemo<ComposerSuggestion[]>(() => {
+    if (draft === dismissedSuggestionDraft) return [];
+    if (commandMatch) {
+      const query = commandMatch[1];
+      return commands
+        .flatMap((command) => {
+          const score = fuzzyScore(command.name, query);
+          return score === undefined ? [] : [{ command, score }];
+        })
+        .sort(
+          (left, right) =>
+            left.score - right.score ||
+            left.command.name.localeCompare(right.command.name),
+        )
+        .slice(0, 20)
+        .map(({ command }) => ({
+          id: `command:${command.name}`,
+          kind: "command",
+          label: `/${command.name}`,
+          description: command.description || command.source,
+          value: command.name,
+        }));
+    }
+    if (fileMatch)
+      return fileSuggestions.map((file) => ({
+        id: `file:${file.path}`,
+        kind: "file",
+        label: `@${file.path}`,
+        description: file.directory ? t("directory") : t("file"),
+        value: file.path,
+      }));
+    return [];
+  }, [
+    commandMatch,
+    commands,
+    dismissedSuggestionDraft,
+    draft,
+    fileMatch,
+    fileSuggestions,
+    t,
+  ]);
+
   useEffect(() => {
     void messages;
     void delta;
+    if (!followingOutput.current) return;
     end.current?.scrollIntoView({
       behavior: window.matchMedia?.("(prefers-reduced-motion: reduce)").matches
         ? "auto"
         : "smooth",
     });
   }, [messages, delta]);
+
+  const promptHistory = useMemo(
+    () =>
+      messages
+        .filter((message) => message.role === "user" && message.text)
+        .map((message) => message.text),
+    [messages],
+  );
+
+  const applySuggestion = (suggestion: ComposerSuggestion) => {
+    if (suggestion.kind === "command") {
+      setDraft(`/${suggestion.value} `);
+      return;
+    }
+    const match = draft.match(/(?:^|\s)@([^\s@]*)$/);
+    if (!match || match.index === undefined) return;
+    const at = draft.lastIndexOf("@", draft.length - match[1].length - 1);
+    const value = suggestion.value.includes(" ")
+      ? `@"${suggestion.value}"`
+      : `@${suggestion.value}`;
+    setDraft(`${draft.slice(0, at)}${value} `);
+  };
 
   const addImages = async (files: File[]) => {
     setImageError(undefined);
@@ -167,12 +456,18 @@ export function ChatPage({
     if (
       !conversationId ||
       (!draft.trim() && images.length === 0) ||
-      running ||
       inputDisabled ||
       !eventsConnected
     )
       return;
+    if (running && images.length > 0) {
+      setImageError(t("queueImagesUnsupported"));
+      return;
+    }
     const message = draft.trim();
+    followingOutput.current = true;
+    const queued = running;
+    const optimisticId = queued ? undefined : localId();
     const messageImages = images;
     const promptImages = images.map(({ type, data, mimeType }) => ({
       type,
@@ -182,39 +477,80 @@ export function ChatPage({
     setDraft("");
     setImages([]);
     setImageError(undefined);
-    setMessages((current) => [
-      ...current,
-      {
-        id: localId(),
-        role: "user",
-        text: message,
-        timestamp: Date.now(),
-        ...(messageImages.length > 0 ? { images: messageImages } : {}),
-      },
-    ]);
-    onRunning(true);
+    if (optimisticId)
+      setMessages((current) => [
+        ...current,
+        {
+          id: optimisticId,
+          role: "user",
+          text: message,
+          timestamp: Date.now(),
+          ...(messageImages.length > 0 ? { images: messageImages } : {}),
+        },
+      ]);
+    if (!queued) onRunning(true);
     try {
       await api(
-        `/api/conversations/${conversationId}/messages`,
+        `/api/conversations/${conversationId}/${queued ? delivery : "messages"}`,
         mutation("POST", {
           message,
           ...(promptImages.length > 0 ? { images: promptImages } : {}),
         }),
       );
+      setHistoryIndex(-1);
     } catch {
+      if (optimisticId)
+        setMessages((current) =>
+          current.filter((item) => item.id !== optimisticId),
+        );
       setDraft((current) => current || message);
       setImages((current) => (current.length > 0 ? current : messageImages));
-      onRunning(false);
+      if (!queued) onRunning(false);
     }
   };
   const stop = async () => {
-    await api("/api/runs/abort", mutation("POST"));
-    onRunning(false);
+    try {
+      const result = await api<{
+        queue?: { restored?: string[] };
+      }>("/api/runs/abort", mutation("POST"));
+      const restored = result.queue?.restored ?? [];
+      if (restored.length > 0)
+        setDraft((current) =>
+          [current, ...restored].filter(Boolean).join("\n"),
+        );
+      onRunning(false);
+    } catch {
+      setImageError(t("stopFailed"));
+    }
+  };
+
+  const clearQueue = async () => {
+    if (!conversationId) return;
+    try {
+      const result = await api<{ restored: string[] }>(
+        `/api/conversations/${conversationId}/queue`,
+        mutation("DELETE"),
+      );
+      if (result.restored.length > 0)
+        setDraft((current) =>
+          [current, ...result.restored].filter(Boolean).join("\n"),
+        );
+    } catch {
+      setImageError(t("queueRestoreFailed"));
+    }
   };
 
   return (
     <section className="chatPage" aria-label={t("chat")}>
-      <ScrollArea className="messageScroll" tabIndex={0}>
+      <ScrollArea
+        className="messageScroll"
+        tabIndex={0}
+        onScrollCapture={(event) => {
+          const target = event.target as HTMLElement;
+          followingOutput.current =
+            target.scrollHeight - target.scrollTop - target.clientHeight < 80;
+        }}
+      >
         <div className="messageColumn">
           {messages.length === 0 && !delta ? (
             <div className="emptyState">
@@ -227,42 +563,51 @@ export function ChatPage({
             messages.map((message) => (
               <article className={`message ${message.role}`} key={message.id}>
                 <Text className="messageRole" size="1" color="gray">
-                  {message.role === "assistant" ? "Pi" : message.role}
+                  {message.role === "assistant"
+                    ? "Pi"
+                    : message.label || message.role}
                 </Text>
-                {message.role === "tool" ? (
-                  <details
-                    className={message.isError ? "toolRow error" : "toolRow"}
-                  >
-                    <summary>{message.toolName}</summary>
-                    <Code>{message.text}</Code>
+                {message.thinking && (
+                  <details className="thinkingBlock">
+                    <summary>
+                      {extensionUi?.hiddenThinkingLabel || t("thinking")}
+                    </summary>
+                    <div className="markdown">
+                      <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                        {message.thinking}
+                      </ReactMarkdown>
+                    </div>
                   </details>
-                ) : (
-                  <div className="messageContent">
-                    {message.images && message.images.length > 0 && (
-                      <div className="messageImages">
-                        {message.images.map((image, index) => (
-                          <img
-                            alt={t("attachedImage", { number: index + 1 })}
-                            key={image.id}
-                            src={imageSource(image)}
-                          />
-                        ))}
-                      </div>
-                    )}
-                    {message.text && (
+                )}
+                <div className="messageContent">
+                  {message.images && message.images.length > 0 && (
+                    <div className="messageImages">
+                      {message.images.map((image, index) => (
+                        <img
+                          alt={t("attachedImage", { number: index + 1 })}
+                          key={image.id}
+                          src={imageSource(image)}
+                        />
+                      ))}
+                    </div>
+                  )}
+                  {message.text &&
+                    (message.role === "tool" || message.role === "bash" ? (
+                      <pre className="toolOutput">{message.text}</pre>
+                    ) : (
                       <div className="markdown">
                         <ReactMarkdown remarkPlugins={[remarkGfm]}>
                           {message.text}
                         </ReactMarkdown>
                       </div>
-                    )}
-                  </div>
-                )}
+                    ))}
+                </div>
                 {message.tools?.map((tool) => (
-                  <details className="toolRow" key={tool.id}>
-                    <summary>{tool.name}</summary>
-                    <Code>{JSON.stringify(tool.arguments, null, 2)}</Code>
-                  </details>
+                  <ToolBlock
+                    expanded={extensionUi?.toolsExpanded === true}
+                    key={tool.id}
+                    tool={tool}
+                  />
                 ))}
               </article>
             ))
@@ -271,13 +616,31 @@ export function ChatPage({
             <details
               className={tool.status === "error" ? "toolRow error" : "toolRow"}
               key={tool.id}
+              open={extensionUi?.toolsExpanded || undefined}
             >
               <summary>
-                {tool.name} · {tool.status}
+                {tool.name} · {tool.status} · {tool.durationMs}ms
               </summary>
-              <Code>{JSON.stringify(tool.result ?? tool.args, null, 2)}</Code>
+              {tool.diff && <DiffBlock diff={tool.diff} />}
+              {tool.output ? (
+                <pre className="toolOutput">{tool.output}</pre>
+              ) : (
+                <Code>{JSON.stringify(tool.result ?? tool.args, null, 2)}</Code>
+              )}
             </details>
           ))}
+          {thinking && (
+            <details className="thinkingBlock live" open>
+              <summary>
+                {extensionUi?.hiddenThinkingLabel || t("thinking")}
+              </summary>
+              <div className="markdown">
+                <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                  {thinking}
+                </ReactMarkdown>
+              </div>
+            </details>
+          )}
           {delta && (
             <article className="message assistant streaming">
               <Text className="messageRole" size="1" color="gray">
@@ -295,6 +658,63 @@ export function ChatPage({
       </ScrollArea>
       <div className="composerWrap">
         <div className="composer">
+          {extensionUi?.widgets
+            .filter((widget) => widget.placement === "aboveEditor")
+            .map((widget) => (
+              <div className="extensionWidget" key={widget.key}>
+                {widget.lines.join("\n")}
+              </div>
+            ))}
+          {extensionUi?.statuses.length ? (
+            <div className="extensionStatuses" role="status">
+              {extensionUi.statuses.map((status) => (
+                <span key={status.key}>
+                  <strong>{status.key}</strong> {status.text}
+                </span>
+              ))}
+            </div>
+          ) : null}
+          {activity && !["done", "changed"].includes(activity.status) && (
+            <Text
+              as="p"
+              color={activity.status === "error" ? "red" : "gray"}
+              size="1"
+            >
+              {activity.kind}: {activity.message || activity.status}
+            </Text>
+          )}
+          {running && extensionUi?.workingVisible !== false && (
+            <Text as="p" color="gray" role="status" size="1">
+              {extensionUi?.workingIndicator || "●"}{" "}
+              {extensionUi?.workingMessage || t("working")}
+            </Text>
+          )}
+          {queue && queue.steering.length + queue.followUp.length > 0 && (
+            <section className="messageQueue" aria-label={t("messageQueue")}>
+              <Flex align="center" justify="between">
+                <Text size="1" weight="medium">
+                  {t("messageQueue")}
+                </Text>
+                <Button
+                  size="1"
+                  variant="ghost"
+                  onClick={() => void clearQueue()}
+                >
+                  {t("restoreQueue")}
+                </Button>
+              </Flex>
+              {keyedLines(queue.steering).map(({ id, line }) => (
+                <div key={`steer-${id}`}>
+                  <strong>{t("steer")}</strong> {line}
+                </div>
+              ))}
+              {keyedLines(queue.followUp).map(({ id, line }) => (
+                <div key={`follow-up-${id}`}>
+                  <strong>{t("followUp")}</strong> {line}
+                </div>
+              ))}
+            </section>
+          )}
           {images.length > 0 && (
             <ul aria-label={t("attachedImages")} className="attachmentTray">
               {images.map((image, index) => (
@@ -332,17 +752,83 @@ export function ChatPage({
           )}
           <TextArea
             aria-label={t("messagePlaceholder")}
-            placeholder={t("messagePlaceholder")}
-            value={draft}
-            disabled={
-              !conversationId || running || inputDisabled || !eventsConnected
+            placeholder={
+              running ? t("steerPlaceholder") : t("messagePlaceholder")
             }
-            onChange={(event) => setDraft(event.target.value)}
+            value={draft}
+            disabled={!conversationId || inputDisabled || !eventsConnected}
+            onChange={(event) => {
+              setDraft(event.target.value);
+              setDismissedSuggestionDraft(undefined);
+              setSuggestionIndex(0);
+              setHistoryIndex(-1);
+            }}
+            onCompositionEnd={() => {
+              composing.current = false;
+            }}
+            onCompositionStart={() => {
+              composing.current = true;
+            }}
             onKeyDown={(event) => {
+              if (composing.current || event.nativeEvent.isComposing) return;
+              if (suggestions.length > 0) {
+                if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+                  event.preventDefault();
+                  setSuggestionIndex((current) =>
+                    event.key === "ArrowDown"
+                      ? (current + 1) % suggestions.length
+                      : (current - 1 + suggestions.length) % suggestions.length,
+                  );
+                  return;
+                }
+                if (event.key === "Enter" || event.key === "Tab") {
+                  event.preventDefault();
+                  applySuggestion(
+                    suggestions[suggestionIndex] ?? suggestions[0],
+                  );
+                  return;
+                }
+                if (event.key === "Escape") {
+                  event.preventDefault();
+                  setDismissedSuggestionDraft(draft);
+                  return;
+                }
+              }
+              if (
+                event.key === "ArrowUp" &&
+                !draft &&
+                promptHistory.length > 0
+              ) {
+                event.preventDefault();
+                const next = Math.min(
+                  historyIndex + 1,
+                  promptHistory.length - 1,
+                );
+                setHistoryIndex(next);
+                setDraft(promptHistory[promptHistory.length - 1 - next]);
+                return;
+              }
+              if (event.key === "ArrowDown" && historyIndex >= 0) {
+                event.preventDefault();
+                const next = historyIndex - 1;
+                setHistoryIndex(next);
+                setDraft(
+                  next < 0
+                    ? ""
+                    : promptHistory[promptHistory.length - 1 - next],
+                );
+                return;
+              }
               if (event.key === "Enter" && !event.shiftKey) {
                 event.preventDefault();
                 void send();
               }
+            }}
+            onDrop={(event) => {
+              const files = Array.from(event.dataTransfer.files);
+              if (files.length < 1) return;
+              event.preventDefault();
+              void addImages(files);
             }}
             onPaste={(event) => {
               const files = Array.from(event.clipboardData.items).flatMap(
@@ -356,6 +842,33 @@ export function ChatPage({
               void addImages(files);
             }}
           />
+          {suggestions.length > 0 && (
+            <div className="composerSuggestions" role="listbox">
+              {suggestions.map((suggestion, index) => (
+                <button
+                  aria-selected={index === suggestionIndex}
+                  className={index === suggestionIndex ? "selected" : undefined}
+                  key={suggestion.id}
+                  role="option"
+                  type="button"
+                  onMouseDown={(event) => event.preventDefault()}
+                  onClick={() => applySuggestion(suggestion)}
+                >
+                  <span>{suggestion.label}</span>
+                  {suggestion.description && (
+                    <small>{suggestion.description}</small>
+                  )}
+                </button>
+              ))}
+            </div>
+          )}
+          {extensionUi?.widgets
+            .filter((widget) => widget.placement === "belowEditor")
+            .map((widget) => (
+              <div className="extensionWidget" key={widget.key}>
+                {widget.lines.join("\n")}
+              </div>
+            ))}
           <input
             accept={CHAT_IMAGE_MIME_TYPES.join(",")}
             hidden
@@ -369,29 +882,74 @@ export function ChatPage({
             }}
           />
           <Flex align="center" justify="between" mt="2">
-            <Tooltip content={t("attachImage")}>
-              <IconButton
-                aria-label={t("attachImage")}
-                disabled={
-                  !conversationId ||
-                  running ||
-                  inputDisabled ||
-                  !eventsConnected
-                }
-                variant="ghost"
-                onClick={() => imageInput.current?.click()}
-              >
-                <ImageIcon />
-              </IconButton>
-            </Tooltip>
-            {running ? (
-              <Button color="red" variant="soft" onClick={() => void stop()}>
-                <StopIcon /> {t("stop")}
-              </Button>
-            ) : (
-              <Tooltip content={t("send")}>
+            <Flex align="center" gap="1">
+              <Tooltip content={t("attachImage")}>
                 <IconButton
-                  aria-label={t("send")}
+                  aria-label={t("attachImage")}
+                  disabled={
+                    !conversationId || inputDisabled || !eventsConnected
+                  }
+                  variant="ghost"
+                  onClick={() => imageInput.current?.click()}
+                >
+                  <ImageIcon />
+                </IconButton>
+              </Tooltip>
+              {conversationId && (
+                <ConversationPanel
+                  conversationId={conversationId}
+                  disabled={running || inputDisabled}
+                  state={agentState}
+                  onConversationChanged={onConversationChanged}
+                  onDraft={(text, mode) =>
+                    setDraft((current) =>
+                      mode === "append" ? `${current}${text}` : text,
+                    )
+                  }
+                  onStateChanged={onStateChanged}
+                />
+              )}
+              <Button size="1" variant="ghost" onClick={onChooseModel}>
+                {t("model")}
+              </Button>
+            </Flex>
+            <Flex align="center" gap="2">
+              {running && (
+                <Select.Root
+                  value={delivery}
+                  onValueChange={(value) =>
+                    setDelivery(value as "follow-up" | "steer")
+                  }
+                >
+                  <Select.Trigger aria-label={t("deliveryMode")} />
+                  <Select.Content>
+                    <Select.Item value="steer">{t("steer")}</Select.Item>
+                    <Select.Item value="follow-up">{t("followUp")}</Select.Item>
+                  </Select.Content>
+                </Select.Root>
+              )}
+              {running && (
+                <Button color="red" variant="soft" onClick={() => void stop()}>
+                  <StopIcon /> {t("stop")}
+                </Button>
+              )}
+              <Tooltip
+                content={
+                  running
+                    ? delivery === "steer"
+                      ? t("steer")
+                      : t("followUp")
+                    : t("send")
+                }
+              >
+                <IconButton
+                  aria-label={
+                    running
+                      ? delivery === "steer"
+                        ? t("steer")
+                        : t("followUp")
+                      : t("send")
+                  }
                   disabled={
                     !conversationId ||
                     (!draft.trim() && images.length === 0) ||
@@ -403,8 +961,21 @@ export function ChatPage({
                   <PaperPlaneIcon />
                 </IconButton>
               </Tooltip>
-            )}
+            </Flex>
           </Flex>
+          {conversationId && agentState?.sessionId === conversationId && (
+            <div className="sessionFooter" role="status">
+              <span>
+                {agentState.stats.tokens.total.toLocaleString()} {t("tokens")}
+              </span>
+              <span>
+                {agentState.stats.contextUsage?.percent === null ||
+                agentState.stats.contextUsage?.percent === undefined
+                  ? t("contextUnknown")
+                  : `${agentState.stats.contextUsage.percent.toFixed(1)}% ${t("context")}`}
+              </span>
+            </div>
+          )}
         </div>
       </div>
     </section>

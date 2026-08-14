@@ -1,3 +1,5 @@
+import type { AgentPreferences } from "../shared/contracts.js";
+
 export type ProviderCredentialType = "api_key" | "oauth";
 
 export interface ModelOption {
@@ -44,6 +46,7 @@ export interface ModelData {
   thinkingLevel: string;
   thinkingLevels: string[];
   authPending: boolean;
+  agent: AgentPreferences;
   models: ModelOption[];
   providers: ProviderOption[];
 }

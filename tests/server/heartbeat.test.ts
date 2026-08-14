@@ -2,7 +2,10 @@ import { describe, expect, test, vi } from "vitest";
 import { EventHub } from "../../src/server/agent/events.js";
 import { RunCoordinator } from "../../src/server/agent/run-coordinator.js";
 import { parseHeartbeat } from "../../src/server/heartbeat/config.js";
-import { HeartbeatScheduler } from "../../src/server/heartbeat/scheduler.js";
+import {
+  HeartbeatExecutionError,
+  HeartbeatScheduler,
+} from "../../src/server/heartbeat/scheduler.js";
 import type { HeartbeatRunRecord } from "../../src/server/storage/types.js";
 
 describe("parseHeartbeat", () => {
@@ -168,13 +171,62 @@ describe("HeartbeatScheduler", () => {
     await chat;
   });
 
+  test("persists diagnostic details when heartbeat execution fails", async () => {
+    const runs: HeartbeatRunRecord[] = [];
+    const scheduler = new HeartbeatScheduler({
+      load: async () => parseHeartbeat("Check"),
+      coordinator: new RunCoordinator(),
+      events: new EventHub(),
+      runAgent: async () => {
+        throw new HeartbeatExecutionError("Weather service failed", {
+          tools: [
+            {
+              id: "tool-1",
+              name: "bash",
+              output: "connection refused",
+              isError: true,
+            },
+          ],
+        });
+      },
+      store: {
+        createHeartbeatRun: async (run) => runs.push(run),
+        finishHeartbeatRun: async (id, update) =>
+          Object.assign(runs.find((run) => run.id === id) as object, update),
+        latestHeartbeatRun: async () => undefined,
+        listHeartbeatRuns: async () => runs,
+      },
+    });
+
+    await scheduler.runNow();
+
+    expect(runs[0]).toMatchObject({
+      status: "error",
+      error: "Weather service failed",
+      details: { tools: [{ output: "connection refused" }] },
+    });
+  });
+
   test("does not retry failures and classifies non-OK output as attention", async () => {
     const runs: HeartbeatRunRecord[] = [];
     const scheduler = new HeartbeatScheduler({
       load: async () => parseHeartbeat("Check"),
       coordinator: new RunCoordinator(),
       events: new EventHub(),
-      runAgent: async () => "HEARTBEAT_OK\n",
+      runAgent: async () => ({
+        response: "HEARTBEAT_OK\n",
+        details: {
+          response: "HEARTBEAT_OK\n",
+          tools: [
+            {
+              id: "tool-1",
+              name: "read",
+              output: "configuration missing",
+              isError: true,
+            },
+          ],
+        },
+      }),
       store: {
         createHeartbeatRun: async (run) => runs.push(run),
         finishHeartbeatRun: async (id, update) =>
@@ -189,6 +241,9 @@ describe("HeartbeatScheduler", () => {
     expect(runs[0]).toMatchObject({
       status: "attention",
       summary: "HEARTBEAT_OK",
+      details: {
+        tools: [{ name: "read", output: "configuration missing" }],
+      },
     });
   });
 });

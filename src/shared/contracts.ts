@@ -38,6 +38,156 @@ export type ErrorCode =
   | "provider_not_configured"
   | "unauthorized";
 
+export type QueueMode = "all" | "one-at-a-time";
+
+export interface ExtensionWidget {
+  key: string;
+  lines: string[];
+  placement: "aboveEditor" | "belowEditor";
+}
+
+export interface ExtensionUiSnapshot {
+  sessionId: string;
+  statuses: Array<{ key: string; text: string }>;
+  widgets: ExtensionWidget[];
+  title?: string;
+  editorText: string;
+  workingMessage?: string;
+  workingVisible: boolean;
+  workingIndicator?: string;
+  hiddenThinkingLabel?: string;
+  toolsExpanded: boolean;
+}
+
+export interface AgentQueueState {
+  sessionId: string;
+  steering: string[];
+  followUp: string[];
+}
+
+export interface AgentStats {
+  model?: { provider: string; id: string; name: string };
+  sessionBytes?: number;
+  userMessages: number;
+  assistantMessages: number;
+  toolCalls: number;
+  toolResults: number;
+  totalMessages: number;
+  tokens: {
+    input: number;
+    output: number;
+    cacheRead: number;
+    cacheWrite: number;
+    total: number;
+  };
+  cost: number;
+  contextUsage?: {
+    tokens: number | null;
+    contextWindow: number;
+    percent: number | null;
+  };
+}
+
+export interface SessionTreeItem {
+  id: string;
+  parentId: string | null;
+  type: string;
+  timestamp: string;
+  label?: string;
+  preview: string;
+  canForkBefore: boolean;
+  children: SessionTreeItem[];
+}
+
+export interface AgentPreferences {
+  steeringMode: QueueMode;
+  followUpMode: QueueMode;
+  autoCompaction: boolean;
+  autoRetry: boolean;
+  activeTools: string[];
+  availableTools: Array<{ name: string; description: string }>;
+}
+
+export interface ConversationAgentState {
+  sessionId: string;
+  running: boolean;
+  queue: AgentQueueState;
+  preferences: AgentPreferences;
+  stats: AgentStats;
+  tree: SessionTreeItem[];
+  leafId: string | null;
+  treeTruncated: boolean;
+  extensionUi: ExtensionUiSnapshot;
+}
+
+export interface LiveToolState {
+  sessionId: string;
+  id: string;
+  name: string;
+  status: "done" | "error" | "running";
+  args?: unknown;
+  result?: unknown;
+  output?: string;
+  diff?: string;
+  startedAt: number;
+  updatedAt: number;
+  durationMs: number;
+}
+
+export interface ThinkingState {
+  sessionId: string;
+  status: "done" | "running";
+  delta?: string;
+}
+
+export interface AgentActivity {
+  sessionId: string;
+  kind: "compaction" | "model" | "retry" | "thinking";
+  status: string;
+  message?: string;
+  attempt?: number;
+  maxAttempts?: number;
+}
+
+export interface WebEventDataMap {
+  interaction: Record<string, unknown>;
+  message_delta: { sessionId: string; delta: string };
+  message_complete: { sessionId: string; role: string; timestamp: number };
+  notification: {
+    message?: string;
+    type?: string;
+    [key: string]: unknown;
+  };
+  package_progress: unknown;
+  provider_auth: unknown;
+  run_status: {
+    status: string;
+    runId?: string;
+    sessionId?: string;
+    kind?: string;
+    message?: string;
+  };
+  tool_status: LiveToolState;
+  thinking_status: ThinkingState;
+  queue_update: AgentQueueState;
+  agent_status: AgentActivity;
+  agent_config: { sessionId: string; preferences: AgentPreferences };
+  extension_ui: {
+    snapshot: ExtensionUiSnapshot;
+    editor?: { text: string; mode: "append" | "replace" };
+  };
+}
+
+export type WebEventType = keyof WebEventDataMap;
+
+export type WebEvent = {
+  [Type in WebEventType]: {
+    id: number;
+    type: Type;
+    data: WebEventDataMap[Type];
+  };
+}[WebEventType];
+
 export interface ApiErrorBody {
   error: {
     code: ErrorCode;

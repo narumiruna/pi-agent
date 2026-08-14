@@ -67,9 +67,23 @@ export function SettingsPage({
 
   const load = useCallback(async () => {
     const result = await api<ModelData>("/api/models");
-    setData(result);
-    return result;
-  }, []);
+    const normalized = {
+      ...result,
+      agent: result.agent ?? {
+        steeringMode: "all" as const,
+        followUpMode: "all" as const,
+        autoCompaction: true,
+        autoRetry: true,
+        activeTools: session.tools,
+        availableTools: session.tools.map((name) => ({
+          name,
+          description: name,
+        })),
+      },
+    };
+    setData(normalized);
+    return normalized;
+  }, [session.tools]);
 
   useEffect(() => {
     void load().catch((reason) => setError(errorMessage(reason)));
@@ -142,6 +156,9 @@ export function SettingsPage({
         ),
       t("modelApplied", { model: model.name }),
     );
+
+  const updateAgent = (key: string, value: Record<string, unknown>) =>
+    run(key, () => api("/api/agent-settings", mutation("PUT", value)));
 
   return (
     <section className="pageColumn settingsPage">
@@ -352,12 +369,119 @@ export function SettingsPage({
             <Heading id="agent-heading" size="4">
               {t("agent")}
             </Heading>
-            <Text weight="medium">{t("activeTools")}</Text>
-            <div className="toolChips">
-              {session.tools.map((tool) => (
-                <code key={tool}>{tool}</code>
-              ))}
+            <div className="settingRow compactRow">
+              <div>
+                <Text weight="medium">{t("steeringDelivery")}</Text>
+                <Text as="p" color="gray" size="1">
+                  {t("queueModeDescription")}
+                </Text>
+              </div>
+              <Select.Root
+                value={data.agent.steeringMode}
+                onValueChange={(steeringMode) =>
+                  void updateAgent("steeringMode", { steeringMode })
+                }
+              >
+                <Select.Trigger aria-label={t("steeringDelivery")} />
+                <Select.Content>
+                  <Select.Item value="all">{t("queueAll")}</Select.Item>
+                  <Select.Item value="one-at-a-time">
+                    {t("queueOne")}
+                  </Select.Item>
+                </Select.Content>
+              </Select.Root>
             </div>
+            <div className="settingRow compactRow">
+              <div>
+                <Text weight="medium">{t("followUpDelivery")}</Text>
+                <Text as="p" color="gray" size="1">
+                  {t("queueModeDescription")}
+                </Text>
+              </div>
+              <Select.Root
+                value={data.agent.followUpMode}
+                onValueChange={(followUpMode) =>
+                  void updateAgent("followUpMode", { followUpMode })
+                }
+              >
+                <Select.Trigger aria-label={t("followUpDelivery")} />
+                <Select.Content>
+                  <Select.Item value="all">{t("queueAll")}</Select.Item>
+                  <Select.Item value="one-at-a-time">
+                    {t("queueOne")}
+                  </Select.Item>
+                </Select.Content>
+              </Select.Root>
+            </div>
+            <div className="settingRow compactRow">
+              <Text weight="medium">{t("autoCompaction")}</Text>
+              <Select.Root
+                value={data.agent.autoCompaction ? "enabled" : "disabled"}
+                onValueChange={(value) =>
+                  void updateAgent("autoCompaction", {
+                    autoCompaction: value === "enabled",
+                  })
+                }
+              >
+                <Select.Trigger aria-label={t("autoCompaction")} />
+                <Select.Content>
+                  <Select.Item value="enabled">{t("enabled")}</Select.Item>
+                  <Select.Item value="disabled">{t("disabled")}</Select.Item>
+                </Select.Content>
+              </Select.Root>
+            </div>
+            <div className="settingRow compactRow">
+              <Text weight="medium">{t("autoRetry")}</Text>
+              <Select.Root
+                value={data.agent.autoRetry ? "enabled" : "disabled"}
+                onValueChange={(value) =>
+                  void updateAgent("autoRetry", {
+                    autoRetry: value === "enabled",
+                  })
+                }
+              >
+                <Select.Trigger aria-label={t("autoRetry")} />
+                <Select.Content>
+                  <Select.Item value="enabled">{t("enabled")}</Select.Item>
+                  <Select.Item value="disabled">{t("disabled")}</Select.Item>
+                </Select.Content>
+              </Select.Root>
+            </div>
+            <Text weight="medium">{t("activeTools")}</Text>
+            <div className="toolChips toolToggles">
+              {data.agent.availableTools.map((tool) => {
+                const active = data.agent.activeTools.includes(tool.name);
+                return (
+                  <Button
+                    aria-pressed={active}
+                    disabled={
+                      Boolean(pending) ||
+                      (active && data.agent.activeTools.length === 1)
+                    }
+                    key={tool.name}
+                    size="1"
+                    title={tool.description}
+                    variant={active ? "solid" : "soft"}
+                    onClick={() =>
+                      void updateAgent("activeTools", {
+                        activeTools: active
+                          ? data.agent.activeTools.filter(
+                              (name) => name !== tool.name,
+                            )
+                          : [...data.agent.activeTools, tool.name],
+                      })
+                    }
+                  >
+                    {tool.name}
+                  </Button>
+                );
+              })}
+            </div>
+            {session.tools.length > data.agent.availableTools.length && (
+              <Text color="gray" size="1">
+                {t("toolAllowlistNote")}
+              </Text>
+            )}
           </section>
 
           <section

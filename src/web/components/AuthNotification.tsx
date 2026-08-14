@@ -7,6 +7,7 @@ export interface AuthNotificationData {
   code?: string;
   message: string;
   url?: string;
+  type?: "error" | "info" | "warning";
 }
 
 interface Props {
@@ -26,7 +27,14 @@ export function AuthNotification({
   return (
     <Callout.Root
       className={`${embedded ? "embeddedNotification" : "notification"} authNotification`}
-      role="status"
+      color={
+        notification.type === "error"
+          ? "red"
+          : notification.type === "warning"
+            ? "amber"
+            : undefined
+      }
+      role={notification.type === "error" ? "alert" : "status"}
     >
       <Flex align="start" gap="3" justify="between">
         <div className="authNotificationBody">

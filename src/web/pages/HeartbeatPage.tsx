@@ -74,23 +74,102 @@ export function HeartbeatPage({ refresh }: { refresh: number }) {
         <Table.Root variant="surface">
           <Table.Header>
             <Table.Row>
-              <Table.ColumnHeaderCell>Status</Table.ColumnHeaderCell>
-              <Table.ColumnHeaderCell>Time</Table.ColumnHeaderCell>
-              <Table.ColumnHeaderCell>Summary</Table.ColumnHeaderCell>
+              <Table.ColumnHeaderCell>{t("runStatus")}</Table.ColumnHeaderCell>
+              <Table.ColumnHeaderCell>{t("runTime")}</Table.ColumnHeaderCell>
+              <Table.ColumnHeaderCell>{t("runSummary")}</Table.ColumnHeaderCell>
             </Table.Row>
           </Table.Header>
           <Table.Body>
-            {runs.map((run) => (
-              <Table.Row key={run.id}>
-                <Table.Cell>
-                  <span className={`status ${run.status}`}>{run.status}</span>
-                </Table.Cell>
-                <Table.Cell>
-                  {new Date(run.startedAt).toLocaleString()}
-                </Table.Cell>
-                <Table.Cell>{run.summary ?? run.error ?? "—"}</Table.Cell>
-              </Table.Row>
-            ))}
+            {runs.map((run) => {
+              const details = run.details;
+              const hasDetails = Boolean(
+                run.error ||
+                  details?.response ||
+                  details?.reasoning ||
+                  details?.tools?.length,
+              );
+              return (
+                <Table.Row key={run.id}>
+                  <Table.Cell>
+                    <span
+                      className={`status ${run.status}`}
+                      title={
+                        run.status === "attention"
+                          ? t("heartbeatAttentionExplanation")
+                          : undefined
+                      }
+                    >
+                      {t(`heartbeatStatus_${run.status}`)}
+                    </span>
+                  </Table.Cell>
+                  <Table.Cell>
+                    {new Date(run.startedAt).toLocaleString()}
+                  </Table.Cell>
+                  <Table.Cell>
+                    <div className="heartbeatRunSummary">
+                      <span>{run.summary ?? run.error ?? "—"}</span>
+                      {hasDetails && (
+                        <details className="heartbeatRunDetails">
+                          <summary>{t("viewRunDetails")}</summary>
+                          <div className="heartbeatRunDetailContent">
+                            {run.status === "attention" && (
+                              <Text as="p" color="amber" size="2">
+                                {t("heartbeatAttentionExplanation")}
+                              </Text>
+                            )}
+                            {run.error && (
+                              <section>
+                                <strong>{t("runError")}</strong>
+                                <pre>{run.error}</pre>
+                              </section>
+                            )}
+                            {details?.response && (
+                              <section>
+                                <strong>{t("runResponse")}</strong>
+                                <pre>{details.response}</pre>
+                              </section>
+                            )}
+                            {details?.reasoning && (
+                              <section>
+                                <strong>{t("runReasoning")}</strong>
+                                <pre>{details.reasoning}</pre>
+                              </section>
+                            )}
+                            {details?.tools?.map((tool) => (
+                              <section
+                                className={tool.isError ? "toolError" : ""}
+                                key={tool.id}
+                              >
+                                <strong>
+                                  {t("runTool", { name: tool.name })}
+                                </strong>
+                                {tool.input && (
+                                  <>
+                                    <Text as="p" color="gray" size="1">
+                                      {t("runToolInput")}
+                                    </Text>
+                                    <pre>{tool.input}</pre>
+                                  </>
+                                )}
+                                {tool.output && (
+                                  <>
+                                    <Text as="p" color="gray" size="1">
+                                      {t("runToolOutput")}
+                                    </Text>
+                                    <pre>{tool.output}</pre>
+                                  </>
+                                )}
+                                {tool.diff && <pre>{tool.diff}</pre>}
+                              </section>
+                            ))}
+                          </div>
+                        </details>
+                      )}
+                    </div>
+                  </Table.Cell>
+                </Table.Row>
+              );
+            })}
           </Table.Body>
         </Table.Root>
       )}
