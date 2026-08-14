@@ -69,6 +69,32 @@ describe("EventHub", () => {
   });
 });
 
+describe("conversation listing", () => {
+  test("includes the active in-memory conversation before Pi persists it", async () => {
+    const service = Object.create(PiService.prototype) as PiService;
+    Object.defineProperties(service, {
+      nativeSessions: { value: vi.fn(async () => []) },
+      runtime: {
+        value: {
+          session: {
+            messages: [],
+            sessionId: "active-session",
+            sessionName: undefined,
+          },
+        },
+      },
+    });
+
+    await expect(service.listConversations()).resolves.toEqual([
+      expect.objectContaining({
+        id: "active-session",
+        active: true,
+        messageCount: 0,
+      }),
+    ]);
+  });
+});
+
 describe("model selection", () => {
   test("only exposes models with configured authentication", () => {
     const available = { provider: "anthropic", id: "available" };
