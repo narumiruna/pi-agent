@@ -3,6 +3,7 @@ import { Button, Callout, Flex, Tabs, Text, TextField } from "@radix-ui/themes";
 import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import type { ProviderOption } from "../model-access.js";
+import { DialogPortal } from "./DialogPortal.js";
 
 interface Props {
   open: boolean;
@@ -86,7 +87,7 @@ export function ModelAccessDialog({
         else void close();
       }}
     >
-      <Dialog.Portal>
+      <DialogPortal>
         <Dialog.Overlay className="dialogOverlay" />
         <Dialog.Content
           className="dialogContent accessDialog"
@@ -214,7 +215,7 @@ export function ModelAccessDialog({
             </>
           )}
         </Dialog.Content>
-      </Dialog.Portal>
+      </DialogPortal>
     </Dialog.Root>
   );
 }

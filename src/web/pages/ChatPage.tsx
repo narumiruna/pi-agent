@@ -86,7 +86,7 @@ export function ChatPage({
 
   return (
     <section className="chatPage" aria-label={t("chat")}>
-      <ScrollArea className="messageScroll">
+      <ScrollArea className="messageScroll" tabIndex={0}>
         <div className="messageColumn">
           {messages.length === 0 && !delta ? (
             <div className="emptyState">

@@ -210,6 +210,7 @@ export function SettingsPage({
                 </Text>
               </div>
               <Button
+                highContrast
                 variant="soft"
                 disabled={data.models.length === 0 || pending === "model"}
                 onClick={() => setModelOpen(true)}
@@ -258,6 +259,7 @@ export function SettingsPage({
                 </Text>
               </div>
               <Button
+                highContrast
                 disabled={data.authPending || Boolean(pending)}
                 onClick={() => setAccessOpen(true)}
               >
@@ -367,6 +369,7 @@ export function SettingsPage({
             </Heading>
             <Flex>
               <Button
+                highContrast
                 color="red"
                 variant="soft"
                 onClick={() =>

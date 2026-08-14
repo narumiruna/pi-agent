@@ -7,6 +7,7 @@ import type { HeartbeatRun } from "../types.js";
 export function HeartbeatPage({ refresh }: { refresh: number }) {
   const { t } = useTranslation();
   const [content, setContent] = useState("");
+  const [loaded, setLoaded] = useState(false);
   const [runs, setRuns] = useState<HeartbeatRun[]>([]);
   const [diagnostic, setDiagnostic] = useState<string>();
   const load = useCallback(async () => {
@@ -18,6 +19,7 @@ export function HeartbeatPage({ refresh }: { refresh: number }) {
     ]);
     setContent(document.content);
     setRuns(status.runs);
+    setLoaded(true);
     setDiagnostic(status.config?.diagnostic);
   }, []);
   useEffect(() => {
@@ -39,12 +41,17 @@ export function HeartbeatPage({ refresh }: { refresh: number }) {
       <TextArea
         rows={14}
         value={content}
+        disabled={!loaded}
         onChange={(event) => setContent(event.target.value)}
         aria-label="HEARTBEAT.md"
       />
       <Flex gap="3">
-        <Button onClick={() => void save()}>{t("save")}</Button>
+        <Button highContrast disabled={!loaded} onClick={() => void save()}>
+          {t("save")}
+        </Button>
         <Button
+          highContrast
+          disabled={!loaded}
           variant="soft"
           onClick={() =>
             void api("/api/heartbeat/run", mutation("POST")).then(load)

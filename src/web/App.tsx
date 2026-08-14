@@ -30,6 +30,7 @@ export function App() {
   const [page, setPage] = useState<Page>("chat");
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [activeId, setActiveId] = useState<string>();
+  const [conversationPending, setConversationPending] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [refresh, setRefresh] = useState(0);
   const [delta, setDelta] = useState("");
@@ -177,13 +178,24 @@ export function App() {
   }, [activeId, loadConversations, session]);
 
   const createConversation = async () => {
-    const result = await api<{ id: string }>(
-      "/api/conversations",
-      mutation("POST"),
-    );
-    await loadConversations();
-    setActiveId(result.id);
-    setPage("chat");
+    if (conversationPending) return;
+    const previousId = activeId;
+    setConversationPending(true);
+    setActiveId(undefined);
+    try {
+      const result = await api<{ id: string }>(
+        "/api/conversations",
+        mutation("POST"),
+      );
+      await loadConversations();
+      setActiveId(result.id);
+      setPage("chat");
+    } catch {
+      setActiveId(previousId);
+      setNotification({ message: t("conversationCreateFailed") });
+    } finally {
+      setConversationPending(false);
+    }
   };
 
   return (
@@ -199,6 +211,7 @@ export function App() {
           <h1>{t("appName")}</h1>
           <p>{t("signedOut")}</p>
           <Button
+            highContrast
             size="3"
             onClick={() => window.location.assign("/auth/login")}
           >
@@ -220,6 +233,7 @@ export function App() {
             conversations={conversations}
             activeId={activeId}
             mobileOpen={mobileOpen}
+            newPending={conversationPending}
             onMobileOpen={setMobileOpen}
             onPage={setPage}
             onConversation={setActiveId}

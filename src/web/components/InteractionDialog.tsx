@@ -15,6 +15,7 @@ import {
   AuthNotification,
   type AuthNotificationData,
 } from "./AuthNotification.js";
+import { DialogPortal } from "./DialogPortal.js";
 
 interface Props {
   authNotification?: AuthNotificationData;
@@ -51,7 +52,7 @@ export function InteractionDialog({
 
   return (
     <Dialog.Root open onOpenChange={(open) => !open && cancel()}>
-      <Dialog.Portal>
+      <DialogPortal>
         <Dialog.Overlay className="dialogOverlay" />
         <Dialog.Content
           className="dialogContent"
@@ -77,7 +78,16 @@ export function InteractionDialog({
           {options ? (
             <RadioGroup.Root value={value} onValueChange={setValue}>
               {options.map((option) => (
-                <RadioGroup.Item key={option.id} value={option.id}>
+                <RadioGroup.Item
+                  key={option.id}
+                  value={option.id}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter" || event.key === " ") {
+                      event.preventDefault();
+                      setValue(option.id);
+                    }
+                  }}
+                >
                   {option.label}
                 </RadioGroup.Item>
               ))}
@@ -114,7 +124,7 @@ export function InteractionDialog({
             </Button>
           </Flex>
         </Dialog.Content>
-      </Dialog.Portal>
+      </DialogPortal>
     </Dialog.Root>
   );
 }
