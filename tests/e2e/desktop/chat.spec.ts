@@ -24,6 +24,9 @@ test("streams the first conversation and restores it after reload", async ({
   await send(page, message);
   try {
     await expect(page.locator("article.streaming")).toContainText("E2E e2e-");
+    await expect(
+      page.getByRole("button", { name: "New conversation" }),
+    ).toBeDisabled();
   } finally {
     const release = await request.post(`${mockOrigin}/__control/release`);
     expect([200, 409]).toContain(release.status());
@@ -31,6 +34,9 @@ test("streams the first conversation and restores it after reload", async ({
   await expect(
     page.getByText(new RegExp(`E2E e2e-(primary|secondary): ${message}`)),
   ).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "New conversation" }),
+  ).toBeEnabled();
 
   const captured = await request.get(`${mockOrigin}/__control/requests`);
   await expect(captured.json()).resolves.toMatchObject({

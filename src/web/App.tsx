@@ -178,10 +178,8 @@ export function App() {
   }, [activeId, loadConversations, session]);
 
   const createConversation = async () => {
-    if (conversationPending) return;
-    const previousId = activeId;
+    if (conversationPending || running) return;
     setConversationPending(true);
-    setActiveId(undefined);
     try {
       const result = await api<{ id: string }>(
         "/api/conversations",
@@ -191,7 +189,6 @@ export function App() {
       setActiveId(result.id);
       setPage("chat");
     } catch {
-      setActiveId(previousId);
       setNotification({ message: t("conversationCreateFailed") });
     } finally {
       setConversationPending(false);
@@ -233,7 +230,7 @@ export function App() {
             conversations={conversations}
             activeId={activeId}
             mobileOpen={mobileOpen}
-            newPending={conversationPending}
+            newPending={conversationPending || running}
             onMobileOpen={setMobileOpen}
             onPage={setPage}
             onConversation={setActiveId}
@@ -258,6 +255,7 @@ export function App() {
                 refresh={refresh}
                 delta={delta}
                 running={running}
+                inputDisabled={conversationPending}
                 liveTools={liveTools}
                 eventsConnected={Boolean(
                   activeId && eventsConnectedFor === activeId,

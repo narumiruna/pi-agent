@@ -108,10 +108,22 @@ describe("web application", () => {
           { status: 200, headers: { "content-type": "application/json" } },
         );
       if (url === "/api/conversations/existing-conversation")
-        return new Response(JSON.stringify({ messages: [] }), {
-          status: 200,
-          headers: { "content-type": "application/json" },
-        });
+        return new Response(
+          JSON.stringify({
+            messages: [
+              {
+                id: "existing-message",
+                role: "user",
+                text: "Existing message",
+                timestamp: 0,
+              },
+            ],
+          }),
+          {
+            status: 200,
+            headers: { "content-type": "application/json" },
+          },
+        );
       throw new Error(`Unexpected request: ${url}`);
     });
     const user = userEvent.setup();
@@ -120,9 +132,11 @@ describe("web application", () => {
     const create = await screen.findByRole("button", {
       name: /new conversation/i,
     });
+    expect(await screen.findByText("Existing message")).toBeVisible();
     await user.click(create);
     expect(create).toBeDisabled();
     expect(screen.getByLabelText(/Ask Pi anything/i)).toBeDisabled();
+    expect(screen.getByText("Existing message")).toBeVisible();
     finishCreate?.(
       new Response(JSON.stringify({ error: { code: "internal_error" } }), {
         status: 500,
