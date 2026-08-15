@@ -8,6 +8,21 @@
 
 所有功能必須沿用 Pi 原生 session、prompt、skill、extension、package、settings 與 resource loader 行為。
 
+## 強制交付流程
+
+Roadmap 中的每一個 milestone checkbox 都必須獨立完成以下流程。
+
+1. 實作前建立一份專屬 plan，存放於 `docs/plans/YYYY-MM-DD_<topic>-plan.md`。
+2. Plan 必須連結對應的 Roadmap milestone，並列出可驗證的完成條件、測試與風險。
+3. 一份 plan 只能實作一個 Roadmap milestone，不得將多份 plan 合併到同一個 implementation branch 或 pull request。
+4. 開始實作時，必須從最新且適當的 base branch 建立新的 focused branch，不得重用其他 plan 的 branch。
+5. 每份 plan 必須開啟一個專屬 pull request，PR description 必須連結該 plan 與對應的 Roadmap milestone。
+6. PR 必須執行 plan 與 repository 要求的 focused tests、`npm run ci`、E2E 或 Docker checks，且不得隱藏失敗或未驗證項目。
+7. 必須逐項閱讀、分類並處理所有 PR review comments、submitted reviews 與 conversation threads。
+8. 所有有效 feedback 都必須修正並加入必要的 regression coverage，非 actionable feedback 必須留下有證據的回覆。
+9. PR threads 只能在修正完成且驗證通過後回覆或 resolve。
+10. 只有在所有 required checks 通過、所有 feedback 都有明確結論且專屬 PR 合併後，才能勾選 Roadmap milestone 並封存 plan。
+
 ## 目標資訊架構
 
 左側主要導覽預計依序提供以下入口。
