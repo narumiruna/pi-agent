@@ -11,6 +11,8 @@ function destinationContent(page: PlaywrightPage, destination: Page) {
       return page.getByRole("region", { name: "Chats" });
     case "files":
       return page.getByRole("heading", { name: "Files" });
+    case "prompts":
+      return page.getByRole("heading", { name: "Prompts" });
     case "heartbeat":
       return page.getByRole("heading", { name: "Heartbeat" });
     case "library":
@@ -44,7 +46,6 @@ test("restores canonical destinations and safely recovers invalid routes", async
     "/unknown",
     "/nested/unknown",
     "/files/",
-    "/prompts",
     "/skills",
     "/extensions",
   ]) {

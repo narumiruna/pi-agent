@@ -34,7 +34,7 @@ afterEach(() => {
 
 function renderNavigation(
   options: {
-    page?: "chats" | "files" | "heartbeat" | "library" | "settings";
+    page?: "chats" | "files" | "prompts" | "heartbeat" | "library" | "settings";
     mobileOpen?: boolean;
     conversationFilters?: ConversationFilters;
     conversations?: Conversation[];
@@ -95,6 +95,9 @@ describe("Navigation accessibility", () => {
     expect(
       within(navigation).getByRole("button", { name: "Chats" }),
     ).not.toHaveAttribute("aria-current");
+    expect(
+      within(navigation).getByRole("button", { name: "Prompts" }),
+    ).toBeVisible();
 
     files.focus();
     await user.keyboard("{Enter}");

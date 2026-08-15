@@ -2,55 +2,15 @@ import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { expect, test } from "@playwright/test";
 
-test("persists system instructions and manages a prompt template", async ({
-  page,
-}) => {
+test("keeps package and MCP controls in Library", async ({ page }) => {
   await page.goto("/");
   await page.getByRole("button", { name: "Library" }).click();
-  const systemContent = `E2E system instructions ${Date.now()}`;
-  await page
-    .getByRole("textbox", { name: "System prompt" })
-    .fill(systemContent);
-  const systemSaved = page.waitForResponse(
-    (response) =>
-      response.url().endsWith("/api/documents/system") &&
-      response.request().method() === "PUT",
-  );
-  await page.getByRole("button", { name: "Save changes" }).first().click();
-  expect((await systemSaved).status()).toBe(200);
-  await expect(
-    readFile(resolve(".local/e2e/runtime/agent/SYSTEM.md"), "utf8"),
-  ).resolves.toBe(systemContent);
-
-  await page.reload();
-  await page.getByRole("button", { name: "Library" }).click();
-  await expect(
-    page.getByRole("textbox", { name: "System prompt" }),
-  ).toHaveValue(systemContent);
-
-  await page.getByRole("tab", { name: "Prompt templates" }).click();
-  const panel = page.getByRole("tabpanel", { name: "Prompt templates" });
-  const templateName = `e2e-template-${Date.now()}`;
-  const templateContent = "Review the E2E result.";
-  await panel.getByPlaceholder("daily-review").fill(templateName);
-  await panel.getByRole("textbox").nth(1).fill(templateContent);
-  await panel.getByRole("button", { name: "Save changes" }).click();
-  await expect(
-    page.getByText(`/${templateName}`, { exact: true }),
-  ).toBeVisible();
-  await expect(
-    readFile(
-      resolve(`.local/e2e/runtime/agent/prompts/${templateName}.md`),
-      "utf8",
-    ),
-  ).resolves.toBe(templateContent);
-
-  await page.getByRole("button", { name: "Delete" }).last().click();
-  await expect(page.getByText(`/${templateName}`, { exact: true })).toHaveCount(
+  await expect(page.getByRole("tab", { name: "Prompt templates" })).toHaveCount(
     0,
   );
-
-  await page.getByRole("tab", { name: "Pi packages" }).click();
+  await expect(
+    page.getByRole("textbox", { name: "System prompt" }),
+  ).toHaveCount(0);
   const packagePanel = page.getByRole("tabpanel", { name: "Pi packages" });
   await expect(packagePanel.getByRole("note")).toContainText(
     "Packages, skills, extensions, and MCP servers are trusted code",

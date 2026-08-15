@@ -6,6 +6,7 @@ describe("Web navigation fallback", () => {
     "/",
     "/chats",
     "/files",
+    "/prompts",
     "/heartbeat",
     "/library",
     "/settings",
