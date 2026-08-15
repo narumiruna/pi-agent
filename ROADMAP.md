@@ -115,7 +115,7 @@ Pi package 仍是 prompt、skill 與 extension 的共同安裝來源，不建立
 
 ## Phase 3：Prompts
 
-- [ ] 建立 `Prompts` 頁面並遷移 system prompt 與 template CRUD。
+- [x] 建立 `Prompts` 頁面並遷移 system prompt 與 template CRUD。
   - 將 `SYSTEM.md` 與 `APPEND_SYSTEM.md` editor 移到 `Prompts`。
   - 將目前 `prompts/` template list、create、edit 與 delete 移到 `Prompts`。
   - Existing `SYSTEM.md`、`APPEND_SYSTEM.md` 與 prompt template 不需資料轉換。

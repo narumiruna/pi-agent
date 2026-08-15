@@ -1,6 +1,6 @@
 # Prompts Page Migration Plan
 
-Status: In progress.
+Status: Completed on 2026-08-15.
 
 ## Goal
 
@@ -62,8 +62,8 @@ Keep all writes on `ResourceService`, so atomic replacement, safe paths, existin
 - [x] Update README route and resource-management documentation without claiming later discovery/diagnostic scope.
 - [x] Run focused tests, `npm run ci`, full E2E, PostgreSQL storage verification, and production Docker build; record exact results.
 - [x] Audit unchanged API/files, native reload reuse, no duplicate prompt UI/state, route history, errors, accessibility, responsive layout, and unrelated changes.
-- [ ] Commit, push, and open dedicated pull request [#45](https://github.com/narumiruna/pi-agent/pull/45) linking this plan and Roadmap milestone; resolve all checks/review feedback with regressions, then merge.
-- [ ] After merge, check the matching Roadmap milestone and archive this plan through an administrative documentation pull request.
+- [x] Commit, push, and merge dedicated pull request [#45](https://github.com/narumiruna/pi-agent/pull/45) as `d818ae5` after required checks and a clean final review.
+- [x] After merge, check the matching Roadmap milestone and archive this plan through an administrative documentation pull request.
 
 ## Completion Checklist
 
@@ -74,8 +74,8 @@ Keep all writes on `ResourceService`, so atomic replacement, safe paths, existin
 - [x] Mutation controls reject duplicate submission and expose actionable success/failure state.
 - [x] Desktop and 390px keyboard/E2E flows cover system save and template create/edit/delete without overflow or serious accessibility violations.
 - [x] Focused tests, CI, full E2E, PostgreSQL verification, and Docker build pass.
-- [ ] The dedicated implementation PR is merged with all feedback resolved.
-- [ ] The Roadmap milestone is checked and this plan is archived only after merge.
+- [x] Dedicated implementation pull request [#45](https://github.com/narumiruna/pi-agent/pull/45) merged as `d818ae5` with required checks passing and no review findings.
+- [x] The Roadmap milestone is checked and this plan is archived after the implementation merge.
 
 ## Verification
 
@@ -87,3 +87,4 @@ Keep all writes on `ResourceService`, so atomic replacement, safe paths, existin
 - `TEST_POSTGRES_URL=postgresql://pi_agent:test_password@127.0.0.1:55433/pi_agent npm test -- tests/server/storage.test.ts` passed all 14 SQLite/PostgreSQL storage tests against a temporary PostgreSQL 17 container.
 - `docker build -t pi-agent:local .` built production image `sha256:191b8501e6dd2429527243ec72a7c68ad7920418995f0de24f49acfef677be55`.
 - Diff and source audits confirmed no resource API or file-layout changes, all writes still use `ResourceService` atomic write plus native reload, `/prompts` participates in canonical history, Library no longer requests prompt data, and later prompt discovery/diagnostic scope remains unimplemented.
+- GitHub CI passed with PostgreSQL and production Docker verification, final Codex review on `2453a46` found no major issues, and implementation PR [#45](https://github.com/narumiruna/pi-agent/pull/45) merged as `d818ae5`.
