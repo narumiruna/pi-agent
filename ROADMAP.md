@@ -86,7 +86,7 @@ Pi package 仍是 prompt、skill 與 extension 的共同安裝來源，不建立
 - [x] 補齊 conversation 搜尋、named-only filter 與排序。
   - 新舊 session 與未持久化 session 都能正確切換。
   - Search 在 desktop 和 mobile 都有 E2E coverage。
-- [ ] 統一 conversation 管理操作與執行中 session recovery。
+- [x] 統一 conversation 管理操作與執行中 session recovery。
   - 提供 rename、delete、fork、clone、tree、compact、import 與 export 的一致入口。
   - 保留執行中 conversation isolation、queue restore 與 reconnect recovery。
   - Forked session 能正確切換。

@@ -1,6 +1,6 @@
 # Conversation Management and Recovery Plan
 
-Status: In progress.
+Status: Completed on 2026-08-15.
 
 ## Goal
 
@@ -67,8 +67,8 @@ Keep advanced tree, fork/clone, compact, import, and export actions in the exist
 - [x] Run focused tests, `npm run ci`, full E2E, PostgreSQL storage verification, and production Docker build; record exact results.
 - [x] Audit native semantic fidelity, JSONL immutability/validity, active-run races, cancellation, path disclosure, stale state, duplicate actions, accessibility, test layout, and unrelated changes.
 - [x] Commit, push, and open dedicated pull request [#43](https://github.com/narumiruna/pi-agent/pull/43) with a signed implementation commit linking this plan and Roadmap milestone.
-- [ ] Resolve every pull-request check and feedback item with regression coverage, then merge the clean pull request.
-- [ ] After merge, check the matching Roadmap milestone and archive this plan through an administrative documentation pull request.
+- [x] Resolve every pull-request check and feedback item with regression coverage, then merge clean implementation pull request [#43](https://github.com/narumiruna/pi-agent/pull/43) as `cb29fc2`.
+- [x] After merge, check the matching Roadmap milestone and archive this plan through administrative documentation pull request [#44](https://github.com/narumiruna/pi-agent/pull/44).
 
 ## Completion Checklist
 
@@ -82,8 +82,8 @@ Keep advanced tree, fork/clone, compact, import, and export actions in the exist
 - [x] Original JSONL remains valid after list, search, export, and fork/clone.
 - [x] Rename, delete, and fork pass desktop/mobile keyboard, 390px, and accessibility E2E.
 - [x] Focused tests, CI, full E2E, PostgreSQL verification, and Docker build pass.
-- [ ] The dedicated pull request is merged with all feedback resolved.
-- [ ] The Roadmap milestone is checked and this plan is archived only after merge.
+- [x] Dedicated implementation pull request [#43](https://github.com/narumiruna/pi-agent/pull/43) merged as `cb29fc2` with all eight review findings resolved and a clean final review.
+- [x] The Roadmap milestone is checked and this plan is archived after the implementation merge.
 
 ## Verification
 
@@ -95,4 +95,4 @@ Keep advanced tree, fork/clone, compact, import, and export actions in the exist
 - `docker build -t pi-agent:local .`: final production image built successfully as `sha256:fcf056cd1e9ae7871574c25342622fe5b2cd7e5ba9153d0d287f63967cc85cfc`.
 - Codex review found a server-restart mismatch, stale/permanently-disabled and incomplete or replay-racing reconnect paths, stale activity, and a delete/activate time-of-check race; reconnect now adopts the authoritative server ID with generation cancellation, in-stream retries, replay-versioned state/list/transcript snapshots, recovered editor commands, and transient-state reset, while rename/delete hold the coordinator across lookup and recheck active identity before writing, with ordering, retry, cancellation, and race regressions.
 - Native-source and diff audits confirmed inactive rename follows Pi’s selector, runtime replacements honor cancellation, coordinator admission prevents write races, active delete is rejected, JSONL paths stay private, native files remain parseable, reconnect hydrates a valid active ID, and desktop/mobile dialogs avoid nested interactive controls.
-- GitHub CI passed with PostgreSQL and production Docker verification, all review threads are resolved, and final Codex review on `6a9eb63` reported no major issues.
+- GitHub CI passed with PostgreSQL and production Docker verification, all review threads were resolved, final Codex review on `6a9eb63` reported no major issues, and implementation PR [#43](https://github.com/narumiruna/pi-agent/pull/43) merged as `cb29fc2`.
