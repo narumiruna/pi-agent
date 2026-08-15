@@ -83,8 +83,9 @@ Mitigate with valid operation-shaped inputs, exact public error contracts, multi
 
 ## Verification
 
-- `npm test -- tests/server/workspace.test.ts tests/server/resources.test.ts tests/server/agent.test.ts tests/server/http-auth.test.ts`: 80 tests passed.
-- `npm run ci`: 24 files passed, 303 tests passed, 5 PostgreSQL-dependent tests skipped, and both builds passed.
+- `npm test -- tests/server/workspace.test.ts tests/server/resources.test.ts tests/server/agent.test.ts tests/server/http-auth.test.ts`: 81 tests passed.
+- `npm run ci`: 24 files passed, 304 tests passed, 5 PostgreSQL-dependent tests skipped, and both builds passed.
 - `npx playwright test`: all 19 setup, desktop, accessibility, and mobile tests passed.
 - `docker build -t pi-agent:local .`: production image built successfully as `sha256:f9c1f227a46a0a23619037355d507d2525ba73510b5a9ea7ede07e3c1d4e24d2`.
 - The diff changes only matching server tests, the acceptance matrix documentation, and this plan; no production boundary code or test layout changed.
+- Codex review found that the active-run matrix initially conflated coordinator and native-session busy predicates; the matrix now isolates a busy coordinator with an idle session, and a separate regression isolates the native-session predicate.

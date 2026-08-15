@@ -603,7 +603,7 @@ describe("native session operations", () => {
     expect(await readFile(branchPath as string, "utf8")).toContain("original");
   });
 
-  test("rejects every idle-guarded operation during an active run", async () => {
+  test("rejects every idle-guarded operation while the coordinator has an active run", async () => {
     const coordinator = new RunCoordinator();
     let release: (() => void) | undefined;
     const active = coordinator.run(
@@ -621,7 +621,7 @@ describe("native session operations", () => {
         value: {
           session: {
             sessionId: "session",
-            isIdle: false,
+            isIdle: true,
             setAutoRetryEnabled: guardedAction,
             sessionManager: { getEntry: guardedAction },
             navigateTree: guardedAction,
@@ -654,6 +654,30 @@ describe("native session operations", () => {
     expect(guardedAction).not.toHaveBeenCalled();
     release?.();
     await active;
+  });
+
+  test("rejects an idle-guarded mutation while the native session is busy", async () => {
+    const guardedAction = vi.fn();
+    const service = Object.create(PiService.prototype) as PiService;
+    Object.defineProperties(service, {
+      coordinator: { value: new RunCoordinator() },
+      runtime: {
+        value: {
+          session: {
+            sessionId: "session",
+            isIdle: false,
+            setAutoRetryEnabled: guardedAction,
+          },
+        },
+      },
+    });
+
+    await expect(
+      Promise.resolve().then(() =>
+        service.setPreferences({ autoRetry: false }),
+      ),
+    ).rejects.toMatchObject({ code: "agent_busy" });
+    expect(guardedAction).not.toHaveBeenCalled();
   });
 
   test("imports validated JSONL through a private temporary file", async () => {
