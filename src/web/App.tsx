@@ -18,7 +18,7 @@ import { FilesPage } from "./pages/FilesPage.js";
 import { HeartbeatPage } from "./pages/HeartbeatPage.js";
 import { LibraryPage } from "./pages/LibraryPage.js";
 import { SettingsPage } from "./pages/SettingsPage.js";
-import { DEFAULT_APP_ROUTE, type Page } from "./routes.js";
+import { type Page, pageFromPathname, pathnameForPage } from "./routes.js";
 import type {
   AgentActivity,
   AgentQueueState,
@@ -48,7 +48,9 @@ export function App() {
   const [session, setSession] = useState<SessionInfo>();
   const [signedOut, setSignedOut] = useState(false);
   const [error, setError] = useState<string>();
-  const [page, setPage] = useState<Page>(DEFAULT_APP_ROUTE);
+  const [page, setPage] = useState<Page>(() =>
+    pageFromPathname(window.location.pathname),
+  );
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [activeId, setActiveId] = useState<string>();
   const [conversationPending, setConversationPending] = useState(false);
@@ -80,6 +82,38 @@ export function App() {
   const [dark, setDark] = useState(
     () => window.matchMedia?.("(prefers-color-scheme: dark)").matches ?? false,
   );
+
+  const navigate = useCallback((nextPage: Page) => {
+    const pathname = pathnameForPage(nextPage);
+    setPage(nextPage);
+    if (window.location.pathname !== pathname)
+      window.history.pushState(null, "", pathname);
+  }, []);
+
+  useEffect(() => {
+    const initialPage = pageFromPathname(window.location.pathname);
+    const canonicalPath = pathnameForPage(initialPage);
+    if (window.location.pathname !== canonicalPath)
+      window.history.replaceState(null, "", canonicalPath);
+  }, []);
+
+  useEffect(() => {
+    const onPopState = () => {
+      const nextPage = pageFromPathname(window.location.pathname);
+      const canonicalPath = pathnameForPage(nextPage);
+      if (page === "files" && filesDirty && nextPage !== page) {
+        window.history.pushState(null, "", pathnameForPage(page));
+        pendingFilesAction.current = () => navigate(nextPage);
+        setFilesDiscardOpen(true);
+        return;
+      }
+      if (window.location.pathname !== canonicalPath)
+        window.history.replaceState(null, "", canonicalPath);
+      setPage(nextPage);
+    };
+    window.addEventListener("popstate", onPopState);
+    return () => window.removeEventListener("popstate", onPopState);
+  }, [filesDirty, navigate, page]);
 
   const loadAgentState = useCallback(async (id: string) => {
     const request = ++agentStateRequest.current;
@@ -316,14 +350,14 @@ export function App() {
   const selectConversation = async (id: string) => {
     if (conversationPending || running) return;
     if (id === activeId) {
-      setPage("chats");
+      navigate("chats");
       return;
     }
     setConversationPending(true);
     try {
       await api(`/api/conversations/${id}/activate`, mutation("POST"));
       setActiveId(id);
-      setPage("chats");
+      navigate("chats");
       await loadConversations(id).catch(() =>
         setNotification({
           message: t("conversationListRefreshFailed"),
@@ -349,7 +383,7 @@ export function App() {
         mutation("POST"),
       );
       setActiveId(result.id);
-      setPage("chats");
+      navigate("chats");
       await loadConversations(result.id).catch(() =>
         setNotification({
           message: t("conversationListRefreshFailed"),
@@ -382,7 +416,7 @@ export function App() {
 
   const chooseModel = () => {
     afterFilesDiscard(() => {
-      setPage("settings");
+      navigate("settings");
       setChooseModelRequest((value) => value + 1);
     });
   };
@@ -425,16 +459,16 @@ export function App() {
             mobileOpen={mobileOpen}
             newPending={conversationPending || running}
             onMobileOpen={setMobileOpen}
-            onPage={(nextPage) => afterFilesDiscard(() => setPage(nextPage))}
+            onPage={(nextPage) => afterFilesDiscard(() => navigate(nextPage))}
             onConversation={(id) =>
               afterFilesDiscard(() => {
-                setPage("chats");
+                navigate("chats");
                 void selectConversation(id);
               })
             }
             onNew={() =>
               afterFilesDiscard(() => {
-                setPage("chats");
+                navigate("chats");
                 void createConversation();
               })
             }

@@ -13,6 +13,7 @@ import { McpManager } from "./mcp/manager.js";
 import { ResourceService } from "./resources/service.js";
 import { acquireRuntimeLock } from "./runtime-lock.js";
 import { createStore } from "./storage/index.js";
+import { shouldServeWebApp } from "./web-fallback.js";
 import { WorkspaceService } from "./workspace/service.js";
 
 export async function main(): Promise<void> {
@@ -62,7 +63,13 @@ export async function main(): Promise<void> {
       services: { pi, interactions, resources, workspace, mcp, heartbeat },
     });
     app.use("/assets/*", serveStatic({ root: "./dist/public" }));
-    app.get("/", serveStatic({ path: "./dist/public/index.html" }));
+    const serveWebIndex = serveStatic({ path: "./dist/public/index.html" });
+    app.get("/", serveWebIndex);
+    app.get("*", async (context, next) => {
+      if (!shouldServeWebApp(context.req.path, context.req.header("accept")))
+        return context.notFound();
+      return (await serveWebIndex(context, next)) ?? context.notFound();
+    });
     const server = serve({
       fetch: app.fetch,
       hostname: config.host,

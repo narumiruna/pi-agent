@@ -104,6 +104,7 @@ describe("web application", () => {
     ).toBe(updated);
   });
   beforeEach(async () => {
+    window.history.replaceState(null, "", "/");
     await setLanguage("en");
     vi.stubGlobal("fetch", vi.fn());
     HTMLElement.prototype.hasPointerCapture = vi.fn(() => false);
@@ -215,11 +216,20 @@ describe("web application", () => {
 
     await user.click(await screen.findByRole("button", { name: "Files" }));
     expect(screen.getByRole("heading", { name: "Files" })).toBeVisible();
+    expect(window.location.pathname).toBe("/files");
     await user.click(
       await screen.findByRole("button", { name: /notes\.txt/i }),
     );
     const editor = await screen.findByLabelText("Contents of notes.txt");
     await user.type(editor, " changed");
+
+    act(() => {
+      window.history.replaceState(null, "", "/chats");
+      window.dispatchEvent(new PopStateEvent("popstate"));
+    });
+    expect(screen.getByText("Discard unsaved changes?")).toBeVisible();
+    expect(window.location.pathname).toBe("/files");
+    await user.click(screen.getByRole("button", { name: "Cancel" }));
 
     act(() =>
       providerAuthListener?.(
@@ -248,6 +258,7 @@ describe("web application", () => {
     await user.click(screen.getByRole("button", { name: "Chat" }));
     await user.click(screen.getByRole("button", { name: "Discard changes" }));
     expect(await screen.findByRole("region", { name: "Chat" })).toBeVisible();
+    expect(window.location.pathname).toBe("/chats");
   });
 
   test("expands heartbeat failure diagnostics", async () => {

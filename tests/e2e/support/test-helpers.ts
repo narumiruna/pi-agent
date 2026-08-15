@@ -19,7 +19,7 @@ export async function selectIdentity(
 export async function signIn(page: Page): Promise<void> {
   await page.goto("/");
   await page.getByRole("button", { name: /Pocket ID/i }).click();
-  await expect(page).toHaveURL(`${appOrigin}/`);
+  await expect(page).toHaveURL(`${appOrigin}/chats`);
   await expect(page.getByRole("region", { name: "Chat" })).toBeVisible();
 }
 
