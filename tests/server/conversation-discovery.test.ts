@@ -233,6 +233,29 @@ describe("native conversation discovery", () => {
     ).toEqual(["child", "root"]);
   });
 
+  test("iteratively orders a thread deeper than the JavaScript call stack", async () => {
+    const depth = 12_000;
+    const records = Array.from({ length: depth }, (_, index) => {
+      const id = `deep-${index.toString().padStart(5, "0")}`;
+      return record(id, "2026-08-15T00:00:00.000Z", {
+        path: `/virtual-sessions/${id}.jsonl`,
+        ...(index > 0
+          ? {
+              parentSessionPath: `/virtual-sessions/deep-${(index - 1)
+                .toString()
+                .padStart(5, "0")}.jsonl`,
+            }
+          : {}),
+      });
+    });
+
+    const result = await discoverConversations(records, { sort: "threaded" });
+
+    expect(result).toHaveLength(depth);
+    expect(result[0]?.id).toBe("deep-00000");
+    expect(result.at(-1)?.id).toBe("deep-11999");
+  }, 10_000);
+
   test("keeps cyclic or missing parents once as deterministic roots", async () => {
     const first = record("cycle-a", "2026-08-15T00:00:00.000Z", {
       parentSessionPath: "/sessions/cycle-b.jsonl",

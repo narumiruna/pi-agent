@@ -369,51 +369,86 @@ function threadedRecords(
       : undefined;
     if (parent && parent !== node) intendedParent.set(node.key, parent);
   }
-  const createsCycle = (node: ThreadNode, parent: ThreadNode) => {
-    const visited = new Set([node.key]);
-    let current: ThreadNode | undefined = parent;
+  const safe = new Set<string>();
+  const unsafe = new Set<string>();
+  for (const node of nodes) {
+    if (safe.has(node.key) || unsafe.has(node.key)) continue;
+    const chain: ThreadNode[] = [];
+    const chainKeys = new Set<string>();
+    let current: ThreadNode | undefined = node;
+    let isUnsafe = false;
     while (current) {
-      if (visited.has(current.key)) return true;
-      visited.add(current.key);
+      if (unsafe.has(current.key) || chainKeys.has(current.key)) {
+        isUnsafe = true;
+        break;
+      }
+      if (safe.has(current.key)) break;
+      chain.push(current);
+      chainKeys.add(current.key);
       current = intendedParent.get(current.key);
     }
-    return false;
-  };
+    const destination = isUnsafe ? unsafe : safe;
+    for (const item of chain) destination.add(item.key);
+  }
   const roots: ThreadNode[] = [];
   for (const node of nodes) {
     const parent = intendedParent.get(node.key);
-    if (!parent || createsCycle(node, parent)) roots.push(node);
+    if (!parent || unsafe.has(node.key)) roots.push(node);
     else parent.children.push(node);
   }
-  const updateLatest = (node: ThreadNode): number => {
-    for (const child of node.children)
-      node.latestActivity = Math.max(node.latestActivity, updateLatest(child));
-    return node.latestActivity;
+
+  const activityStack = roots.map((node) => ({ node, expanded: false }));
+  while (activityStack.length > 0) {
+    const item = activityStack.pop();
+    if (!item) break;
+    if (item.expanded) {
+      for (const child of item.node.children)
+        item.node.latestActivity = Math.max(
+          item.node.latestActivity,
+          child.latestActivity,
+        );
+      continue;
+    }
+    activityStack.push({ node: item.node, expanded: true });
+    for (const child of item.node.children)
+      activityStack.push({ node: child, expanded: false });
+  }
+
+  const compareNodes = (left: ThreadNode, right: ThreadNode) => {
+    const difference = right.latestActivity - left.latestActivity;
+    if (difference !== 0) return difference;
+    return left.record.id < right.record.id
+      ? -1
+      : left.record.id > right.record.id
+        ? 1
+        : 0;
   };
-  const sortNodes = (items: ThreadNode[]) => {
-    items.sort((left, right) => {
-      const difference = right.latestActivity - left.latestActivity;
-      if (difference !== 0) return difference;
-      return left.record.id < right.record.id
-        ? -1
-        : left.record.id > right.record.id
-          ? 1
-          : 0;
-    });
-    for (const node of items) sortNodes(node.children);
-  };
-  for (const root of roots) updateLatest(root);
-  sortNodes(roots);
+  roots.sort(compareNodes);
+  const sortStack = [...roots];
+  while (sortStack.length > 0) {
+    const node = sortStack.pop();
+    if (!node) break;
+    node.children.sort(compareNodes);
+    sortStack.push(...node.children);
+  }
+
   const result: ConversationDiscoveryRecord[] = [];
   const visited = new Set<string>();
-  const append = (node: ThreadNode) => {
-    if (visited.has(node.key)) return;
-    visited.add(node.key);
-    result.push(node.record);
-    for (const child of node.children) append(child);
+  const appendTree = (root: ThreadNode) => {
+    const stack = [root];
+    while (stack.length > 0) {
+      const node = stack.pop();
+      if (!node || visited.has(node.key)) continue;
+      visited.add(node.key);
+      result.push(node.record);
+      for (let index = node.children.length - 1; index >= 0; index--) {
+        const child = node.children[index];
+        if (child) stack.push(child);
+      }
+    }
   };
-  for (const root of roots) append(root);
-  for (const node of nodes) append(node);
+  for (const root of roots) appendTree(root);
+  for (const node of nodes) appendTree(node);
   return result;
 }
 
