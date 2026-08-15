@@ -1,4 +1,5 @@
 import type { AgentSession } from "@earendil-works/pi-coding-agent";
+import { safeMetadataText } from "../api-metadata.js";
 import type { InteractionBroker } from "../interactions/broker.js";
 import {
   createHeadlessTheme,
@@ -29,7 +30,7 @@ export async function bindWebSessionEvents(options: {
     onError: (error) =>
       events.publish("notification", {
         type: "error",
-        message: error.error,
+        message: safeMetadataText(error.error),
       }),
   });
   return session.subscribe((event) => {
@@ -116,7 +117,7 @@ export async function bindWebSessionEvents(options: {
         sessionId,
         kind: "compaction",
         status: "running",
-        message: event.reason,
+        message: safeMetadataText(event.reason),
       });
       return;
     }
@@ -129,7 +130,9 @@ export async function bindWebSessionEvents(options: {
           : event.errorMessage
             ? "error"
             : "done",
-        ...(event.errorMessage ? { message: event.errorMessage } : {}),
+        ...(event.errorMessage
+          ? { message: safeMetadataText(event.errorMessage) }
+          : {}),
       });
       return;
     }
@@ -138,7 +141,7 @@ export async function bindWebSessionEvents(options: {
         sessionId,
         kind: "retry",
         status: "waiting",
-        message: event.errorMessage,
+        message: safeMetadataText(event.errorMessage),
         attempt: event.attempt,
         maxAttempts: event.maxAttempts,
       });
@@ -149,7 +152,9 @@ export async function bindWebSessionEvents(options: {
         sessionId,
         kind: "retry",
         status: event.success ? "done" : "error",
-        ...(event.finalError ? { message: event.finalError } : {}),
+        ...(event.finalError
+          ? { message: safeMetadataText(event.finalError) }
+          : {}),
         attempt: event.attempt,
       });
       return;
@@ -159,7 +164,7 @@ export async function bindWebSessionEvents(options: {
         sessionId,
         kind: "retry",
         status: "waiting",
-        message: event.errorMessage,
+        message: safeMetadataText(event.errorMessage),
         attempt: event.attempt,
         maxAttempts: event.maxAttempts,
       });
@@ -170,7 +175,7 @@ export async function bindWebSessionEvents(options: {
         sessionId,
         kind: "retry",
         status: "running",
-        message: event.source,
+        message: safeMetadataText(event.source),
       });
       return;
     }

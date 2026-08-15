@@ -8,6 +8,8 @@ import {
 } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import type { PackageManager } from "@earendil-works/pi-coding-agent";
+import type { WebPackageSummary } from "../../shared/contracts.js";
+import { opaquePackageId, projectPackageSummary } from "../api-metadata.js";
 import { atomicWrite } from "./atomic-write.js";
 import { safeMarkdownPath } from "./paths.js";
 
@@ -16,13 +18,6 @@ export type DocumentKind = "append" | "heartbeat" | "system" | "template";
 export interface TemplateDocument {
   name: string;
   content: string;
-}
-
-export interface PackageSummary {
-  source: string;
-  scope: "project" | "user";
-  filtered: boolean;
-  installedPath?: string;
 }
 
 type PackageOperations = Pick<
@@ -138,13 +133,19 @@ export class ResourceService {
     return documents;
   }
 
-  listPackages(): PackageSummary[] {
-    return this.packages.listConfiguredPackages().map((item) => ({
-      source: item.source,
-      scope: item.scope,
-      filtered: item.filtered,
-      ...(item.installedPath ? { installedPath: item.installedPath } : {}),
-    }));
+  private packageSourceForId(id: string): string {
+    const item = this.packages
+      .listConfiguredPackages()
+      .find(
+        (candidate) =>
+          opaquePackageId(candidate.scope, candidate.source) === id,
+      );
+    if (!item) throw new Error("Package not found");
+    return item.source;
+  }
+
+  listPackages(): WebPackageSummary[] {
+    return this.packages.listConfiguredPackages().map(projectPackageSummary);
   }
 
   async installPackage(value: string): Promise<void> {
@@ -152,14 +153,16 @@ export class ResourceService {
     await this.reload();
   }
 
-  async removePackage(value: string): Promise<boolean> {
-    const removed = await this.packages.removeAndPersist(packageSource(value));
+  async removePackage(id: string): Promise<boolean> {
+    const removed = await this.packages.removeAndPersist(
+      this.packageSourceForId(id),
+    );
     if (removed) await this.reload();
     return removed;
   }
 
-  async updatePackage(value?: string): Promise<void> {
-    await this.packages.update(value ? packageSource(value) : undefined);
+  async updatePackage(id?: string): Promise<void> {
+    await this.packages.update(id ? this.packageSourceForId(id) : undefined);
     await this.reload();
   }
 }

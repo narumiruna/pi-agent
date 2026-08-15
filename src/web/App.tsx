@@ -2,6 +2,7 @@ import { ExclamationTriangleIcon } from "@radix-ui/react-icons";
 import { Button, Callout, Spinner, Theme } from "@radix-ui/themes";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
+import type { WebPackageProgress } from "../shared/contracts.js";
 import { ApiError, api, mutation } from "./api.js";
 import {
   AuthNotification,
@@ -249,10 +250,9 @@ export function App() {
         }));
     });
     source.addEventListener("package_progress", (raw) => {
-      const event = JSON.parse((raw as MessageEvent).data) as {
-        message?: string;
-        type?: string;
-      };
+      const event = JSON.parse(
+        (raw as MessageEvent).data,
+      ) as WebPackageProgress;
       setNotification({
         message: event.message ?? event.type ?? "Package operation updated",
       });

@@ -635,6 +635,97 @@ describe("API contracts", () => {
     await replayReader?.cancel();
   });
 
+  test("returns only bounded path-safe diagnostics required by the Web", async () => {
+    const diagnostics = vi.fn(() => ({
+      runtime: { path: "/private/runtime/session.jsonl" },
+    }));
+    const app = appWith({
+      pi: { diagnostics } as never,
+      mcp: {
+        diagnostics: () => [
+          {
+            server: "local",
+            level: "error",
+            message: "spawn /private/bin/server failed",
+          },
+        ],
+      } as never,
+    });
+
+    const response = await app.request("/api/diagnostics");
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({
+      mcp: [
+        {
+          server: "local",
+          level: "error",
+          message: "spawn <path> failed",
+        },
+      ],
+    });
+    expect(diagnostics).not.toHaveBeenCalled();
+  });
+
+  test("uses opaque package IDs for update and remove API contracts", async () => {
+    const packageId = `pkg_${"a".repeat(43)}`;
+    const listPackages = vi.fn(() => [
+      {
+        id: packageId,
+        name: "example",
+        scope: "user",
+        filtered: false,
+      },
+    ]);
+    const updatePackage = vi.fn(async () => undefined);
+    const removePackage = vi.fn(async () => true);
+    const app = appWith({
+      resources: { listPackages, updatePackage, removePackage } as never,
+    });
+
+    const listed = await app.request("/api/packages");
+    const updated = await app.request("/api/packages/update", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        id: packageId,
+        acknowledgeRisk: true,
+      }),
+    });
+    const removed = await app.request("/api/packages", {
+      method: "DELETE",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        id: packageId,
+        acknowledgeRisk: true,
+      }),
+    });
+    const rawSource = await app.request("/api/packages/update", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        id: packageId,
+        source: "/private/packages/example",
+        acknowledgeRisk: true,
+      }),
+    });
+
+    expect(await listed.json()).toEqual([
+      {
+        id: packageId,
+        name: "example",
+        scope: "user",
+        filtered: false,
+      },
+    ]);
+    expect(updated.status).toBe(200);
+    expect(removed.status).toBe(200);
+    expect(rawSource.status).toBe(400);
+    expect(updatePackage).toHaveBeenCalledWith(packageId);
+    expect(removePackage).toHaveBeenCalledWith(packageId);
+    expect(updatePackage).toHaveBeenCalledOnce();
+  });
+
   test("lists and inspects workspace files through relative contracts", async () => {
     const listDirectory = vi.fn(async () => ({
       path: "src",

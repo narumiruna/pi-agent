@@ -24,7 +24,6 @@ export type {
 export interface SessionInfo {
   authenticated: boolean;
   authDisabled: boolean;
-  owner?: string;
   tools: string[];
 }
 
