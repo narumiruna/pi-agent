@@ -90,3 +90,4 @@ Mitigate with the shared navigation contract, role/name assertions, universal im
 - `npx playwright test`: all 19 setup, desktop, accessibility, and 390px mobile tests passed.
 - The new mobile acceptance test derives its destination set from `PRIMARY_NAVIGATION_ITEMS`, keyboard-activates all five destinations, verifies dialog focus containment and trigger restoration, checks a 2px focus outline, runs serious axe analysis, and measures reduced-motion timing.
 - `docker build -t pi-agent:local .`: production image built successfully as `sha256:f9c1f227a46a0a23619037355d507d2525ba73510b5a9ea7ede07e3c1d4e24d2`.
+- Codex review identified that the new browser spec belonged under the repository's Web test area; it moved to `tests/web/e2e/mobile/`, and Playwright plus E2E TypeScript discovery now include that area while still listing exactly 19 intended tests.

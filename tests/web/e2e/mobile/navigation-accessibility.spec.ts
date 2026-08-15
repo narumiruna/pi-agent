@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
-import { PRIMARY_NAVIGATION_ITEMS } from "../../../src/web/navigation.js";
-import { expectNoSeriousAccessibilityViolations } from "../support/test-helpers.js";
+import { PRIMARY_NAVIGATION_ITEMS } from "../../../../src/web/navigation.js";
+import { expectNoSeriousAccessibilityViolations } from "../../../e2e/support/test-helpers.js";
 
 function durationInMilliseconds(value: string): number {
   const duration = Number.parseFloat(value);
