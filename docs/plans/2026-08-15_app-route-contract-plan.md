@@ -45,7 +45,7 @@ Mitigate with repository-wide literal scans, focused App tests, and desktop/mobi
 - [x] Migrate current App and Navigation state from `chat` to canonical `chats` and import the route-owned `Page` type; literal scans found no stale singular page route and focused App tests still render and navigate Chat.
 - [x] Run focused route/App tests, `npm run ci`, and navigation E2E; 43 focused tests passed, CI passed 247 tests with 5 intentional skips and both builds, and all 17 SQLite browser tests passed.
 - [x] Review the complete diff for blank-page states, accidental early navigation exposure, route drift, dependency additions, and unrelated changes; `Page` excludes planned routes, Navigation exposes no planned literal, contract tests lock exact order, no dependency file changed, and `git diff --check` passed.
-- [ ] Commit only the plan, contract, integration, and tests with signed Conventional Commits; push and open one dedicated pull request linking this plan and milestone.
+- [x] Commit only the plan, contract, integration, and tests with signed Conventional Commits; signed commit `570a962` is pushed in dedicated PR #14 with plan and milestone links.
 - [ ] Read all pull-request checks and feedback, address every actionable item with regression coverage, and merge the clean pull request.
 - [ ] After merge, check the matching Roadmap milestone and archive this completed plan through an administrative documentation pull request.
 
