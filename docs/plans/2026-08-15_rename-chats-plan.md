@@ -60,7 +60,7 @@ Mitigate with one translation-value change, targeted semantic assertion updates,
 - [x] Update README terminology for the renamed destination and retained controls.
 - [x] Run focused tests, `npm run ci`, full local E2E, and the production Docker build; record exact results.
 - [x] Review the complete diff for internal/API renames, route changes, duplicated labels, lost conversation controls, localization regressions, test-layout violations, and unrelated edits.
-- [ ] Commit, push, and open one dedicated signed pull request linking this plan and Roadmap milestone.
+- [x] Commit, push, and open dedicated pull request [#36](https://github.com/narumiruna/pi-agent/pull/36) with a signed implementation commit linking this plan and Roadmap milestone.
 - [ ] Resolve every pull-request check and feedback item with regression coverage, then merge the clean pull request.
 - [ ] After merge, check the matching Roadmap milestone and archive this plan through an administrative documentation pull request.
 
