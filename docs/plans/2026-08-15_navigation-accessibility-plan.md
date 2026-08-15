@@ -65,7 +65,7 @@ Mitigate with the shared navigation contract, role/name assertions, universal im
 - [x] Update README accessibility guarantees.
 - [x] Run focused tests, `npm run ci`, full local E2E, and the production Docker build; record exact results.
 - [x] Review the complete diff for inaccessible duplicate navigation, missing destinations, pointer-only handlers, hidden focus, focus loss, motion leaks, localization gaps, route duplication, and unrelated edits.
-- [ ] Commit, push, and open one dedicated signed pull request linking this plan and Roadmap milestone.
+- [x] Commit, push, and open dedicated pull request [#30](https://github.com/narumiruna/pi-agent/pull/30) with a signed implementation commit linking this plan and Roadmap milestone.
 - [ ] Resolve every pull-request check and feedback item with regression coverage, then merge the clean pull request.
 - [ ] After merge, check the matching Roadmap acceptance milestone and archive this plan through an administrative documentation pull request.
 
