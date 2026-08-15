@@ -29,6 +29,7 @@ import type {
   InteractionEvent,
   LiveTool,
   SessionInfo,
+  TranscriptMessage,
 } from "./types.js";
 
 export function updateLiveTools(
@@ -115,6 +116,13 @@ export function App() {
   const [activity, setActivity] = useState<AgentActivity>();
   const [agentState, setAgentState] = useState<ConversationAgentState>();
   const [extensionUi, setExtensionUi] = useState<ExtensionUiSnapshot>();
+  const extensionUiRef = useRef(extensionUi);
+  extensionUiRef.current = extensionUi;
+  const [transcriptRecovery, setTranscriptRecovery] = useState<{
+    sessionId: string;
+    sequence: number;
+    messages: TranscriptMessage[];
+  }>();
   const [editorCommand, setEditorCommand] = useState<{
     sessionId: string;
     sequence: number;
@@ -300,6 +308,7 @@ export function App() {
     setActivity(undefined);
     setAgentState(undefined);
     setExtensionUi(undefined);
+    setTranscriptRecovery(undefined);
     setEditorCommand(undefined);
     void loadAgentState(activeId).catch(() => undefined);
   }, [activeId, loadAgentState, session]);
@@ -317,8 +326,92 @@ export function App() {
   useEffect(() => {
     if (!session) return;
     setEventsConnectedFor(undefined);
+    let reconnecting = false;
+    let closed = false;
+    let recoveryGeneration = 0;
+    let replayVersion = 0;
+    let recoveryTimer: number | undefined;
     const source = new EventSource("/api/events");
-    source.onopen = () => setEventsConnectedFor(activeId);
+    const recover = async (generation: number): Promise<void> => {
+      try {
+        const native = await api<Conversation[]>(
+          "/api/conversations?sort=recent",
+        );
+        if (closed || generation !== recoveryGeneration) return;
+        const recoveredId =
+          native.find((conversation) => conversation.active)?.id ?? activeId;
+        if (!recoveredId) return;
+        const previousEditorText =
+          extensionUiRef.current?.sessionId === recoveredId
+            ? extensionUiRef.current.editorText
+            : undefined;
+        const stateRequest = agentStateRequest.current;
+        const listRequest = conversationListRequest.current;
+        const replayAtRequest = replayVersion;
+        const [state, filtered, transcript] = await Promise.all([
+          api<ConversationAgentState>(
+            `/api/conversations/${recoveredId}/state`,
+          ),
+          api<Conversation[]>(
+            conversationListPath(conversationFiltersRef.current),
+          ),
+          api<{ messages: TranscriptMessage[] }>(
+            `/api/conversations/${recoveredId}`,
+          ),
+        ]);
+        if (closed || generation !== recoveryGeneration) return;
+        if (
+          replayAtRequest !== replayVersion ||
+          stateRequest !== agentStateRequest.current ||
+          listRequest !== conversationListRequest.current
+        ) {
+          recoveryTimer = window.setTimeout(() => void recover(generation), 0);
+          return;
+        }
+        agentStateRequest.current++;
+        conversationListRequest.current++;
+        setActiveId(recoveredId);
+        setAgentState(state);
+        setRunning(state.running);
+        setQueue(state.queue);
+        setExtensionUi(state.extensionUi);
+        setConversations(filtered);
+        setTranscriptRecovery((current) => ({
+          sessionId: recoveredId,
+          sequence: (current?.sequence ?? 0) + 1,
+          messages: transcript.messages,
+        }));
+        if (state.extensionUi.editorText !== previousEditorText)
+          setEditorCommand((current) => ({
+            sessionId: recoveredId,
+            sequence: (current?.sequence ?? 0) + 1,
+            text: state.extensionUi.editorText,
+            mode: "replace",
+          }));
+        setEventsConnectedFor(recoveredId);
+      } catch (error) {
+        if (closed || generation !== recoveryGeneration) return;
+        if (error instanceof ApiError && error.status === 401) {
+          source.close();
+          setSignedOut(true);
+          return;
+        }
+        recoveryTimer = window.setTimeout(() => void recover(generation), 500);
+      }
+    };
+    source.onopen = () => {
+      if (!reconnecting || !activeId) {
+        setEventsConnectedFor(activeId);
+        return;
+      }
+      reconnecting = false;
+      setDelta("");
+      setThinking("");
+      setLiveTools([]);
+      setActivity(undefined);
+      const generation = ++recoveryGeneration;
+      void recover(generation);
+    };
     source.addEventListener("message_delta", (raw) => {
       const event = JSON.parse((raw as MessageEvent).data) as {
         sessionId: string;
@@ -328,6 +421,7 @@ export function App() {
         setDelta((current) => current + event.delta);
     });
     source.addEventListener("message_complete", (raw) => {
+      replayVersion++;
       const event = JSON.parse((raw as MessageEvent).data) as {
         sessionId: string;
       };
@@ -340,6 +434,7 @@ export function App() {
       setRefresh((value) => value + 1);
     });
     source.addEventListener("run_status", (raw) => {
+      replayVersion++;
       const event = JSON.parse((raw as MessageEvent).data) as {
         status: string;
         sessionId?: string;
@@ -375,6 +470,7 @@ export function App() {
         setThinking((current) => current + event.delta);
     });
     source.addEventListener("queue_update", (raw) => {
+      replayVersion++;
       const event = JSON.parse((raw as MessageEvent).data) as AgentQueueState;
       if (event.sessionId === activeId) setQueue(event);
     });
@@ -383,6 +479,7 @@ export function App() {
       if (event.sessionId === activeId) setActivity(event);
     });
     source.addEventListener("agent_config", (raw) => {
+      replayVersion++;
       const event = JSON.parse((raw as MessageEvent).data) as {
         sessionId: string;
         preferences: ConversationAgentState["preferences"];
@@ -393,6 +490,7 @@ export function App() {
         );
     });
     source.addEventListener("extension_ui", (raw) => {
+      replayVersion++;
       const event = JSON.parse((raw as MessageEvent).data) as {
         snapshot: ExtensionUiSnapshot;
         editor?: { text: string; mode: "append" | "replace" };
@@ -454,10 +552,14 @@ export function App() {
       setProviderAuth(event.phase === "dismissed" ? undefined : event);
     });
     source.addEventListener("reset", () => {
+      replayVersion++;
       setRefresh((value) => value + 1);
       if (activeId) void loadAgentState(activeId).catch(() => undefined);
     });
     source.onerror = () => {
+      reconnecting = true;
+      recoveryGeneration++;
+      if (recoveryTimer !== undefined) window.clearTimeout(recoveryTimer);
       setEventsConnectedFor(undefined);
       setNotification({ message: "Connection interrupted; retrying…" });
       void api<SessionInfo>("/api/session").catch((reason) => {
@@ -467,7 +569,12 @@ export function App() {
         }
       });
     };
-    return () => source.close();
+    return () => {
+      closed = true;
+      recoveryGeneration++;
+      if (recoveryTimer !== undefined) window.clearTimeout(recoveryTimer);
+      source.close();
+    };
   }, [activeId, loadAgentState, loadConversations, session]);
 
   const selectConversation = async (id: string) => {
@@ -515,6 +622,64 @@ export function App() {
       );
     } catch {
       setNotification({ message: t("conversationCreateFailed") });
+    } finally {
+      setConversationPending(false);
+    }
+  };
+
+  const renameConversation = async (id: string, name: string) => {
+    if (conversationPending || running) throw new Error("conversation_busy");
+    setConversationPending(true);
+    try {
+      await api(`/api/conversations/${id}`, mutation("PATCH", { name }));
+      await loadConversations(activeId)
+        .then(() =>
+          setNotification({
+            message: t("conversationRenamed"),
+            type: "info",
+          }),
+        )
+        .catch(() =>
+          setNotification({
+            message: t("conversationListRefreshFailed"),
+            type: "warning",
+          }),
+        );
+    } catch (error) {
+      setNotification({
+        message: t("conversationManagementFailed"),
+        type: "error",
+      });
+      throw error;
+    } finally {
+      setConversationPending(false);
+    }
+  };
+
+  const deleteConversation = async (id: string) => {
+    if (conversationPending || running) throw new Error("conversation_busy");
+    setConversationPending(true);
+    try {
+      await api(`/api/conversations/${id}`, mutation("DELETE"));
+      await loadConversations(activeId)
+        .then(() =>
+          setNotification({
+            message: t("conversationDeleted"),
+            type: "info",
+          }),
+        )
+        .catch(() =>
+          setNotification({
+            message: t("conversationListRefreshFailed"),
+            type: "warning",
+          }),
+        );
+    } catch (error) {
+      setNotification({
+        message: t("conversationManagementFailed"),
+        type: "error",
+      });
+      throw error;
     } finally {
       setConversationPending(false);
     }
@@ -588,7 +753,9 @@ export function App() {
             newPending={conversationPending || running}
             onMobileOpen={setMobileOpen}
             onConversationFilters={changeConversationFilters}
+            onDeleteConversation={deleteConversation}
             onPage={(nextPage) => afterFilesDiscard(() => navigate(nextPage))}
+            onRenameConversation={renameConversation}
             onConversation={(id) =>
               afterFilesDiscard(() => {
                 navigate("chats");
@@ -622,6 +789,11 @@ export function App() {
                 refresh={refresh}
                 delta={delta}
                 thinking={thinking}
+                transcriptRecovery={
+                  transcriptRecovery?.sessionId === activeId
+                    ? transcriptRecovery
+                    : undefined
+                }
                 running={running}
                 inputDisabled={conversationPending}
                 liveTools={liveTools}

@@ -1,5 +1,5 @@
 import { writeFileSync } from "node:fs";
-import { access, mkdtemp, readFile, rm } from "node:fs/promises";
+import { access, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { AuthInteraction } from "@earendil-works/pi-ai";
@@ -539,11 +539,23 @@ describe("conversation listing", () => {
 });
 
 describe("native session operations", () => {
-  test("forks through AgentSessionRuntime and seeds the new editor state", async () => {
-    const fork = vi.fn(async () => ({
-      cancelled: false,
-      selectedText: "edit this",
-    }));
+  test("forks through AgentSessionRuntime, switches IDs, and seeds the new editor state", async () => {
+    let session = {
+      sessionId: "session",
+      isIdle: true,
+      sessionManager: { getEntry: () => ({ id: "entry" }) },
+    };
+    const fork = vi.fn(async () => {
+      session = {
+        sessionId: "forked",
+        isIdle: true,
+        sessionManager: { getEntry: () => ({ id: "entry" }) },
+      };
+      return {
+        cancelled: false,
+        selectedText: "edit this",
+      };
+    });
     const setEditorText = vi.fn();
     const service = Object.create(PiService.prototype) as PiService;
     Object.defineProperties(service, {
@@ -551,10 +563,8 @@ describe("native session operations", () => {
       extensionState: { value: { setEditorText } },
       runtime: {
         value: {
-          session: {
-            sessionId: "session",
-            isIdle: true,
-            sessionManager: { getEntry: () => ({ id: "entry" }) },
+          get session() {
+            return session;
           },
           fork,
         },
@@ -563,9 +573,170 @@ describe("native session operations", () => {
 
     await expect(
       service.forkConversation("session", "entry", "before"),
-    ).resolves.toEqual({ id: "session", selectedText: "edit this" });
+    ).resolves.toEqual({ id: "forked", selectedText: "edit this" });
     expect(fork).toHaveBeenCalledWith("entry", { position: "before" });
     expect(setEditorText).toHaveBeenCalledWith("edit this", "replace");
+  });
+
+  test("renames and deletes an inactive native session without activating it", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "pi-agent-manage-"));
+    temporaryDirectories.push(directory);
+    const manager = SessionManager.create("/workspace", directory);
+    manager.appendMessage({
+      role: "user",
+      content: "manage me",
+      timestamp: 1,
+    });
+    manager.appendMessage({
+      role: "assistant",
+      content: [{ type: "text", text: "persisted" }],
+      api: "test",
+      provider: "test",
+      model: "test",
+      usage: {
+        input: 1,
+        output: 1,
+        cacheRead: 0,
+        cacheWrite: 0,
+        cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+      },
+      stopReason: "stop",
+      timestamp: 2,
+    });
+    const path = manager.getSessionFile();
+    if (!path) throw new Error("Session was not persisted");
+    const before = await readFile(path, "utf8");
+    const setSessionName = vi.fn();
+    const service = Object.create(PiService.prototype) as PiService;
+    Object.defineProperties(service, {
+      coordinator: { value: new RunCoordinator() },
+      nativeSessions: {
+        value: vi.fn(async () => [{ id: manager.getSessionId(), path }]),
+      },
+      runtime: {
+        value: {
+          session: {
+            sessionId: "active-session",
+            isIdle: true,
+            setSessionName,
+          },
+        },
+      },
+    });
+
+    await service.renameConversation(manager.getSessionId(), "  Renamed  ");
+
+    expect(service.activeSessionId).toBe("active-session");
+    expect(setSessionName).not.toHaveBeenCalled();
+    expect(SessionManager.open(path).getSessionName()).toBe("Renamed");
+    const renamed = await readFile(path, "utf8");
+    expect(renamed.startsWith(before)).toBe(true);
+    expect(() =>
+      renamed
+        .trim()
+        .split("\n")
+        .forEach((line) => {
+          JSON.parse(line);
+        }),
+    ).not.toThrow();
+
+    await service.deleteConversation(manager.getSessionId());
+
+    expect(service.activeSessionId).toBe("active-session");
+    await expect(access(path)).rejects.toThrow();
+  });
+
+  test("holds the coordinator and rechecks active identity before deletion", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "pi-agent-delete-race-"));
+    temporaryDirectories.push(directory);
+    const path = join(directory, "target.jsonl");
+    await writeFile(path, "session\n");
+    let releaseList: (() => void) | undefined;
+    let markListStarted: (() => void) | undefined;
+    const listStarted = new Promise<void>((resolve) => {
+      markListStarted = resolve;
+    });
+    const listGate = new Promise<void>((resolve) => {
+      releaseList = resolve;
+    });
+    let activeId = "current";
+    const service = Object.create(PiService.prototype) as PiService;
+    Object.defineProperties(service, {
+      coordinator: { value: new RunCoordinator() },
+      nativeSessions: {
+        value: vi.fn(async () => {
+          markListStarted?.();
+          await listGate;
+          return [{ id: "target", path }];
+        }),
+      },
+      runtime: {
+        value: {
+          get session() {
+            return { sessionId: activeId, isIdle: true };
+          },
+        },
+      },
+    });
+
+    const deletion = service.deleteConversation("target");
+    await listStarted;
+    await expect(service.activateConversation("target")).rejects.toMatchObject({
+      code: "agent_busy",
+    });
+    activeId = "target";
+    releaseList?.();
+
+    await expect(deletion).rejects.toThrow(/active conversation/i);
+    await expect(access(path)).resolves.toBeUndefined();
+  });
+
+  test("renames the active session through AgentSession and rejects deleting it", async () => {
+    const setSessionName = vi.fn();
+    const service = Object.create(PiService.prototype) as PiService;
+    Object.defineProperties(service, {
+      coordinator: { value: new RunCoordinator() },
+      runtime: {
+        value: {
+          session: { sessionId: "active", isIdle: true, setSessionName },
+        },
+      },
+    });
+
+    await service.renameConversation("active", "Active name");
+
+    expect(setSessionName).toHaveBeenCalledWith("Active name");
+    await expect(service.deleteConversation("active")).rejects.toThrow(
+      /active conversation/i,
+    );
+  });
+
+  test("surfaces native cancellation without replacing the active session", async () => {
+    const newSession = vi.fn(async () => ({ cancelled: true }));
+    const switchSession = vi.fn(async () => ({ cancelled: true }));
+    const service = Object.create(PiService.prototype) as PiService;
+    Object.defineProperties(service, {
+      config: { value: { workspace: "/workspace" } },
+      coordinator: { value: new RunCoordinator() },
+      nativeSessions: {
+        value: vi.fn(async () => [{ id: "target", path: "/session.jsonl" }]),
+      },
+      runtime: {
+        value: {
+          session: { sessionId: "active", isIdle: true },
+          newSession,
+          switchSession,
+        },
+      },
+    });
+
+    await expect(service.createConversation()).rejects.toMatchObject({
+      name: "AbortError",
+    });
+    await expect(service.activateConversation("target")).rejects.toMatchObject({
+      name: "AbortError",
+    });
+    expect(service.activeSessionId).toBe("active");
   });
 
   test("keeps the original JSONL unchanged when Pi creates a branch", async () => {
@@ -630,11 +801,15 @@ describe("native session operations", () => {
           },
           fork: guardedAction,
           importFromJsonl: guardedAction,
+          newSession: guardedAction,
         },
       },
     });
     const operations: Array<[string, () => unknown]> = [
       ["activate", () => service.activateConversation("other")],
+      ["create", () => service.createConversation()],
+      ["rename", () => service.renameConversation("session", "name")],
+      ["delete", () => service.deleteConversation("other")],
       ["preferences", () => service.setPreferences({ autoRetry: false })],
       [
         "tree navigation",

@@ -745,12 +745,46 @@ describe("web application", () => {
   test("restores active run and queue state after reconnect", async () => {
     HTMLElement.prototype.scrollIntoView = vi.fn();
     class FakeEventSource {
+      static instances: FakeEventSource[] = [];
       onerror: (() => void) | null = null;
       onopen: (() => void) | null = null;
-      addEventListener(): void {}
+      private listeners = new Map<
+        string,
+        Array<(event: MessageEvent) => void>
+      >();
+      constructor() {
+        FakeEventSource.instances.push(this);
+      }
+      addEventListener(
+        type: string,
+        listener: (event: MessageEvent) => void,
+      ): void {
+        this.listeners.set(type, [
+          ...(this.listeners.get(type) ?? []),
+          listener,
+        ]);
+      }
+      emit(type: string, value: unknown): void {
+        for (const listener of this.listeners.get(type) ?? [])
+          listener({ data: JSON.stringify(value) } as MessageEvent);
+      }
       close(): void {}
     }
     vi.stubGlobal("EventSource", FakeEventSource);
+    let stateRequests = 0;
+    let transcriptRequests = 0;
+    let recoveryListRequests = 0;
+    let releaseHydration: (() => void) | undefined;
+    let markHydrationStarted: (() => void) | undefined;
+    const hydrationStarted = new Promise<void>((resolve) => {
+      markHydrationStarted = resolve;
+    });
+    let releaseStaleList: (() => void) | undefined;
+    let markStaleListStarted: (() => void) | undefined;
+    const staleListStarted = new Promise<void>((resolve) => {
+      markStaleListStarted = resolve;
+    });
+    const reconnectOperations: string[] = [];
     vi.mocked(fetch).mockImplementation(async (input) => {
       const url = String(input);
       const json = (value: unknown) =>
@@ -765,6 +799,43 @@ describe("web application", () => {
           tools: ["read"],
         });
       if (url === "/api/provider-auth") return json(null);
+      if (url === "/api/conversations?sort=recent") {
+        recoveryListRequests++;
+        if (recoveryListRequests === 4) {
+          markStaleListStarted?.();
+          return new Promise<Response>((resolve) => {
+            releaseStaleList = () =>
+              resolve(
+                json([
+                  {
+                    id: "server-session",
+                    createdAt: new Date(0).toISOString(),
+                    modifiedAt: new Date(1).toISOString(),
+                    messageCount: 0,
+                    active: true,
+                  },
+                ]),
+              );
+          });
+        }
+        if (recoveryListRequests === 1)
+          return new Response(
+            JSON.stringify({ error: { code: "internal_error" } }),
+            {
+              status: 503,
+              headers: { "content-type": "application/json" },
+            },
+          );
+        return json([
+          {
+            id: "session",
+            createdAt: new Date(0).toISOString(),
+            modifiedAt: new Date(0).toISOString(),
+            messageCount: 1,
+            active: true,
+          },
+        ]);
+      }
       if (url === "/api/conversations")
         return json([
           {
@@ -775,15 +846,33 @@ describe("web application", () => {
             active: true,
           },
         ]);
-      if (url === "/api/conversations/session") return json({ messages: [] });
-      if (url === "/api/conversations/session/state")
+      if (url === "/api/conversations/session") {
+        transcriptRequests++;
         return json({
+          messages:
+            transcriptRequests > 1
+              ? [
+                  {
+                    id: "recovered-message",
+                    role: "assistant",
+                    text: "Recovered transcript",
+                    timestamp: 1,
+                  },
+                ]
+              : [],
+        });
+      }
+      if (url === "/api/conversations/session/state") {
+        stateRequests++;
+        reconnectOperations.push("state");
+        const reconnected = stateRequests > 1;
+        const response = {
           sessionId: "session",
-          running: true,
+          running: !reconnected,
           queue: {
             sessionId: "session",
-            steering: ["restored steering"],
-            followUp: [],
+            steering: reconnected ? [] : ["restored steering"],
+            followUp: reconnected ? ["reconnected follow-up"] : [],
           },
           preferences: {
             steeringMode: "all",
@@ -815,11 +904,21 @@ describe("web application", () => {
             sessionId: "session",
             statuses: [],
             widgets: [],
-            editorText: "restored draft",
+            editorText: reconnected
+              ? "recovered editor update"
+              : "restored draft",
             workingVisible: true,
             toolsExpanded: false,
           },
-        });
+        };
+        if (stateRequests === 2) {
+          markHydrationStarted?.();
+          return new Promise<Response>((resolve) => {
+            releaseHydration = () => resolve(json(response));
+          });
+        }
+        return json(response);
+      }
       throw new Error(`Unexpected request: ${url}`);
     });
 
@@ -830,6 +929,44 @@ describe("web application", () => {
     expect(screen.getByLabelText(/Ask Pi anything/i)).toHaveValue(
       "restored draft",
     );
+    const source = FakeEventSource.instances.at(-1);
+    if (!source) throw new Error("EventSource was not created");
+    source.emit("agent_status", {
+      sessionId: "session",
+      kind: "retry",
+      status: "waiting",
+      message: "stale activity",
+    });
+    expect(await screen.findByText("retry: stale activity")).toBeVisible();
+    reconnectOperations.length = 0;
+    source.onerror?.();
+    source.onopen?.();
+    await hydrationStarted;
+    source.emit("message_complete", { sessionId: "session" });
+    releaseHydration?.();
+
+    expect(await screen.findByText("reconnected follow-up")).toBeVisible();
+    expect(screen.queryByText("retry: stale activity")).toBeNull();
+    expect(await screen.findByText("Recovered transcript")).toBeVisible();
+    expect(screen.getByLabelText(/Ask Pi anything/i)).toHaveValue(
+      "recovered editor update",
+    );
+    await waitFor(() =>
+      expect(screen.queryByRole("button", { name: "Stop" })).toBeNull(),
+    );
+    expect(stateRequests).toBeGreaterThanOrEqual(2);
+    expect(transcriptRequests).toBeGreaterThanOrEqual(2);
+    expect(recoveryListRequests).toBe(3);
+    expect(reconnectOperations).toEqual(["state", "state"]);
+
+    const stateBeforeStaleRecovery = stateRequests;
+    source.onerror?.();
+    source.onopen?.();
+    await staleListStarted;
+    cleanup();
+    releaseStaleList?.();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(stateRequests).toBe(stateBeforeStaleRecovery);
   });
 
   test("keeps a forked draft out of the conversation being replaced", async () => {

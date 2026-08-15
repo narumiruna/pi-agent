@@ -112,7 +112,9 @@ test("keeps the Chats list and new-conversation action intact", async ({
   ).toBeVisible();
   await expect(page.getByText(oldMessage, { exact: true })).toHaveCount(0);
 
-  await page.getByRole("button", { name: oldConversation.id }).click();
+  await page
+    .getByRole("button", { name: oldConversation.id, exact: true })
+    .click();
   await expect(page.getByText(oldMessage, { exact: true })).toBeVisible();
   await expect(page.getByText(newMessage, { exact: true })).toHaveCount(0);
 });

@@ -32,7 +32,9 @@ export function AuthNotification({
           ? "red"
           : notification.type === "warning"
             ? "amber"
-            : undefined
+            : notification.type === "info"
+              ? "gray"
+              : undefined
       }
       role={notification.type === "error" ? "alert" : "status"}
     >

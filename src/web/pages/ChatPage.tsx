@@ -58,6 +58,10 @@ interface Props {
     text: string;
     mode: "append" | "replace";
   };
+  transcriptRecovery?: {
+    sequence: number;
+    messages: TranscriptMessage[];
+  };
   eventsConnected: boolean;
   onRunning: (running: boolean) => void;
   onConversationChanged: (id: string) => Promise<void>;
@@ -213,6 +217,7 @@ export function ChatPage({
   agentState,
   extensionUi,
   editorCommand,
+  transcriptRecovery,
   eventsConnected,
   onRunning,
   onConversationChanged,
@@ -236,6 +241,7 @@ export function ChatPage({
   const composing = useRef(false);
   const followingOutput = useRef(true);
   const loadedDraftFor = useRef<string>();
+  const transcriptRequest = useRef(0);
   const latestDraft = useRef("");
   const draftSyncEnabled = useRef(false);
   const draftSync = useRef<Promise<unknown>>(Promise.resolve());
@@ -248,6 +254,7 @@ export function ChatPage({
   }, []);
   useEffect(() => {
     void refresh;
+    const request = ++transcriptRequest.current;
     if (!conversationId) {
       setMessages([]);
       return;
@@ -257,10 +264,17 @@ export function ChatPage({
       `/api/conversations/${conversationId}`,
       { signal: abort.signal },
     )
-      .then((data) => setMessages(data.messages))
+      .then((data) => {
+        if (request === transcriptRequest.current) setMessages(data.messages);
+      })
       .catch(() => undefined);
     return () => abort.abort();
   }, [conversationId, refresh]);
+  useEffect(() => {
+    if (!transcriptRecovery) return;
+    transcriptRequest.current++;
+    setMessages(transcriptRecovery.messages);
+  }, [transcriptRecovery]);
   useEffect(() => {
     if (
       !conversationId ||

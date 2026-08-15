@@ -1,19 +1,34 @@
 // @vitest-environment jsdom
 
 import { Theme } from "@radix-ui/themes";
-import { cleanup, render, screen, within } from "@testing-library/react";
+import {
+  cleanup,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { Navigation } from "../../src/web/components/Navigation.js";
 import { setLanguage } from "../../src/web/i18n.js";
-import type { ConversationFilters } from "../../src/web/types.js";
+import type { Conversation, ConversationFilters } from "../../src/web/types.js";
 
 beforeEach(async () => {
   await setLanguage("en");
+  vi.stubGlobal(
+    "ResizeObserver",
+    class {
+      observe() {}
+      unobserve() {}
+      disconnect() {}
+    },
+  );
 });
 
 afterEach(() => {
   cleanup();
+  vi.unstubAllGlobals();
   window.localStorage.clear();
 });
 
@@ -22,17 +37,22 @@ function renderNavigation(
     page?: "chats" | "files" | "heartbeat" | "library" | "settings";
     mobileOpen?: boolean;
     conversationFilters?: ConversationFilters;
+    conversations?: Conversation[];
+    activeId?: string;
   } = {},
 ) {
   const onMobileOpen = vi.fn();
   const onConversationFilters = vi.fn();
+  const onDeleteConversation = vi.fn(async () => undefined);
   const onPage = vi.fn();
+  const onRenameConversation = vi.fn(async () => undefined);
   render(
     <Theme>
       <Navigation
         page={options.page ?? "files"}
         authenticated
-        conversations={[]}
+        activeId={options.activeId}
+        conversations={options.conversations ?? []}
         conversationFilters={
           options.conversationFilters ?? {
             search: "",
@@ -44,13 +64,21 @@ function renderNavigation(
         newPending={false}
         onMobileOpen={onMobileOpen}
         onConversationFilters={onConversationFilters}
+        onDeleteConversation={onDeleteConversation}
         onPage={onPage}
+        onRenameConversation={onRenameConversation}
         onConversation={vi.fn()}
         onNew={vi.fn()}
       />
     </Theme>,
   );
-  return { onConversationFilters, onMobileOpen, onPage };
+  return {
+    onConversationFilters,
+    onDeleteConversation,
+    onMobileOpen,
+    onPage,
+    onRenameConversation,
+  };
 }
 
 describe("Navigation accessibility", () => {
@@ -104,6 +132,51 @@ describe("Navigation accessibility", () => {
     );
     expect(onConversationFilters).toHaveBeenCalledWith(
       expect.objectContaining({ sort: "relevance" }),
+    );
+  });
+
+  test("renames and confirms deletion from a non-nested conversation row action", async () => {
+    const user = userEvent.setup();
+    const conversation: Conversation = {
+      id: "managed-session",
+      name: "Managed session",
+      createdAt: new Date(0).toISOString(),
+      modifiedAt: new Date(0).toISOString(),
+      messageCount: 2,
+      active: false,
+    };
+    const { onDeleteConversation, onRenameConversation } = renderNavigation({
+      conversations: [conversation],
+      activeId: "another-session",
+    });
+
+    const manage = screen
+      .getAllByRole("button", { name: "Manage conversation Managed session" })
+      .find((button) => !button.closest('[aria-hidden="true"]'));
+    if (!manage) throw new Error("Visible management action was not rendered");
+    await user.click(manage);
+    const name = screen.getByRole("textbox", { name: "Conversation name" });
+    await user.clear(name);
+    await user.type(name, "Renamed session");
+    await user.click(screen.getByRole("button", { name: /Save/ }));
+    await waitFor(() =>
+      expect(onRenameConversation).toHaveBeenCalledWith(
+        "managed-session",
+        "Renamed session",
+      ),
+    );
+
+    await user.click(manage);
+    await user.click(screen.getByRole("button", { name: "Delete" }));
+    const confirmation = screen
+      .getAllByRole("dialog")
+      .find((dialog) => within(dialog).queryByText(/cannot be undone/i));
+    if (!confirmation) throw new Error("Delete confirmation was not rendered");
+    await user.click(
+      within(confirmation).getByRole("button", { name: "Delete" }),
+    );
+    await waitFor(() =>
+      expect(onDeleteConversation).toHaveBeenCalledWith("managed-session"),
     );
   });
 

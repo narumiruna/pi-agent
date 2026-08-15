@@ -238,6 +238,18 @@ select:focus-visible,
   gap: 2px;
 }
 
+.conversationRow {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 2px;
+}
+
+.conversationManage {
+  color: var(--muted);
+}
+
 .conversationEmpty {
   padding: 8px;
 }
@@ -1261,6 +1273,36 @@ select:focus-visible,
 
 .conversationPanel > p {
   margin: -10px 0 0;
+}
+
+.conversationManagementDialog {
+  display: grid;
+  gap: 18px;
+}
+
+.conversationManagementDialog > p,
+.conversationDangerZone > p {
+  margin: -8px 0 0;
+}
+
+.conversationRenameForm,
+.conversationRenameForm label,
+.conversationDangerZone {
+  display: grid;
+  gap: 10px;
+}
+
+.conversationRenameForm label {
+  gap: 6px;
+}
+
+.conversationDangerZone {
+  padding-top: 16px;
+  border-top: 1px solid var(--line);
+}
+
+.conversationDangerZone button {
+  justify-self: start;
 }
 
 .conversationStats {

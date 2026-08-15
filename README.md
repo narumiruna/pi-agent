@@ -178,6 +178,12 @@ Conversation discovery follows Pi’s resume selector with fuzzy terms, quoted e
 
 Search runs over native session metadata and user/assistant text on the server; message text, cwd, JSONL paths, parent paths, and scores never enter the list response.
 
+Each conversation row opens one management dialog for native session rename and confirmed inactive-session deletion; the active session must be switched first and cannot be deleted.
+
+Conversation details retain Pi’s native tree navigation, fork, clone, compaction, JSONL/HTML export, and validated JSONL import lifecycle without duplicating session state.
+
+Management and runtime replacement are rejected while an agent run is active, and reconnecting event streams reconcile the authoritative run, queue, draft, transcript, and list state.
+
 Direct loads, reloads, Back, and Forward restore those pages, while root, unknown, malformed, and not-yet-enabled routes replace safely to `/chats`.
 
 A validated current path is carried through signed OIDC state so direct bookmarks survive sign-in without enabling open redirects.
