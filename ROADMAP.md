@@ -54,7 +54,7 @@ Pi package 仍是 prompt、skill 與 extension 的共同安裝來源，不建立
 - [x] 所有 Pi 資源都必須保留 `user`、`project`、`package` 與 `temporary` provenance。
 - [x] Project-local skill 與 extension 只有在 Pi project trust 生效後才能載入或修改。
 - [x] Package、skill、extension 與 MCP 必須持續顯示 trusted-code 警告。
-- [ ] 資源變更後使用 Pi 原生 reload flow，不直接修改 runtime 內部集合。
+- [x] 資源變更後使用 Pi 原生 reload flow，不直接修改 runtime 內部集合。
 
 ### Phase 0 驗收條件
 
