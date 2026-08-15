@@ -9,6 +9,18 @@ export default defineConfig({
     outDir: resolve(import.meta.dirname, "dist/public"),
     emptyOutDir: false,
     chunkSizeWarningLimit: 650,
+    rolldownOptions: {
+      output: {
+        codeSplitting: {
+          groups: [
+            {
+              name: "monaco",
+              test: /node_modules[\\/]monaco-editor[\\/]/,
+            },
+          ],
+        },
+      },
+    },
   },
   server: {
     proxy: {

@@ -735,6 +735,121 @@ input:focus-visible,
   line-height: 1.5;
 }
 
+.codeEditorPanel {
+  min-width: 0;
+  display: grid;
+  gap: 8px;
+}
+
+.codeEditorToolbar {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.codeEditorToolbar > span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.filesMonacoEditor {
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.filesEditorLoading {
+  min-height: 220px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  color: var(--muted);
+}
+
+.codeEditorStatus {
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  border: 0;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px 14px;
+  color: var(--muted);
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
+  font-size: 11px;
+}
+
+.codeEditorStatus span {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.editorSettingsDialog > p,
+.fileConflictDialog > p {
+  margin: -8px 0 0;
+}
+
+.editorSettingsGrid {
+  padding-top: 20px;
+  display: grid;
+  gap: 14px;
+}
+
+.editorSettingRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.editorSettingsSelect {
+  min-width: 140px;
+  height: 32px;
+  padding: 0 30px 0 10px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--ink);
+  font: inherit;
+}
+
+.editorSettingsSelect:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.fileConflictDialog {
+  width: min(96vw, 1240px);
+  display: grid;
+  gap: 16px;
+}
+
+.plainDiffEditor {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.plainDiffEditor > div {
+  min-width: 0;
+  display: grid;
+  gap: 7px;
+}
+
+.plainDiffEditor textarea {
+  min-height: min(48vh, 480px);
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
+  line-height: 1.5;
+}
+
 .filesNotice {
   margin: 10px;
   padding: 10px 12px;
@@ -770,6 +885,10 @@ input:focus-visible,
 
 .dialogActions {
   padding-top: 20px;
+}
+
+.fileConflictDialog .dialogActions {
+  padding-top: 0;
 }
 
 .tabContent,
@@ -1472,6 +1591,39 @@ input:focus-visible,
 
   .filesTextEditor textarea {
     min-height: 340px;
+  }
+
+  .codeEditorToolbar {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .codeEditorToolbar > .rt-Flex,
+  .codeEditorToolbar button {
+    width: 100%;
+  }
+
+  .codeEditorStatus {
+    justify-content: flex-start;
+  }
+
+  .fileConflictDialog {
+    width: min(96vw, 720px);
+    padding: 18px;
+  }
+
+  .plainDiffEditor {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .plainDiffEditor textarea {
+    min-height: 220px;
+  }
+
+  .editorSettingRow {
+    align-items: stretch;
+    flex-direction: column;
+    gap: 7px;
   }
 
   .messageColumn {

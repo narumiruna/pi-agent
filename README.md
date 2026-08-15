@@ -164,6 +164,16 @@ The Files page browses directories lazily and can preview, create, edit, rename,
 
 Text preview and editing are limited to valid UTF-8 files of 1 MB or less.
 
+Desktop editing uses a self-hosted Monaco code editor with extension-based syntax highlighting, local language workers, light and dark themes, and no external CDN dependency.
+
+This editor is not a full IDE and does not add project language servers, code execution, terminals, or VS Code extensions.
+
+Editor settings for font size, tab size, wrapping, minimap, whitespace, and editor mode are stored only in the current browser.
+
+Small screens and Monaco startup failures use a native plain-text editor without changing the loaded draft.
+
+Ctrl/Cmd+S saves, Ctrl/Cmd+F finds in Monaco, and the Tab focus control lets keyboard users leave the editor.
+
 Binary and larger files expose metadata and a download action, while downloads are streamed and limited to 100 MB.
 
 All Files APIs accept and return slash-separated workspace-relative paths and never return host absolute paths.
@@ -171,6 +181,14 @@ All Files APIs accept and return slash-separated workspace-relative paths and ne
 Files skips symlinks, `.git`, `.hg`, `.svn`, `.local`, `.pi`, `.ssh`, `dist`, `node_modules`, credential-like files, and configured agent or application data directories.
 
 Writes use temporary files and atomic replacement, and updates, renames, and deletes require an opaque revision so an external change produces a conflict instead of a silent overwrite.
+
+A stale save fetches the latest file into a review dialog with a read-only disk version and an editable local draft.
+
+Cancel keeps the draft, **Use disk version** discards it, and **Apply merged draft** returns the edited result to the main editor without saving automatically.
+
+The next save uses the refreshed revision, and another external change opens a new review instead of overwriting it.
+
+If the refreshed file is missing, binary, too large, or unreadable, Files keeps the local draft and reports why review is unavailable.
 
 Create and rename never replace an existing destination.
 

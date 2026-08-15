@@ -14,7 +14,6 @@ import {
   Heading,
   Spinner,
   Text,
-  TextArea,
   TextField,
 } from "@radix-ui/themes";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -25,14 +24,27 @@ import type {
   WorkspaceMatch,
 } from "../../shared/contracts.js";
 import { ApiError, api, mutation } from "../api.js";
+import { CodeEditor } from "../components/CodeEditor.js";
 import { ConfirmDialog } from "../components/ConfirmDialog.js";
 import { DialogPortal } from "../components/DialogPortal.js";
+import { FileConflictDialog } from "../components/FileConflictDialog.js";
+import {
+  type EditorAppearance,
+  loadEditorSettings,
+  saveEditorSettings,
+} from "../editor/config.js";
 
 interface Props {
+  appearance?: EditorAppearance;
   onDirtyChange?: (dirty: boolean) => void;
 }
 
 type FileDialogKind = "create" | "rename";
+
+interface FileConflict {
+  disk: WorkspaceFile;
+  merged: string;
+}
 
 function parentPath(path: string): string {
   const separator = path.lastIndexOf("/");
@@ -55,7 +67,7 @@ function apiReason(error: unknown): string | undefined {
     : undefined;
 }
 
-export function FilesPage({ onDirtyChange }: Props) {
+export function FilesPage({ appearance = "light", onDirtyChange }: Props) {
   const { t } = useTranslation();
   const [directoryPath, setDirectoryPath] = useState("");
   const [directory, setDirectory] = useState<WorkspaceDirectory>();
@@ -77,9 +89,13 @@ export function FilesPage({ onDirtyChange }: Props) {
   const [fileDialogError, setFileDialogError] = useState<string>();
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [discardOpen, setDiscardOpen] = useState(false);
+  const [editorSettings, setEditorSettings] = useState(loadEditorSettings);
+  const [editorGeneration, setEditorGeneration] = useState(0);
+  const [conflict, setConflict] = useState<FileConflict>();
   const pendingDiscardAction = useRef<(() => void) | undefined>(undefined);
   const directoryRequest = useRef(0);
   const fileRequest = useRef(0);
+  const conflictRequest = useRef(0);
 
   const dirty = Boolean(
     selected?.content !== undefined && draft !== selected.content,
@@ -146,6 +162,8 @@ export function FilesPage({ onDirtyChange }: Props) {
         if (request !== fileRequest.current) return;
         setSelected(result);
         setDraft(result.content ?? "");
+        setConflict(undefined);
+        setEditorGeneration((value) => value + 1);
       } catch (error) {
         if (request === fileRequest.current) {
           setSelected(undefined);
@@ -166,9 +184,14 @@ export function FilesPage({ onDirtyChange }: Props) {
     () => () => {
       directoryRequest.current += 1;
       fileRequest.current += 1;
+      conflictRequest.current += 1;
     },
     [],
   );
+
+  useEffect(() => {
+    saveEditorSettings(editorSettings);
+  }, [editorSettings]);
 
   useEffect(() => {
     onDirtyChange?.(dirty);
@@ -244,8 +267,11 @@ export function FilesPage({ onDirtyChange }: Props) {
 
   const clearSelection = () => {
     fileRequest.current += 1;
+    conflictRequest.current += 1;
     setSelected(undefined);
     setDraft("");
+    setConflict(undefined);
+    setEditorGeneration((value) => value + 1);
     setFileError(undefined);
     setFileErrorReason(undefined);
     setStatus(undefined);
@@ -278,6 +304,9 @@ export function FilesPage({ onDirtyChange }: Props) {
 
   const save = async () => {
     if (!selected || selected.content === undefined || pending) return;
+    const currentPath = selected.path;
+    const currentDraft = draft;
+    const currentFileRequest = fileRequest.current;
     setPending(true);
     setFileError(undefined);
     setFileErrorReason(undefined);
@@ -286,21 +315,74 @@ export function FilesPage({ onDirtyChange }: Props) {
       const result = await api<WorkspaceFile>(
         "/api/workspace/file",
         mutation("PUT", {
-          path: selected.path,
-          content: draft,
+          path: currentPath,
+          content: currentDraft,
           revision: selected.revision,
         }),
       );
+      conflictRequest.current += 1;
+      setConflict(undefined);
       setSelected(result);
-      setDraft(result.content ?? draft);
+      setDraft(result.content ?? currentDraft);
       setStatus(t("filesSaved"));
       await loadDirectory(parentPath(result.path));
     } catch (error) {
+      const reason = apiReason(error);
       setFileError(errorMessage(error));
-      setFileErrorReason(apiReason(error));
+      setFileErrorReason(reason);
+      if (reason === "stale") {
+        const request = ++conflictRequest.current;
+        try {
+          const disk = await api<WorkspaceFile>(
+            `/api/workspace/file?path=${encodeURIComponent(currentPath)}`,
+          );
+          if (
+            request !== conflictRequest.current ||
+            currentFileRequest !== fileRequest.current
+          )
+            return;
+          if (disk.content === undefined || !disk.editable) {
+            setFileError(t("filesConflictUnavailable"));
+            return;
+          }
+          setConflict({ disk, merged: currentDraft });
+        } catch (refreshError) {
+          if (
+            request === conflictRequest.current &&
+            currentFileRequest === fileRequest.current
+          ) {
+            setFileError(errorMessage(refreshError));
+            setFileErrorReason(apiReason(refreshError));
+          }
+        }
+      }
     } finally {
       setPending(false);
     }
+  };
+
+  const reloadConflict = () => {
+    if (!conflict || conflict.disk.content === undefined) return;
+    conflictRequest.current += 1;
+    setSelected(conflict.disk);
+    setDraft(conflict.disk.content);
+    setConflict(undefined);
+    setEditorGeneration((value) => value + 1);
+    setFileError(undefined);
+    setFileErrorReason(undefined);
+    setStatus(t("filesReloaded"));
+  };
+
+  const applyConflict = () => {
+    if (!conflict) return;
+    conflictRequest.current += 1;
+    setSelected(conflict.disk);
+    setDraft(conflict.merged);
+    setConflict(undefined);
+    setEditorGeneration((value) => value + 1);
+    setFileError(undefined);
+    setFileErrorReason(undefined);
+    setStatus(t("filesConflictDraftReady"));
   };
 
   const openFileDialog = (kind: FileDialogKind) => {
@@ -343,8 +425,11 @@ export function FilesPage({ onDirtyChange }: Props) {
       if (!result) return;
       setFileDialog(undefined);
       setFileName("");
+      conflictRequest.current += 1;
+      setConflict(undefined);
       setSelected(result);
       setDraft(result.content ?? "");
+      setEditorGeneration((value) => value + 1);
       setStatus(
         fileDialog === "create" ? t("filesCreated") : t("filesRenamed"),
       );
@@ -587,13 +672,18 @@ export function FilesPage({ onDirtyChange }: Props) {
               </header>
 
               {selected.content !== undefined ? (
-                <TextArea
-                  className="filesTextEditor"
-                  aria-label={t("filesFileContent", { name: selected.name })}
+                <CodeEditor
+                  key={`${selected.path}:${editorGeneration}`}
+                  appearance={appearance}
+                  ariaLabel={t("filesFileContent", { name: selected.name })}
+                  path={selected.path}
+                  pending={pending}
                   readOnly={!selected.editable || pending}
-                  rows={24}
+                  settings={editorSettings}
                   value={draft}
-                  onChange={(event) => setDraft(event.target.value)}
+                  onChange={setDraft}
+                  onSave={() => void save()}
+                  onSettingsChange={setEditorSettings}
                 />
               ) : (
                 <div className="filesUnsupported">
@@ -619,7 +709,7 @@ export function FilesPage({ onDirtyChange }: Props) {
               {fileError && (
                 <div className="filesNotice error" role="alert">
                   <span>{fileError}</span>
-                  {fileErrorReason === "stale" && (
+                  {fileErrorReason === "stale" && !conflict && (
                     <Button
                       highContrast
                       variant="soft"
@@ -718,6 +808,24 @@ export function FilesPage({ onDirtyChange }: Props) {
           </Dialog.Content>
         </DialogPortal>
       </Dialog.Root>
+
+      {conflict && (
+        <FileConflictDialog
+          appearance={appearance}
+          disk={conflict.disk}
+          merged={conflict.merged}
+          open
+          settings={editorSettings}
+          onApply={applyConflict}
+          onCancel={() => setConflict(undefined)}
+          onMergedChange={(merged) =>
+            setConflict((current) =>
+              current ? { ...current, merged } : current,
+            )
+          }
+          onReload={reloadConflict}
+        />
+      )}
 
       <ConfirmDialog
         open={deleteOpen}

@@ -4,7 +4,70 @@ import { Theme } from "@radix-ui/themes";
 import { act, cleanup, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
+import type { EditorSettings } from "../../src/web/editor/config.js";
 import i18n, { setLanguage } from "../../src/web/i18n.js";
+
+interface MockEditorProps {
+  appearance: "dark" | "light";
+  ariaLabel: string;
+  path: string;
+  pending: boolean;
+  readOnly: boolean;
+  settings: EditorSettings;
+  value: string;
+  onChange: (value: string) => void;
+  onSave: () => void;
+  onSettingsChange: (settings: EditorSettings) => void;
+}
+
+interface MockDiffProps {
+  modified: string;
+  modifiedLabel: string;
+  original: string;
+  originalLabel: string;
+  onModifiedChange: (value: string) => void;
+}
+
+vi.mock("../../src/web/components/CodeEditor.js", () => ({
+  CodeEditor: ({
+    ariaLabel,
+    pending,
+    readOnly,
+    value,
+    onChange,
+    onSave,
+  }: MockEditorProps) => (
+    <textarea
+      aria-label={ariaLabel}
+      readOnly={readOnly}
+      value={value}
+      onChange={(event) => onChange(event.target.value)}
+      onKeyDown={(event) => {
+        if ((event.ctrlKey || event.metaKey) && event.key === "s" && !pending) {
+          event.preventDefault();
+          onSave();
+        }
+      }}
+    />
+  ),
+  CodeDiffEditor: ({
+    modified,
+    modifiedLabel,
+    original,
+    originalLabel,
+    onModifiedChange,
+  }: MockDiffProps) => (
+    <div>
+      <textarea aria-label={originalLabel} readOnly value={original} />
+      <textarea
+        aria-label={modifiedLabel}
+        value={modified}
+        onChange={(event) => onModifiedChange(event.target.value)}
+      />
+    </div>
+  ),
+}));
+
 import { FilesPage } from "../../src/web/pages/FilesPage.js";
 
 function json(value: unknown, status = 200): Response {
@@ -325,7 +388,94 @@ describe("Files page", () => {
     expect(screen.getByRole("dialog")).toBeVisible();
   });
 
-  test("preserves a stale draft until reload is explicitly confirmed", async () => {
+  test("reviews and saves a stale draft against the latest revision", async () => {
+    let diskContent = "original";
+    let saveAttempts = 0;
+    vi.mocked(fetch).mockImplementation(async (input, init) => {
+      const url = String(input);
+      if (url === "/api/workspace/entries?path=") {
+        return json(
+          listing("", [
+            {
+              path: "notes.txt",
+              name: "notes.txt",
+              kind: "file",
+              modifiedAt: 1,
+              size: diskContent.length,
+            },
+          ]),
+        );
+      }
+      if (url === "/api/workspace/file?path=notes.txt") {
+        return json(
+          file("notes.txt", {
+            content: diskContent,
+            revision: `revision-${diskContent}`,
+          }),
+        );
+      }
+      if (url === "/api/workspace/file" && init?.method === "PUT") {
+        saveAttempts += 1;
+        if (saveAttempts === 1) {
+          diskContent = "changed outside";
+          return json(
+            { error: { code: "conflict", params: { reason: "stale" } } },
+            409,
+          );
+        }
+        const body = JSON.parse(String(init.body));
+        expect(body).toEqual({
+          path: "notes.txt",
+          content: "merged draft",
+          revision: "revision-changed outside",
+        });
+        diskContent = body.content;
+        return json(
+          file("notes.txt", {
+            content: diskContent,
+            revision: "revision-merged",
+          }),
+        );
+      }
+      throw new Error(`Unexpected request: ${url}`);
+    });
+    const user = userEvent.setup();
+
+    render(
+      <Theme>
+        <FilesPage />
+      </Theme>,
+    );
+
+    await user.click(
+      await screen.findByRole("button", { name: /notes\.txt/i }),
+    );
+    const editor = await screen.findByLabelText("Contents of notes.txt");
+    await user.clear(editor);
+    await user.type(editor, "my unsaved draft");
+    await user.click(screen.getByRole("button", { name: "Save changes" }));
+
+    expect(await screen.findByText("Review file changes")).toBeVisible();
+    expect(screen.getByLabelText("Latest disk version")).toHaveValue(
+      "changed outside",
+    );
+    const merged = screen.getByLabelText("Your editable draft");
+    expect(merged).toHaveValue("my unsaved draft");
+    await user.clear(merged);
+    await user.type(merged, "merged draft");
+    await user.click(
+      screen.getByRole("button", { name: "Apply merged draft" }),
+    );
+
+    expect(screen.getByText("Merged draft is ready to save.")).toBeVisible();
+    expect(screen.getByLabelText("Contents of notes.txt")).toHaveValue(
+      "merged draft",
+    );
+    await user.click(screen.getByRole("button", { name: "Save changes" }));
+    expect(await screen.findByText("File saved.")).toBeVisible();
+  });
+
+  test("can cancel repeated stale reviews and explicitly reload the disk version", async () => {
     let diskContent = "original";
     vi.mocked(fetch).mockImplementation(async (input, init) => {
       const url = String(input);
@@ -366,26 +516,110 @@ describe("Files page", () => {
         <FilesPage />
       </Theme>,
     );
-
     await user.click(
       await screen.findByRole("button", { name: /notes\.txt/i }),
     );
     const editor = await screen.findByLabelText("Contents of notes.txt");
     await user.clear(editor);
-    await user.type(editor, "my unsaved draft");
+    await user.type(editor, "local draft");
     await user.click(screen.getByRole("button", { name: "Save changes" }));
-
-    expect(await screen.findByText(/changed on disk/i)).toBeVisible();
-    expect(editor).toHaveValue("my unsaved draft");
-    await user.click(screen.getByRole("button", { name: "Reload from disk" }));
-    expect(screen.getByText("Discard unsaved changes?")).toBeVisible();
-    await user.click(screen.getByRole("button", { name: "Discard changes" }));
-    await waitFor(() =>
-      expect(screen.getByLabelText("Contents of notes.txt")).toHaveValue(
-        "changed outside",
-      ),
+    await user.click(
+      await screen.findByRole("button", { name: "Cancel", hidden: false }),
     );
+    expect(screen.getByLabelText("Contents of notes.txt")).toHaveValue(
+      "local draft",
+    );
+
+    await user.click(screen.getByRole("button", { name: "Save changes" }));
+    await user.click(
+      await screen.findByRole("button", { name: "Use disk version" }),
+    );
+    expect(screen.getByLabelText("Contents of notes.txt")).toHaveValue(
+      "changed outside",
+    );
+    expect(screen.getByRole("button", { name: "Save changes" })).toBeDisabled();
   });
+
+  test.each([
+    [
+      "unsupported content",
+      () =>
+        json(
+          file("notes.txt", {
+            content: undefined,
+            editable: false,
+            reason: "binary",
+          }),
+        ),
+      "The latest file cannot be merged here. Your local draft is unchanged.",
+    ],
+    [
+      "a missing refreshed file",
+      () =>
+        json(
+          { error: { code: "not_found", params: { reason: "not_found" } } },
+          404,
+        ),
+      "This file is no longer available.",
+    ],
+    [
+      "a refresh error",
+      () => json({ error: { code: "server_error" } }, 500),
+      "The file operation failed. Try again.",
+    ],
+  ])(
+    "preserves the draft when stale refresh returns %s",
+    async (_case, refresh, message) => {
+      let reads = 0;
+      vi.mocked(fetch).mockImplementation(async (input, init) => {
+        const url = String(input);
+        if (url === "/api/workspace/entries?path=")
+          return json(
+            listing("", [
+              {
+                path: "notes.txt",
+                name: "notes.txt",
+                kind: "file",
+                modifiedAt: 1,
+                size: 8,
+              },
+            ]),
+          );
+        if (url === "/api/workspace/file?path=notes.txt") {
+          reads += 1;
+          return reads === 1
+            ? json(file("notes.txt", { content: "original" }))
+            : refresh();
+        }
+        if (url === "/api/workspace/file" && init?.method === "PUT")
+          return json(
+            { error: { code: "conflict", params: { reason: "stale" } } },
+            409,
+          );
+        throw new Error(`Unexpected request: ${url}`);
+      });
+      const user = userEvent.setup();
+
+      render(
+        <Theme>
+          <FilesPage />
+        </Theme>,
+      );
+      await user.click(
+        await screen.findByRole("button", { name: /notes\.txt/i }),
+      );
+      const editor = await screen.findByLabelText("Contents of notes.txt");
+      await user.clear(editor);
+      await user.type(editor, "local draft");
+      await user.click(screen.getByRole("button", { name: "Save changes" }));
+
+      expect(await screen.findByText(message)).toBeVisible();
+      expect(screen.getByLabelText("Contents of notes.txt")).toHaveValue(
+        "local draft",
+      );
+      expect(screen.queryByText("Review file changes")).not.toBeInTheDocument();
+    },
+  );
 
   test("confirms dirty file switches and renders metadata-only files safely", async () => {
     vi.mocked(fetch).mockImplementation(async (input) => {
