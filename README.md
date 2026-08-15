@@ -253,6 +253,10 @@ Disabling trust reloads and unloads project resources.
 
 The generic Files API excludes `.agents` and `.pi`, so it cannot bypass this resource boundary.
 
+Library package and MCP controls plus Settings project trust display one persistent trusted-code warning that covers packages, skills, extensions, and MCP servers.
+
+Future Skills and Extensions management surfaces must reuse that warning and retain any stronger acknowledgement gate.
+
 Project trust controls input loading and is not a sandbox for Pi tools, extensions, packages, skills, or model output.
 
 ## Prompts, skills, and extensions

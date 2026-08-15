@@ -1,7 +1,13 @@
 // @vitest-environment jsdom
 
 import { Theme } from "@radix-ui/themes";
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import {
+  cleanup,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { setLanguage } from "../../src/web/i18n.js";
@@ -81,6 +87,11 @@ describe("Library package metadata", () => {
     expect(await screen.findByText("safe-package")).toBeVisible();
     expect(screen.getByText("user package")).toBeVisible();
     expect(screen.queryByText(/private|workspace/i)).not.toBeInTheDocument();
+    expect(
+      within(screen.getByRole("tabpanel", { name: /Pi packages/ })).getByRole(
+        "note",
+      ),
+    ).toHaveTextContent(/packages, skills, extensions, and MCP servers/i);
 
     await user.click(screen.getByRole("button", { name: "Update" }));
     await waitFor(() => expect(mutations).toHaveLength(1));
@@ -97,5 +108,17 @@ describe("Library package metadata", () => {
         body: { id: "pkg_opaque", acknowledgeRisk: true },
       },
     ]);
+    expect(
+      within(screen.getByRole("tabpanel", { name: /Pi packages/ })).getByRole(
+        "note",
+      ),
+    ).toBeVisible();
+
+    await user.click(screen.getByRole("tab", { name: /MCP servers/ }));
+    expect(
+      within(screen.getByRole("tabpanel", { name: /MCP servers/ })).getByRole(
+        "note",
+      ),
+    ).toHaveTextContent(/trusted code.*container's permissions/i);
   });
 });

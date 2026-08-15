@@ -17,6 +17,7 @@ import {
   type WebPromptTemplateDocument,
 } from "../../shared/contracts.js";
 import { api, mutation } from "../api.js";
+import { TrustedCodeWarning } from "../components/TrustedCodeWarning.js";
 
 function DocumentEditor({
   kind,
@@ -44,6 +45,7 @@ function DocumentEditor({
         aria-label={label}
       />
       <Button
+        highContrast
         disabled={content === undefined}
         onClick={() => {
           if (content !== undefined)
@@ -142,6 +144,7 @@ export function LibraryPage() {
               onChange={(event) => setTemplateContent(event.target.value)}
             />
             <Button
+              highContrast
               disabled={!templateName || !templateContent}
               onClick={() => void saveTemplate()}
             >
@@ -186,9 +189,7 @@ export function LibraryPage() {
           ))}
         </Tabs.Content>
         <Tabs.Content value="packages" className="tabContent">
-          <div className="riskNotice">
-            <Text weight="medium">{t("packageWarning")}</Text>
-          </div>
+          <TrustedCodeWarning />
           <TextField.Root
             placeholder={t("source")}
             value={source}
@@ -204,6 +205,7 @@ export function LibraryPage() {
             </Flex>
           </Text>
           <Button
+            highContrast
             disabled={!trusted || !source}
             onClick={() => void installPackage()}
           >
@@ -252,6 +254,7 @@ export function LibraryPage() {
           ))}
         </Tabs.Content>
         <Tabs.Content value="mcp" className="tabContent">
+          <TrustedCodeWarning />
           <TextArea
             rows={20}
             className="codeEditor"
@@ -269,7 +272,11 @@ export function LibraryPage() {
               {diagnostic.server}: {diagnostic.message}
             </div>
           ))}
-          <Button disabled={!loaded} onClick={() => void saveMcp()}>
+          <Button
+            highContrast
+            disabled={!loaded}
+            onClick={() => void saveMcp()}
+          >
             {t("save")}
           </Button>
         </Tabs.Content>

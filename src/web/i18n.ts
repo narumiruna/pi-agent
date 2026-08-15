@@ -181,6 +181,8 @@ const resources = {
       disableProjectTrust: "Disable project resources",
       projectTrustEnabled: "Project resources are trusted and reloaded.",
       projectTrustDisabled: "Project resources are disabled and reloaded.",
+      trustedCodeWarning:
+        "Packages, skills, extensions, and MCP servers are trusted code. They can execute arbitrary code, run commands, or direct Pi with this container's permissions; review their sources before enabling or changing them.",
       noAccessConfigured: "No model access configured",
       currentModel: "Current model",
       noModelSelected: "No model selected",
@@ -269,8 +271,6 @@ const resources = {
       disabled: "Disabled",
       toolAllowlistNote: "Only tools allowed by the server can be enabled.",
       install: "Install",
-      packageWarning:
-        "Pi packages can execute arbitrary code inside this container. Review the source first.",
       confirmInstall: "I reviewed and trust this package",
       noMessages: "No messages yet",
       noRuns: "No heartbeat runs yet",
@@ -507,6 +507,8 @@ const resources = {
       disableProjectTrust: "停用專案資源",
       projectTrustEnabled: "已信任並重新載入專案資源。",
       projectTrustDisabled: "已停用並重新載入專案資源。",
+      trustedCodeWarning:
+        "Packages、skills、extensions 與 MCP servers 都是受信任程式碼。它們可以用此容器的權限執行任意程式碼、執行命令或引導 Pi；啟用或變更前請先檢查來源。",
       noAccessConfigured: "尚未設定模型存取方式",
       currentModel: "目前模型",
       noModelSelected: "尚未選擇模型",
@@ -591,7 +593,6 @@ const resources = {
       disabled: "停用",
       toolAllowlistNote: "只能啟用伺服器允許的工具。",
       install: "安裝",
-      packageWarning: "Pi package 可在容器中執行任意程式碼。請先檢查來源。",
       confirmInstall: "我已檢查並信任此 package",
       noMessages: "尚無訊息",
       noRuns: "尚無 heartbeat 執行紀錄",

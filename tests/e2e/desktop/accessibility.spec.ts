@@ -52,6 +52,12 @@ test("has no serious accessibility violations in primary owner flows", async ({
   await expectNoSeriousAccessibilityViolations(page);
   await page.getByRole("button", { name: "Cancel" }).click();
 
+  await page.getByRole("button", { name: "Library" }).click();
+  await page.getByRole("tab", { name: "Pi packages" }).click();
+  await expectNoSeriousAccessibilityViolations(page);
+  await page.getByRole("tab", { name: "MCP servers" }).click();
+  await expectNoSeriousAccessibilityViolations(page);
+
   await page.getByRole("button", { name: "Heartbeat" }).click();
   await expectNoSeriousAccessibilityViolations(page);
 });
