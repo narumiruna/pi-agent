@@ -257,6 +257,12 @@ Library package and MCP controls plus Settings project trust display one persist
 
 Future Skills and Extensions management surfaces must reuse that warning and retain any stronger acknowledgement gate.
 
+Resource mutations persist through Pi-native files, settings, or package APIs before calling `PiService.reload()`.
+
+That adapter waits for active work and invokes Pi's `AgentSession.reload()` lifecycle for chat and heartbeat sessions.
+
+Resource code must never patch loader results, prompt arrays, command maps, skill lists, or extension lists directly.
+
 Project trust controls input loading and is not a sandbox for Pi tools, extensions, packages, skills, or model output.
 
 ## Prompts, skills, and extensions

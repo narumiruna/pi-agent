@@ -27,6 +27,11 @@ type PackageOperations = Pick<
   "installAndPersist" | "listConfiguredPackages" | "removeAndPersist" | "update"
 >;
 
+/** Application adapter for Pi's AgentSession.reload lifecycle. */
+export interface NativeResourceReloader {
+  reload(): Promise<void>;
+}
+
 function packageSource(value: string): string {
   const source = value.trim();
   if (source.length < 1 || source.length > 2_048 || /[\r\n\0]/.test(source)) {
@@ -46,7 +51,7 @@ export class ResourceService {
   constructor(
     private readonly agentDir: string,
     private readonly packages: PackageOperations,
-    private readonly reload: () => Promise<void>,
+    private readonly reloader: NativeResourceReloader,
   ) {
     this.promptDir = join(agentDir, "prompts");
   }
@@ -109,14 +114,14 @@ export class ResourceService {
     const path = this.documentPath(kind, name);
     await this.assertSafeParent(path);
     await atomicWrite(path, content);
-    await this.reload();
+    await this.reloader.reload();
   }
 
   async deleteDocument(kind: DocumentKind, name?: string): Promise<void> {
     const path = this.documentPath(kind, name);
     await this.assertSafeParent(path);
     await rm(path, { force: true });
-    await this.reload();
+    await this.reloader.reload();
   }
 
   async listTemplates(): Promise<WebPromptTemplateDocument[]> {
@@ -156,19 +161,19 @@ export class ResourceService {
 
   async installPackage(value: string): Promise<void> {
     await this.packages.installAndPersist(packageSource(value));
-    await this.reload();
+    await this.reloader.reload();
   }
 
   async removePackage(id: string): Promise<boolean> {
     const removed = await this.packages.removeAndPersist(
       this.packageSourceForId(id),
     );
-    if (removed) await this.reload();
+    if (removed) await this.reloader.reload();
     return removed;
   }
 
   async updatePackage(id?: string): Promise<void> {
     await this.packages.update(id ? this.packageSourceForId(id) : undefined);
-    await this.reload();
+    await this.reloader.reload();
   }
 }

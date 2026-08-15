@@ -45,10 +45,6 @@ test("keeps navigation and model selection keyboard operable at 390px", async ({
     headers: { origin: appOrigin },
   });
   expect(template.ok()).toBe(true);
-  const reload = await page.request.post("/api/reload", {
-    headers: { origin: appOrigin },
-  });
-  expect(reload.ok()).toBe(true);
   await page.reload();
   const composer = page.getByLabel("Ask Pi anything…");
   await composer.fill("/mobile");

@@ -37,7 +37,7 @@ export async function main(): Promise<void> {
     const resources = new ResourceService(
       config.agentDir,
       pi.packageManager,
-      () => pi?.reload() ?? Promise.resolve(),
+      pi,
     );
     const workspace = new WorkspaceService(config.workspace, [
       config.agentDir,
