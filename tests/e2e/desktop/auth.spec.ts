@@ -87,9 +87,9 @@ test("rejects a second identity without invalidating the owner", async ({
 
   const ownerSession = await page.request.get("/api/session");
   expect(ownerSession.status()).toBe(200);
-  await expect(ownerSession.json()).resolves.toMatchObject({
-    owner: "owner-1",
-  });
+  const ownerSessionBody = await ownerSession.json();
+  expect(ownerSessionBody).toMatchObject({ authenticated: true });
+  expect(ownerSessionBody).not.toHaveProperty("owner");
 });
 
 test("logs out only the current owner session", async ({

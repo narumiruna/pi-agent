@@ -14,6 +14,7 @@ import {
 } from "../shared/contracts.js";
 import type { PiService } from "./agent/pi-service.js";
 import { AgentBusyError } from "./agent/run-coordinator.js";
+import { projectMcpDiagnostics } from "./api-metadata.js";
 import type { AppConfig } from "./config.js";
 import type { HeartbeatScheduler } from "./heartbeat/scheduler.js";
 import type { InteractionBroker } from "./interactions/broker.js";
@@ -123,10 +124,20 @@ const ProviderLoginBody = Type.Object({
 const DocumentBody = Type.Object({
   content: Type.String({ maxLength: 1_000_000 }),
 });
-const PackageBody = Type.Object({
-  source: Type.String({ maxLength: 2_048 }),
-  acknowledgeRisk: Type.Literal(true),
-});
+const PackageInstallBody = Type.Object(
+  {
+    source: Type.String({ maxLength: 2_048 }),
+    acknowledgeRisk: Type.Literal(true),
+  },
+  { additionalProperties: false },
+);
+const PackageTargetBody = Type.Object(
+  {
+    id: Type.String({ pattern: "^pkg_[A-Za-z0-9_-]{43}$" }),
+    acknowledgeRisk: Type.Literal(true),
+  },
+  { additionalProperties: false },
+);
 const McpBody = Type.Object({
   mcpServers: Type.Record(Type.String(), Type.Unknown()),
 });
@@ -779,8 +790,7 @@ export function registerApi<E extends ApiEnv>(
   );
   app.get("/api/diagnostics", (context) =>
     context.json({
-      ...services.pi.diagnostics(),
-      mcp: services.mcp.diagnostics(),
+      mcp: projectMcpDiagnostics(services.mcp.diagnostics()),
     }),
   );
 
@@ -848,7 +858,7 @@ export function registerApi<E extends ApiEnv>(
   );
   app.post(
     "/api/packages",
-    tbValidator("json", PackageBody),
+    tbValidator("json", PackageInstallBody),
     async (context) => {
       try {
         await services.resources.installPackage(
@@ -862,11 +872,11 @@ export function registerApi<E extends ApiEnv>(
   );
   app.delete(
     "/api/packages",
-    tbValidator("json", PackageBody),
+    tbValidator("json", PackageTargetBody),
     async (context) => {
       try {
         const removed = await services.resources.removePackage(
-          context.req.valid("json").source,
+          context.req.valid("json").id,
         );
         return context.json({ removed });
       } catch (error) {
@@ -876,12 +886,10 @@ export function registerApi<E extends ApiEnv>(
   );
   app.post(
     "/api/packages/update",
-    tbValidator("json", PackageBody),
+    tbValidator("json", PackageTargetBody),
     async (context) => {
       try {
-        await services.resources.updatePackage(
-          context.req.valid("json").source,
-        );
+        await services.resources.updatePackage(context.req.valid("json").id);
         return context.json({ ok: true });
       } catch (error) {
         return errorResponse(context, error);
@@ -903,7 +911,7 @@ export function registerApi<E extends ApiEnv>(
       await services.pi.reload();
       return context.json({
         ok: true,
-        diagnostics: services.mcp.diagnostics(),
+        diagnostics: projectMcpDiagnostics(services.mcp.diagnostics()),
       });
     } catch (error) {
       return errorResponse(context, error);

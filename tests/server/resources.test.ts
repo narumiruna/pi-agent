@@ -18,7 +18,14 @@ async function setup() {
   directories.push(agentDir);
   const reload = vi.fn(async () => undefined);
   const packages = {
-    listConfiguredPackages: vi.fn(() => []),
+    listConfiguredPackages: vi.fn(
+      (): Array<{
+        source: string;
+        scope: "project" | "user";
+        filtered: boolean;
+        installedPath?: string;
+      }> => [],
+    ),
     installAndPersist: vi.fn(async () => undefined),
     removeAndPersist: vi.fn(async () => true),
     update: vi.fn(async () => undefined),
@@ -76,15 +83,48 @@ describe("ResourceService", () => {
     expect(reload).toHaveBeenCalledOnce();
   });
 
-  test("can update and remove a normalized relative local package source", async () => {
+  test("resolves opaque IDs for native package updates and removal", async () => {
     const { service, packages } = await setup();
+    packages.listConfiguredPackages.mockReturnValue([
+      {
+        source: "../../../workspace/package",
+        scope: "project",
+        filtered: false,
+        installedPath: "/private/cache/package",
+      },
+    ]);
+    const [summary] = service.listPackages();
+    if (!summary) throw new Error("Package summary is required");
 
-    await service.updatePackage("../../../workspace/package");
-    await service.removePackage("../../../workspace/package");
+    expect(summary).toMatchObject({
+      name: "package",
+      scope: "project",
+      filtered: false,
+    });
+    expect(JSON.stringify(summary)).not.toContain("workspace");
+    expect(JSON.stringify(summary)).not.toContain("/private");
+
+    await service.updatePackage(summary.id);
+    await service.removePackage(summary.id);
 
     expect(packages.update).toHaveBeenCalledWith("../../../workspace/package");
     expect(packages.removeAndPersist).toHaveBeenCalledWith(
       "../../../workspace/package",
     );
+  });
+
+  test("rejects stale package IDs without mutating native settings", async () => {
+    const { service, packages, reload } = await setup();
+
+    await expect(service.updatePackage("pkg_unknown")).rejects.toThrow(
+      /not found/i,
+    );
+    await expect(service.removePackage("pkg_unknown")).rejects.toThrow(
+      /not found/i,
+    );
+
+    expect(packages.update).not.toHaveBeenCalled();
+    expect(packages.removeAndPersist).not.toHaveBeenCalled();
+    expect(reload).not.toHaveBeenCalled();
   });
 });

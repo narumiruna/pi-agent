@@ -12,10 +12,9 @@ setup(
 
     const session = await page.request.get("/api/session");
     expect(session.status()).toBe(200);
-    await expect(session.json()).resolves.toMatchObject({
-      authenticated: true,
-      owner: "owner-1",
-    });
+    const body = await session.json();
+    expect(body).toMatchObject({ authenticated: true });
+    expect(body).not.toHaveProperty("owner");
 
     await mkdir(dirname(authState), { recursive: true });
     await page.context().storageState({ path: authState });

@@ -148,7 +148,7 @@ describe("Pi event bridge", () => {
       attempt: 1,
       maxAttempts: 3,
       delayMs: 10,
-      errorMessage: "overloaded",
+      errorMessage: "overloaded at /private/runtime/session.jsonl",
     } as never);
     listener?.({
       type: "message_end",
@@ -182,6 +182,7 @@ describe("Pi event bridge", () => {
           data: expect.objectContaining({
             sessionId: "session",
             kind: "retry",
+            message: "overloaded at <path>",
           }),
         }),
         expect.objectContaining({

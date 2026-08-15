@@ -227,6 +227,12 @@ AGENT_TOOLS=read,grep,find,ls,write,edit,bash
 
 OIDC authenticates the owner but does not sandbox Pi, extensions, skills, MCP servers, packages, or model-generated tool calls.
 
+Web metadata responses omit the OIDC subject, native runtime diagnostics, package sources, installed package paths, and terminal control sequences.
+
+Package list entries use opaque IDs and bounded display names, and update or removal resolves those IDs against Pi's current native package settings.
+
+Explicit owner-requested content such as transcripts, documents, redacted MCP configuration, workspace files, tool output, and session exports remains available through its dedicated endpoint.
+
 ## Prompts, skills, and extensions
 
 The Library page edits `SYSTEM.md`, `APPEND_SYSTEM.md`, and files under `prompts/` with atomic writes.

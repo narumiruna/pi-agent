@@ -71,6 +71,25 @@ export interface WorkspaceMatch {
   directory: boolean;
 }
 
+export interface WebPackageSummary {
+  id: string;
+  name: string;
+  scope: "project" | "user";
+  filtered: boolean;
+}
+
+export interface WebMcpDiagnostic {
+  server: string;
+  level: "error" | "warning";
+  message: string;
+}
+
+export interface WebPackageProgress {
+  type: "complete" | "error" | "progress" | "start";
+  action: "clone" | "install" | "pull" | "remove" | "update";
+  message?: string;
+}
+
 export type QueueMode = "all" | "one-at-a-time";
 
 export interface ExtensionWidget {
@@ -191,7 +210,7 @@ export interface WebEventDataMap {
     type?: string;
     [key: string]: unknown;
   };
-  package_progress: unknown;
+  package_progress: WebPackageProgress;
   provider_auth: unknown;
   run_status: {
     status: string;

@@ -30,6 +30,7 @@ import type {
   ConversationAgentState,
   QueueMode,
 } from "../../shared/contracts.js";
+import { projectPackageProgress, safeMetadataText } from "../api-metadata.js";
 import type { AppConfig } from "../config.js";
 import { HeartbeatExecutionError } from "../heartbeat/scheduler.js";
 import type { InteractionBroker } from "../interactions/broker.js";
@@ -231,7 +232,7 @@ export class PiService {
     this.extensionState = new WebExtensionState(events);
     runtime.setRebindSession(async (session) => this.bindSession(session));
     packageManager.setProgressCallback((event) =>
-      this.events.publish("package_progress", event),
+      this.events.publish("package_progress", projectPackageProgress(event)),
     );
   }
 
@@ -559,8 +560,9 @@ export class PiService {
               runId,
               sessionId: id,
               status: "error",
-              message:
+              message: safeMetadataText(
                 error instanceof Error ? error.message : "Agent run failed",
+              ),
             });
           }
         },

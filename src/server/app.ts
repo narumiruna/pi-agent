@@ -204,7 +204,6 @@ export function createApp(options: CreateAppOptions): Hono<AppBindings> {
     context.json({
       authenticated: true,
       authDisabled: options.config.auth.mode === "disabled",
-      owner: context.get("session")?.subject,
       tools: options.config.agentTools,
     }),
   );

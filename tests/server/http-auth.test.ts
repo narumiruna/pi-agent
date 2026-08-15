@@ -100,7 +100,11 @@ describe("HTTP authentication boundary", () => {
     const response = await app.request("/api/session");
 
     expect(response.status).toBe(200);
-    expect(await response.json()).toMatchObject({ authDisabled: true });
+    expect(await response.json()).toEqual({
+      authenticated: true,
+      authDisabled: true,
+      tools: ["read"],
+    });
   });
 
   test("rejects oversized API request bodies", async () => {

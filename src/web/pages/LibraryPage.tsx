@@ -10,17 +10,15 @@ import {
 } from "@radix-ui/themes";
 import { useCallback, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
+import type {
+  WebMcpDiagnostic,
+  WebPackageSummary,
+} from "../../shared/contracts.js";
 import { api, mutation } from "../api.js";
 
 interface Template {
   name: string;
   content: string;
-}
-
-interface PackageInfo {
-  source: string;
-  scope: string;
-  installedPath?: string;
 }
 
 function DocumentEditor({
@@ -64,7 +62,7 @@ function DocumentEditor({
 export function LibraryPage() {
   const { t } = useTranslation();
   const [templates, setTemplates] = useState<Template[]>([]);
-  const [packages, setPackages] = useState<PackageInfo[]>([]);
+  const [packages, setPackages] = useState<WebPackageSummary[]>([]);
   const [templateName, setTemplateName] = useState("");
   const [templateContent, setTemplateContent] = useState("");
   const [source, setSource] = useState("");
@@ -72,18 +70,14 @@ export function LibraryPage() {
   const [loaded, setLoaded] = useState(false);
   const [mcp, setMcp] = useState('{\n  "mcpServers": {}\n}\n');
   const [mcpError, setMcpError] = useState<string>();
-  const [mcpDiagnostics, setMcpDiagnostics] = useState<
-    Array<{ server: string; level: string; message: string }>
-  >([]);
+  const [mcpDiagnostics, setMcpDiagnostics] = useState<WebMcpDiagnostic[]>([]);
   const load = useCallback(async () => {
     const [templateData, packageData, mcpData, diagnostics] = await Promise.all(
       [
         api<Template[]>("/api/templates"),
-        api<PackageInfo[]>("/api/packages"),
+        api<WebPackageSummary[]>("/api/packages"),
         api<unknown>("/api/mcp"),
-        api<{ mcp: Array<{ server: string; level: string; message: string }> }>(
-          "/api/diagnostics",
-        ),
+        api<{ mcp: WebMcpDiagnostic[] }>("/api/diagnostics"),
       ],
     );
     setTemplates(templateData);
@@ -216,11 +210,11 @@ export function LibraryPage() {
             {t("install")}
           </Button>
           {packages.map((item) => (
-            <div className="listRow" key={`${item.scope}-${item.source}`}>
+            <div className="listRow" key={item.id}>
               <div>
-                <Text weight="medium">{item.source}</Text>
+                <Text weight="medium">{item.name}</Text>
                 <Text as="p" size="1" color="gray">
-                  {item.scope} · {item.installedPath}
+                  {item.scope}
                 </Text>
               </div>
               <Flex gap="2">
@@ -230,7 +224,7 @@ export function LibraryPage() {
                     void api(
                       "/api/packages/update",
                       mutation("POST", {
-                        source: item.source,
+                        id: item.id,
                         acknowledgeRisk: true,
                       }),
                     ).then(load)
@@ -245,7 +239,7 @@ export function LibraryPage() {
                     void api(
                       "/api/packages",
                       mutation("DELETE", {
-                        source: item.source,
+                        id: item.id,
                         acknowledgeRisk: true,
                       }),
                     ).then(load)
