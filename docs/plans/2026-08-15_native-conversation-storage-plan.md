@@ -81,8 +81,9 @@ Static documentation alone can drift; pair it with native projection, activation
 
 - Installed `@earendil-works/pi-coding-agent` 0.84.1 README, session-format documentation, declarations, implementation, and exports confirm `SessionManager` owns append-only JSONL, native IDs, `listAll`, `open`, and runtime switching contracts.
 - `npm test -- tests/server/native-conversations.test.ts tests/server/storage.test.ts tests/server/api.test.ts`: 47 tests passed and 5 PostgreSQL-dependent tests skipped.
+- `TEST_POSTGRES_URL=postgresql://pi-agent:test-password@127.0.0.1:55432/pi-agent npm test -- tests/server/storage.test.ts`: all 14 SQLite/PostgreSQL storage tests passed against a temporary PostgreSQL 17 container.
 - `npm run ci`: 26 files passed, 331 tests passed, 5 PostgreSQL-dependent tests skipped, and both builds passed against the final test layout.
 - `npx playwright test`: all 22 setup, desktop, Chats, accessibility, route, and 390px mobile tests passed.
 - `docker build -t pi-agent:local .`: production image built successfully as `sha256:d70d8912d6e44ab9467160af844fb4111dd568a3bbee5f7d29a1ea6bc3562416`.
 - Source and schema audits found no conversation/transcript/JSONL mirror in either app store, no parsing of conversation IDs, and no Web projection of native paths.
-- Codex review identified a weak exact-ID fixture and an over-broad SQLite table assertion; a prefixed decoy now proves target selection, while targeted forbidden-table checks permit unrelated future metadata tables.
+- Codex reviews identified a weak exact-ID fixture, an over-broad SQLite table assertion, and missing PostgreSQL catalog coverage; a prefixed decoy proves target selection, targeted forbidden-table checks permit unrelated metadata tables, and equivalent SQLite/PostgreSQL schema regressions now enforce both documented database modes.

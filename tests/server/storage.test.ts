@@ -2,6 +2,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
+import postgres from "postgres";
 import { afterEach, describe, expect, test } from "vitest";
 import { acquireRuntimeLock } from "../../src/server/runtime-lock.js";
 import { PostgresStore } from "../../src/server/storage/postgres.js";
@@ -9,6 +10,20 @@ import { SqliteStore } from "../../src/server/storage/sqlite.js";
 import type { AppStore } from "../../src/server/storage/types.js";
 
 const cleanups: Array<() => Promise<void>> = [];
+const forbiddenConversationTables = new Set([
+  "conversations",
+  "conversation_messages",
+  "chat_messages",
+  "session_entries",
+  "session_jsonl",
+  "transcripts",
+]);
+
+function expectNoConversationMirror(tables: string[]): void {
+  expect(
+    tables.filter((table) => forbiddenConversationTables.has(table)),
+  ).toEqual([]);
+}
 
 afterEach(async () => {
   await Promise.all(cleanups.splice(0).map((cleanup) => cleanup()));
@@ -174,17 +189,7 @@ test("does not create a mirror for native conversation JSONL", async () => {
       "web_sessions",
     ]),
   );
-  const forbiddenMirrorTables = new Set([
-    "conversations",
-    "conversation_messages",
-    "chat_messages",
-    "session_entries",
-    "session_jsonl",
-    "transcripts",
-  ]);
-  expect(tables.filter((table) => forbiddenMirrorTables.has(table))).toEqual(
-    [],
-  );
+  expectNoConversationMirror(tables);
 });
 
 test("migrates an existing SQLite heartbeat table for run details", async () => {
@@ -231,6 +236,35 @@ describe.runIf(postgresUrl)("PostgreSQL store", () => {
       await store.close();
     });
     return store;
+  });
+
+  test("does not create a mirror for native conversation JSONL", async () => {
+    const store = new PostgresStore(postgresUrl as string);
+    const sql = postgres(postgresUrl as string, { max: 1 });
+    cleanups.push(async () => {
+      await store.resetForTests();
+      await store.close();
+      await sql.end({ timeout: 5 });
+    });
+    await store.migrate();
+
+    const rows = await sql<Array<{ table_name: string }>>`
+      SELECT table_name
+      FROM information_schema.tables
+      WHERE table_schema = current_schema() AND table_type = 'BASE TABLE'
+      ORDER BY table_name
+    `;
+    const tables = rows.map((row) => row.table_name);
+
+    expect(tables).toEqual(
+      expect.arrayContaining([
+        "app_owner",
+        "heartbeat_runs",
+        "schema_migrations",
+        "web_sessions",
+      ]),
+    );
+    expectNoConversationMirror(tables);
   });
 });
 
