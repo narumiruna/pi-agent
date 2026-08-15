@@ -64,7 +64,6 @@ export async function main(): Promise<void> {
     });
     app.use("/assets/*", serveStatic({ root: "./dist/public" }));
     const serveWebIndex = serveStatic({ path: "./dist/public/index.html" });
-    app.get("/", serveWebIndex);
     app.get("*", async (context, next) => {
       if (!shouldServeWebApp(context.req.path, context.req.header("accept")))
         return context.notFound();

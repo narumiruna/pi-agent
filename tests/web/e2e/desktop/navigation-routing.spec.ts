@@ -62,6 +62,10 @@ test("restores canonical destinations and safely recovers invalid routes", async
     headers: { accept: "application/json" },
   });
   expect(nonHtmlRoute.status()).toBe(404);
+  const nonHtmlRoot = await page.request.get("/", {
+    headers: { accept: "application/json" },
+  });
+  expect(nonHtmlRoot.status()).toBe(404);
 });
 
 test("preserves a direct valid destination through OIDC sign-in", async ({

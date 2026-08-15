@@ -33,6 +33,7 @@ describe("Web navigation fallback", () => {
   test("does not turn non-HTML requests into SPA responses", () => {
     expect(shouldServeWebApp("/files", undefined)).toBe(false);
     expect(shouldServeWebApp("/files", "application/json, */*")).toBe(false);
+    expect(shouldServeWebApp("/", "application/json, */*")).toBe(false);
     expect(shouldServeWebApp("/files", "text/html;q=0, application/json")).toBe(
       false,
     );

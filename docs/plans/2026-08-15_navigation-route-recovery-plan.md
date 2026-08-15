@@ -96,5 +96,5 @@ Mitigate with reserved-prefix and Accept-header tests, pure route parser tests, 
 - `npx playwright test`: all 22 setup, desktop, route-reload, OIDC-return, dirty-history, accessibility, and mobile tests passed.
 - Direct browser navigation exercises the production `main()` server, proving its HTML fallback rather than only a development-server fallback.
 - `docker build -t pi-agent:local .`: post-review production image built successfully as `sha256:07c112d8e1912cdb6aee93e3720b498e87a213791e845694f75999a9ee8cbe8a`.
-- Codex review identified duplicate history entries around dirty-file confirmation and loss of direct routes through OIDC; shared route definitions now validate a signed OIDC return path, and indexed history state restores then replays Back/Forward without adding entries.
+- Codex reviews identified duplicate history entries around dirty-file confirmation, loss of direct routes through OIDC, and a non-HTML root response that bypassed fallback negotiation; indexed history replays traversal without adding entries, signed shared routes preserve login destinations, and root now uses the same HTML-only handler.
 - Browser regressions cover cancel and confirm in both Back and Forward directions, verify preserved history indexes, and prove direct `/files` sign-in returns to `/files`.
