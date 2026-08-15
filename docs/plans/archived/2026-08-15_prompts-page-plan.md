@@ -63,7 +63,7 @@ Keep all writes on `ResourceService`, so atomic replacement, safe paths, existin
 - [x] Run focused tests, `npm run ci`, full E2E, PostgreSQL storage verification, and production Docker build; record exact results.
 - [x] Audit unchanged API/files, native reload reuse, no duplicate prompt UI/state, route history, errors, accessibility, responsive layout, and unrelated changes.
 - [x] Commit, push, and merge dedicated pull request [#45](https://github.com/narumiruna/pi-agent/pull/45) as `d818ae5` after required checks and a clean final review.
-- [x] After merge, check the matching Roadmap milestone and archive this plan through an administrative documentation pull request.
+- [x] After merge, check the matching Roadmap milestone and archive this plan through administrative documentation pull request [#46](https://github.com/narumiruna/pi-agent/pull/46).
 
 ## Completion Checklist
 
