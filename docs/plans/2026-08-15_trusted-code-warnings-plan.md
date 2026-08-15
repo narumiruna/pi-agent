@@ -57,7 +57,7 @@ Mitigate with one shared component, persistent placement, explicit full-permissi
 - [x] Update README trusted-code boundary documentation.
 - [x] Run focused tests, `npm run ci`, full local E2E, and the production Docker build; record exact results.
 - [x] Review the complete diff for missing surfaces, transient warning states, misleading sandbox claims, path or secret disclosure, native behavior changes, and unrelated edits.
-- [ ] Commit, push, and open one dedicated signed pull request linking this plan and Roadmap milestone.
+- [x] Commit, push, and open dedicated pull request [#26](https://github.com/narumiruna/pi-agent/pull/26) with a signed implementation commit linking this plan and Roadmap milestone.
 - [ ] Resolve every pull-request check and feedback item with regression coverage, then merge the clean pull request.
 - [ ] After merge, check the matching Roadmap milestone and archive this plan through an administrative documentation pull request.
 
