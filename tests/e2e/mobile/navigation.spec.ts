@@ -18,6 +18,9 @@ test("keeps navigation and model selection keyboard operable at 390px", async ({
   await menu.click();
   await page.getByRole("button", { name: "Settings" }).click();
   await expect(page.getByRole("heading", { name: "Settings" })).toBeVisible();
+  await expect(page.getByRole("note")).toContainText(
+    "Packages, skills, extensions, and MCP servers are trusted code",
+  );
 
   await page.getByRole("button", { name: "Change model" }).click();
   const radios = page.getByRole("radio");

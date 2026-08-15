@@ -50,8 +50,17 @@ test("persists system instructions and manages a prompt template", async ({
     0,
   );
 
+  await page.getByRole("tab", { name: "Pi packages" }).click();
+  const packagePanel = page.getByRole("tabpanel", { name: "Pi packages" });
+  await expect(packagePanel.getByRole("note")).toContainText(
+    "Packages, skills, extensions, and MCP servers are trusted code",
+  );
+
   await page.getByRole("tab", { name: "MCP servers" }).click();
   const mcpPanel = page.getByRole("tabpanel", { name: "MCP servers" });
+  await expect(mcpPanel.getByRole("note")).toContainText(
+    "container's permissions",
+  );
   const mcpEditor = mcpPanel.getByRole("textbox", { name: "MCP servers" });
   await expect(mcpEditor).toBeEnabled();
   await mcpEditor.fill('{\n  "mcpServers": {}\n}\n');
@@ -62,6 +71,7 @@ test("persists system instructions and manages a prompt template", async ({
   );
   await mcpPanel.getByRole("button", { name: "Save changes" }).click();
   expect((await mcpSaved).status()).toBe(200);
+  await expect(mcpPanel.getByRole("note")).toBeVisible();
   await expect(
     readFile(resolve(".local/e2e/runtime/agent/mcp.json"), "utf8"),
   ).resolves.toContain('"mcpServers"');

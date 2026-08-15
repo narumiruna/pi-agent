@@ -1028,7 +1028,6 @@ input:focus-visible,
   margin: 0 0 8px;
 }
 
-.riskNotice,
 .inlineNotice {
   padding: 13px 15px;
   border-left: 3px solid var(--amber-9, #b9862e);

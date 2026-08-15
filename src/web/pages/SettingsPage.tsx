@@ -16,6 +16,7 @@ import { ApiError, api, mutation } from "../api.js";
 import { DisconnectProviderDialog } from "../components/DisconnectProviderDialog.js";
 import { ModelAccessDialog } from "../components/ModelAccessDialog.js";
 import { ModelPickerDialog } from "../components/ModelPickerDialog.js";
+import { TrustedCodeWarning } from "../components/TrustedCodeWarning.js";
 import { setLanguage } from "../i18n.js";
 import type {
   ModelData,
@@ -364,6 +365,7 @@ export function SettingsPage({
             <Text as="p" size="2" color="gray">
               {t("projectTrustDescription")}
             </Text>
+            <TrustedCodeWarning />
             {projectTrust && (
               <>
                 <Callout.Root

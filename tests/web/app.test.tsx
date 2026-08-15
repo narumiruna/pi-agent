@@ -1045,6 +1045,10 @@ describe("web application", () => {
     expect(
       await screen.findByText(/project skills and extensions are not loaded/i),
     ).toBeVisible();
+    const trustedCodeWarning = screen.getByRole("note");
+    expect(trustedCodeWarning).toHaveTextContent(
+      /packages, skills, extensions, and MCP servers.*container's permissions/i,
+    );
     const enable = screen.getByRole("button", {
       name: /trust project resources/i,
     });
@@ -1058,6 +1062,7 @@ describe("web application", () => {
     expect(
       await screen.findByText(/project resources are trusted and reloaded/i),
     ).toBeVisible();
+    expect(trustedCodeWarning).toBeVisible();
 
     await user.click(
       screen.getByRole("button", { name: /disable project resources/i }),
