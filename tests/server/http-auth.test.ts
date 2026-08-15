@@ -57,7 +57,7 @@ const disabledConfig: AppConfig = {
   auth: { mode: "disabled" },
 };
 
-function apiServices(workspace: object) {
+function apiServices(workspace: object, piOverrides: object = {}) {
   return {
     pi: {
       activeSession: { model: undefined, thinkingLevel: "off" },
@@ -75,6 +75,7 @@ function apiServices(workspace: object) {
       providerAccess: async () => [],
       providerAuthTask: () => undefined,
       providerLoginPending: false,
+      ...piOverrides,
     },
     interactions: { replayPending: () => 0 },
     resources: {},
@@ -151,6 +152,30 @@ describe("HTTP authentication boundary", () => {
 
     expect(response.status).toBe(401);
     expect(listDirectory).not.toHaveBeenCalled();
+  });
+
+  test("protects project trust mutations before touching the service", async () => {
+    const setProjectTrust = vi.fn();
+    const app = createApp({
+      config: { ...disabledConfig, auth: { mode: "oidc" } as never },
+      store: new Store(),
+      services: apiServices(
+        {},
+        {
+          projectTrust: () => ({ required: true, trusted: false }),
+          setProjectTrust,
+        },
+      ),
+    });
+
+    const response = await app.request("/api/project-trust", {
+      method: "PUT",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ trusted: true, acknowledgeRisk: true }),
+    });
+
+    expect(response.status).toBe(401);
+    expect(setProjectTrust).not.toHaveBeenCalled();
   });
 
   test("rejects cross-origin workspace writes before touching the service", async () => {

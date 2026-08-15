@@ -14,6 +14,7 @@ function appWith(overrides: Partial<ApiServices> = {}) {
     activeSession: { model: undefined, thinkingLevel: "off" },
     modelRuntime: { getProviders: () => [] },
     models: () => [],
+    projectTrust: () => ({ required: false, trusted: true }),
     preferences: () => ({
       steeringMode: "all",
       followUpMode: "all",
@@ -456,6 +457,7 @@ describe("API contracts", () => {
     expect(body).toMatchObject({
       thinkingLevels: ["off", "minimal", "low", "medium", "high", "max"],
       authPending: false,
+      projectTrust: { required: false, trusted: true },
       providers: [
         {
           id: "anthropic",
@@ -633,6 +635,43 @@ describe("API contracts", () => {
     expect(replayText).toContain('data: {"status":"new"}');
     replayAbort.abort();
     await replayReader?.cancel();
+  });
+
+  test("requires risk acknowledgement before changing project trust", async () => {
+    const projectTrust = vi.fn(() => ({ required: true, trusted: false }));
+    const setProjectTrust = vi.fn(async (trusted: boolean) => ({
+      required: true,
+      trusted,
+    }));
+    const app = appWith({ pi: { projectTrust, setProjectTrust } as never });
+
+    const status = await app.request("/api/project-trust");
+    const enabled = await app.request("/api/project-trust", {
+      method: "PUT",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ trusted: true, acknowledgeRisk: true }),
+    });
+    const unacknowledged = await app.request("/api/project-trust", {
+      method: "PUT",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ trusted: true }),
+    });
+    const extraField = await app.request("/api/project-trust", {
+      method: "PUT",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        trusted: true,
+        acknowledgeRisk: true,
+        workspace: "/private/workspace",
+      }),
+    });
+
+    expect(await status.json()).toEqual({ required: true, trusted: false });
+    expect(await enabled.json()).toEqual({ required: true, trusted: true });
+    expect(unacknowledged.status).toBe(400);
+    expect(extraField.status).toBe(400);
+    expect(setProjectTrust).toHaveBeenCalledOnce();
+    expect(setProjectTrust).toHaveBeenCalledWith(true);
   });
 
   test("returns path-free native provenance for resource commands", async () => {

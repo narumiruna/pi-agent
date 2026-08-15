@@ -182,7 +182,7 @@ The server resolves the workspace to a canonical real path, walks each existing 
 
 Create and rename destinations require a canonical contained parent and a validated basename.
 
-Files skips symlinks, `.git`, `.hg`, `.svn`, `.local`, `.pi`, `.ssh`, `dist`, `node_modules`, credential-like files, and configured agent or application data directories.
+Files skips symlinks, `.agents`, `.git`, `.hg`, `.svn`, `.local`, `.pi`, `.ssh`, `dist`, `node_modules`, credential-like files, and configured agent or application data directories.
 
 Writes use temporary files and atomic replacement, and updates, renames, and deletes require an opaque revision so an external change produces a conflict instead of a silent overwrite.
 
@@ -240,6 +240,20 @@ Explicit owner-requested content such as transcripts, documents, redacted MCP co
 Resource metadata preserves Pi's native `scope` (`user`, `project`, or `temporary`) separately from `origin` (`top-level` or `package`).
 
 The Web renders those path-free fields directly and does not infer ownership from resource names or filesystem paths.
+
+Project-local Pi settings, skills, packages, and extensions remain disabled until Pi's native project trust is effective.
+
+Startup, every session rebuild, and every general resource reload first refresh native settings and then honor the nearest saved `trust.json` decision and the global non-interactive `defaultProjectTrust`; `ask`, `never`, and trust-store read failures remain untrusted.
+
+The Settings status reports the effective runtime state, so an external `trust.json` change appears only when one of those synchronized resource-discovery boundaries applies it, and loaded resources remain disableable after their source files are removed.
+
+The authenticated Settings page requires an executable-code acknowledgement before enabling project trust, waits for the agent to become idle, reloads chat and heartbeat through Pi, and persists the decision in Pi's native trust store.
+
+Disabling trust reloads and unloads project resources.
+
+The generic Files API excludes `.agents` and `.pi`, so it cannot bypass this resource boundary.
+
+Project trust controls input loading and is not a sandbox for Pi tools, extensions, packages, skills, or model output.
 
 ## Prompts, skills, and extensions
 

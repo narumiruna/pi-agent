@@ -1,5 +1,9 @@
+import { mkdir, rm, writeFile } from "node:fs/promises";
+import { join, resolve } from "node:path";
 import { expect, test } from "@playwright/test";
-import { mockOrigin } from "../support/test-helpers.js";
+import { appOrigin, mockOrigin } from "../support/test-helpers.js";
+
+const workspace = resolve(".local/e2e/runtime/workspace");
 
 interface ModelOption {
   id: string;
@@ -11,6 +15,60 @@ interface ModelData {
   current: ModelOption;
   models: ModelOption[];
 }
+
+test("enables and disables project resources only with acknowledged trust", async ({
+  page,
+}) => {
+  const extensionDirectory = join(workspace, ".pi", "extensions");
+  const skillDirectory = join(workspace, ".pi", "skills", "project-e2e");
+  await mkdir(extensionDirectory, { recursive: true });
+  await mkdir(skillDirectory, { recursive: true });
+  await writeFile(
+    join(extensionDirectory, "project-e2e.js"),
+    'export default function (pi) { pi.registerCommand("project-e2e", { handler() {} }); }\n',
+  );
+  await writeFile(
+    join(skillDirectory, "SKILL.md"),
+    "---\nname: project-e2e\ndescription: Project trust E2E skill\n---\nUse only after trust.\n",
+  );
+  const replacement = await page.request.post("/api/conversations", {
+    headers: { origin: appOrigin },
+  });
+  expect(replacement.status()).toBe(201);
+
+  await page.goto("/");
+  await page.getByRole("button", { name: "Settings" }).click();
+
+  const commandNames = async () => {
+    const response = await page.request.get("/api/commands");
+    const commands = (await response.json()) as { name: string }[];
+    return commands.map((command) => command.name);
+  };
+  expect(await commandNames()).not.toContain("project-e2e");
+  expect(await commandNames()).not.toContain("skill:project-e2e");
+
+  const enable = page.getByRole("button", { name: "Trust project resources" });
+  await expect(enable).toBeDisabled();
+  await page
+    .getByRole("checkbox", {
+      name: /extensions and packages can execute arbitrary code/i,
+    })
+    .check();
+  await enable.click();
+  await expect(
+    page.getByText("Project resources are trusted and reloaded."),
+  ).toBeVisible();
+  expect(await commandNames()).toContain("project-e2e");
+  expect(await commandNames()).toContain("skill:project-e2e");
+
+  await rm(join(workspace, ".pi"), { force: true, recursive: true });
+  await page.getByRole("button", { name: "Disable project resources" }).click();
+  await expect(
+    page.getByText("Project resources are disabled and reloaded."),
+  ).toBeVisible();
+  expect(await commandNames()).not.toContain("project-e2e");
+  expect(await commandNames()).not.toContain("skill:project-e2e");
+});
 
 test("cancels and applies a full-row model selection", async ({
   page,

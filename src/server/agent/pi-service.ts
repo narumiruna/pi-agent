@@ -29,6 +29,7 @@ import type {
   AgentStats,
   ConversationAgentState,
   QueueMode,
+  WebProjectTrust,
   WebResourceCommand,
 } from "../../shared/contracts.js";
 import {
@@ -46,6 +47,10 @@ import {
 import type { McpManager } from "../mcp/manager.js";
 import type { HeartbeatRunDetails } from "../storage/types.js";
 import type { EventHub } from "./events.js";
+import {
+  ProjectTrustPolicy,
+  withProjectTrustRollback,
+} from "./project-trust.js";
 import {
   heartbeatExecutionPrompt,
   heartbeatFileGuidance,
@@ -229,6 +234,7 @@ export class PiService {
     runtime: AgentSessionRuntime,
     private readonly heartbeatSession: AgentSession,
     private readonly interactions: InteractionBroker,
+    private readonly projectTrustPolicy: ProjectTrustPolicy,
   ) {
     this.modelRuntime = modelRuntime;
     this.settingsManager = settingsManager;
@@ -253,6 +259,13 @@ export class PiService {
       config.agentDir,
       { projectTrusted: false },
     );
+    const projectTrustPolicy = new ProjectTrustPolicy(
+      config.workspace,
+      config.agentDir,
+      settingsManager,
+    );
+    await projectTrustPolicy.refresh();
+    await settingsManager.reload();
     const heartbeatGuidance = heartbeatFileGuidance(config.agentDir);
     const modelRuntime = await ModelRuntime.create({
       authPath: join(config.agentDir, "auth.json"),
@@ -263,32 +276,44 @@ export class PiService {
       agentDir: config.agentDir,
       settingsManager,
     });
+    let heartbeatSession: AgentSession | undefined;
     const createRuntime: CreateAgentSessionRuntimeFactory = async ({
       cwd,
       sessionManager,
       sessionStartEvent,
-    }) => {
-      const services = await createAgentSessionServices({
-        cwd,
-        agentDir: config.agentDir,
+    }) =>
+      withProjectTrustRollback(
         settingsManager,
-        modelRuntime,
-        resourceLoaderOptions: {
-          appendSystemPrompt: [heartbeatGuidance],
-          ...(mcp ? { extensionFactories: [mcp.extension()] } : {}),
+        async () => {
+          await projectTrustPolicy.refresh();
         },
-      });
-      return {
-        ...(await createAgentSessionFromServices({
-          services,
-          sessionManager,
-          ...(sessionStartEvent ? { sessionStartEvent } : {}),
-          tools: config.agentTools,
-        })),
-        services,
-        diagnostics: services.diagnostics,
-      };
-    };
+        async (trustChanged) => {
+          if (trustChanged) await heartbeatSession?.reload();
+          const services = await createAgentSessionServices({
+            cwd,
+            agentDir: config.agentDir,
+            settingsManager,
+            modelRuntime,
+            resourceLoaderOptions: {
+              appendSystemPrompt: [heartbeatGuidance],
+              ...(mcp ? { extensionFactories: [mcp.extension()] } : {}),
+            },
+          });
+          return {
+            ...(await createAgentSessionFromServices({
+              services,
+              sessionManager,
+              ...(sessionStartEvent ? { sessionStartEvent } : {}),
+              tools: config.agentTools,
+            })),
+            services,
+            diagnostics: services.diagnostics,
+          };
+        },
+        async () => {
+          await heartbeatSession?.reload();
+        },
+      );
     const runtime = await createAgentSessionRuntime(createRuntime, {
       cwd: config.workspace,
       agentDir: config.agentDir,
@@ -301,7 +326,7 @@ export class PiService {
       modelRuntime,
       resourceLoaderOptions: { noExtensions: true },
     });
-    const { session: heartbeatSession } = await createAgentSessionFromServices({
+    const heartbeatRuntime = await createAgentSessionFromServices({
       services: heartbeatServices,
       sessionManager: SessionManager.continueRecent(
         config.workspace,
@@ -309,6 +334,7 @@ export class PiService {
       ),
       tools: config.agentTools,
     });
+    heartbeatSession = heartbeatRuntime.session;
     const service = new PiService(
       config,
       events,
@@ -318,6 +344,7 @@ export class PiService {
       runtime,
       heartbeatSession,
       interactions,
+      projectTrustPolicy,
     );
     await service.bindSession(runtime.session);
     return service;
@@ -449,8 +476,10 @@ export class PiService {
 
   async createConversation(): Promise<string> {
     await this.coordinator.waitForIdle();
-    await this.runtime.newSession();
-    return this.activeSessionId;
+    return this.coordinator.run("maintenance", async () => {
+      await this.runtime.newSession();
+      return this.activeSessionId;
+    });
   }
 
   async activateConversation(id: string): Promise<void> {
@@ -487,12 +516,14 @@ export class PiService {
   async switchConversation(id: string): Promise<void> {
     if (id === this.activeSessionId) return;
     await this.coordinator.waitForIdle();
-    const target = (await this.nativeSessions()).find(
-      (session) => session.id === id,
-    );
-    if (!target) throw new Error("Conversation not found");
-    await this.runtime.switchSession(target.path, {
-      cwdOverride: this.config.workspace,
+    await this.coordinator.run("maintenance", async () => {
+      const target = (await this.nativeSessions()).find(
+        (session) => session.id === id,
+      );
+      if (!target) throw new Error("Conversation not found");
+      await this.runtime.switchSession(target.path, {
+        cwdOverride: this.config.workspace,
+      });
     });
   }
 
@@ -1055,10 +1086,53 @@ export class PiService {
     await this.modelRuntime.logout(providerId);
   }
 
-  async reload(): Promise<void> {
-    await this.coordinator.waitForIdle();
+  private async reloadSessions(): Promise<void> {
     await this.runtime.session.reload();
     await this.heartbeatSession.reload();
+  }
+
+  async reload(): Promise<void> {
+    await this.coordinator.waitForIdle();
+    await this.coordinator.run("maintenance", () =>
+      withProjectTrustRollback(
+        this.settingsManager,
+        async () => {
+          await this.projectTrustPolicy.refresh();
+        },
+        () => this.reloadSessions(),
+        () => this.reloadSessions(),
+      ),
+    );
+  }
+
+  projectTrust(): WebProjectTrust {
+    return this.projectTrustPolicy.status();
+  }
+
+  async setProjectTrust(trusted: boolean): Promise<WebProjectTrust> {
+    await this.coordinator.waitForIdle();
+    return this.coordinator.run("maintenance", async () => {
+      const state = this.projectTrustPolicy.status();
+      const previous = state.trusted;
+      const runtimeTrusted = this.settingsManager.isProjectTrusted();
+      if (!state.required)
+        throw new Error("Project has no trust-gated resources");
+      if (previous === trusted && runtimeTrusted === trusted) {
+        this.projectTrustPolicy.persist(trusted);
+        return this.projectTrustPolicy.status();
+      }
+
+      this.settingsManager.setProjectTrusted(trusted);
+      try {
+        await this.reloadSessions();
+        this.projectTrustPolicy.persist(trusted);
+        return this.projectTrustPolicy.status();
+      } catch (error) {
+        this.settingsManager.setProjectTrusted(previous);
+        await this.reloadSessions().catch(() => undefined);
+        throw error;
+      }
+    });
   }
 
   models(): readonly Model<Api>[] {

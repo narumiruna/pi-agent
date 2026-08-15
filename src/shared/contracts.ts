@@ -108,6 +108,11 @@ export interface WebPackageSummary {
   provenance: WebResourceProvenance;
 }
 
+export interface WebProjectTrust {
+  required: boolean;
+  trusted: boolean;
+}
+
 export interface WebMcpDiagnostic {
   server: string;
   level: "error" | "warning";

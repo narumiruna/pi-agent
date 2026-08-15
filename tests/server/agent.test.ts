@@ -303,6 +303,214 @@ describe("Pi resource provenance", () => {
   });
 });
 
+describe("Pi project trust", () => {
+  function trustService(
+    options: {
+      coordinator?: RunCoordinator;
+      persistError?: Error;
+      reloadError?: Error;
+    } = {},
+  ) {
+    let trusted = false;
+    const waitForIdle = vi.fn(async () => undefined);
+    const run = vi.fn(async (_kind: string, task: () => Promise<unknown>) =>
+      task(),
+    );
+    const chatReload = options.reloadError
+      ? vi
+          .fn<() => Promise<void>>()
+          .mockRejectedValueOnce(options.reloadError)
+          .mockResolvedValue(undefined)
+      : vi.fn(async () => undefined);
+    const heartbeatReload = vi.fn(async () => undefined);
+    const setProjectTrusted = vi.fn((value: boolean) => {
+      trusted = value;
+    });
+    const persist = options.persistError
+      ? vi.fn(() => {
+          throw options.persistError;
+        })
+      : vi.fn();
+    const service = Object.create(PiService.prototype) as PiService;
+    Object.defineProperties(service, {
+      coordinator: {
+        value: options.coordinator ?? { waitForIdle, run },
+      },
+      settingsManager: {
+        value: {
+          isProjectTrusted: () => trusted,
+          setProjectTrusted,
+        },
+      },
+      runtime: { value: { session: { reload: chatReload } } },
+      heartbeatSession: { value: { reload: heartbeatReload } },
+      projectTrustPolicy: {
+        value: {
+          status: () => ({ required: true, trusted }),
+          persist,
+        },
+      },
+    });
+    return {
+      service,
+      waitForIdle,
+      run,
+      chatReload,
+      heartbeatReload,
+      setProjectTrusted,
+      persist,
+      trusted: () => trusted,
+    };
+  }
+
+  test("re-resolves native trust before every general resource reload", async () => {
+    const waitForIdle = vi.fn(async () => undefined);
+    const run = vi.fn(async (_kind: string, task: () => Promise<unknown>) =>
+      task(),
+    );
+    let trusted = true;
+    const setProjectTrusted = vi.fn((value: boolean) => {
+      trusted = value;
+    });
+    const refresh = vi.fn(async () => {
+      setProjectTrusted(false);
+      return { required: true, trusted: false };
+    });
+    const chatReload = vi.fn(async () => undefined);
+    const heartbeatReload = vi.fn(async () => undefined);
+    const service = Object.create(PiService.prototype) as PiService;
+    Object.defineProperties(service, {
+      coordinator: { value: { waitForIdle, run } },
+      settingsManager: {
+        value: { isProjectTrusted: () => trusted, setProjectTrusted },
+      },
+      projectTrustPolicy: { value: { refresh } },
+      runtime: { value: { session: { reload: chatReload } } },
+      heartbeatSession: { value: { reload: heartbeatReload } },
+    });
+
+    await service.reload();
+
+    expect(waitForIdle).toHaveBeenCalledOnce();
+    expect(run).toHaveBeenCalledWith("maintenance", expect.any(Function));
+    expect(refresh).toHaveBeenCalledOnce();
+    expect(refresh.mock.invocationCallOrder[0]).toBeLessThan(
+      chatReload.mock.invocationCallOrder[0] ?? 0,
+    );
+    expect(chatReload).toHaveBeenCalledOnce();
+    expect(heartbeatReload).toHaveBeenCalledOnce();
+    expect(trusted).toBe(false);
+  });
+
+  test("restores runtime trust when a general reload fails", async () => {
+    let trusted = true;
+    const setProjectTrusted = vi.fn((value: boolean) => {
+      trusted = value;
+    });
+    const chatReload = vi.fn(async () => undefined);
+    const heartbeatReload = vi
+      .fn<() => Promise<void>>()
+      .mockRejectedValueOnce(new Error("heartbeat reload failed"))
+      .mockResolvedValue(undefined);
+    const service = Object.create(PiService.prototype) as PiService;
+    Object.defineProperties(service, {
+      coordinator: { value: new RunCoordinator() },
+      settingsManager: {
+        value: { isProjectTrusted: () => trusted, setProjectTrusted },
+      },
+      projectTrustPolicy: {
+        value: {
+          refresh: async () => {
+            setProjectTrusted(false);
+          },
+        },
+      },
+      runtime: { value: { session: { reload: chatReload } } },
+      heartbeatSession: { value: { reload: heartbeatReload } },
+    });
+
+    await expect(service.reload()).rejects.toThrow("heartbeat reload failed");
+
+    expect(setProjectTrusted).toHaveBeenNthCalledWith(1, false);
+    expect(setProjectTrusted).toHaveBeenNthCalledWith(2, true);
+    expect(chatReload).toHaveBeenCalledTimes(2);
+    expect(heartbeatReload).toHaveBeenCalledTimes(2);
+    expect(trusted).toBe(true);
+  });
+
+  test("holds a maintenance lease after waiting for an active run", async () => {
+    const coordinator = new RunCoordinator();
+    let releaseRun: (() => void) | undefined;
+    const activeRun = coordinator.run(
+      "chat",
+      () =>
+        new Promise<void>((resolve) => {
+          releaseRun = resolve;
+        }),
+    );
+    const state = trustService({ coordinator });
+
+    const change = state.service.setProjectTrust(true);
+    await vi.waitFor(() => expect(releaseRun).toBeDefined());
+    await Promise.resolve();
+    expect(state.setProjectTrusted).not.toHaveBeenCalled();
+    releaseRun?.();
+    await activeRun;
+    await change;
+
+    expect(state.setProjectTrusted).toHaveBeenCalledWith(true);
+    expect(coordinator.isIdle).toBe(true);
+  });
+
+  test("waits for idle, reloads both sessions, and then persists trust", async () => {
+    const state = trustService();
+
+    await expect(state.service.setProjectTrust(true)).resolves.toEqual({
+      required: true,
+      trusted: true,
+    });
+
+    expect(state.waitForIdle).toHaveBeenCalledOnce();
+    expect(state.run).toHaveBeenCalledWith("maintenance", expect.any(Function));
+    expect(state.setProjectTrusted).toHaveBeenCalledWith(true);
+    expect(state.chatReload).toHaveBeenCalledOnce();
+    expect(state.heartbeatReload).toHaveBeenCalledOnce();
+    expect(state.persist).toHaveBeenCalledWith(true);
+    expect(state.persist.mock.invocationCallOrder[0]).toBeGreaterThan(
+      state.heartbeatReload.mock.invocationCallOrder[0] ?? 0,
+    );
+  });
+
+  test("restores untrusted runtime state when reload fails", async () => {
+    const state = trustService({ reloadError: new Error("reload failed") });
+
+    await expect(state.service.setProjectTrust(true)).rejects.toThrow(
+      "reload failed",
+    );
+
+    expect(state.setProjectTrusted).toHaveBeenNthCalledWith(1, true);
+    expect(state.setProjectTrusted).toHaveBeenNthCalledWith(2, false);
+    expect(state.persist).not.toHaveBeenCalled();
+    expect(state.chatReload).toHaveBeenCalledTimes(2);
+    expect(state.heartbeatReload).toHaveBeenCalledOnce();
+    expect(state.trusted()).toBe(false);
+  });
+
+  test("restores untrusted runtime state when persistence fails", async () => {
+    const state = trustService({ persistError: new Error("store failed") });
+
+    await expect(state.service.setProjectTrust(true)).rejects.toThrow(
+      "store failed",
+    );
+
+    expect(state.setProjectTrusted).toHaveBeenNthCalledWith(1, true);
+    expect(state.setProjectTrusted).toHaveBeenNthCalledWith(2, false);
+    expect(state.chatReload).toHaveBeenCalledTimes(2);
+    expect(state.heartbeatReload).toHaveBeenCalledTimes(2);
+    expect(state.trusted()).toBe(false);
+  });
+});
+
 describe("conversation listing", () => {
   test("includes the active in-memory conversation before Pi persists it", async () => {
     const service = Object.create(PiService.prototype) as PiService;

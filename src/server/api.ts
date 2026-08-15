@@ -138,6 +138,13 @@ const PackageTargetBody = Type.Object(
   },
   { additionalProperties: false },
 );
+const ProjectTrustBody = Type.Object(
+  {
+    trusted: Type.Boolean(),
+    acknowledgeRisk: Type.Literal(true),
+  },
+  { additionalProperties: false },
+);
 const McpBody = Type.Object({
   mcpServers: Type.Record(Type.String(), Type.Unknown()),
 });
@@ -571,6 +578,7 @@ export function registerApi<E extends ApiEnv>(
         ? getSupportedThinkingLevels(activeModel)
         : ["off"],
       authPending: services.pi.providerLoginPending,
+      projectTrust: services.pi.projectTrust(),
       agent: services.pi.preferences(),
       models: services.pi.models().map((model) => ({
         id: model.id,
@@ -663,6 +671,22 @@ export function registerApi<E extends ApiEnv>(
       return errorResponse(context, error);
     }
   });
+  app.get("/api/project-trust", (context) =>
+    context.json(services.pi.projectTrust()),
+  );
+  app.put(
+    "/api/project-trust",
+    tbValidator("json", ProjectTrustBody),
+    async (context) => {
+      try {
+        return context.json(
+          await services.pi.setProjectTrust(context.req.valid("json").trusted),
+        );
+      } catch (error) {
+        return errorResponse(context, error);
+      }
+    },
+  );
   app.get("/api/commands", (context) => context.json(services.pi.commands()));
   app.get("/api/workspace/files", async (context) => {
     const query = context.req.query("q") ?? "";
