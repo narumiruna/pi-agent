@@ -52,7 +52,7 @@ Mitigate with an explicit operation matrix, temporary real directories, a symlin
 - [x] Update the workspace security documentation to name the canonicalization and symlink boundary without expanding its guarantee; README retains the trusted-local-process race warning.
 - [x] Run focused server/API tests, `npm run ci`, and local E2E; 49 focused tests passed, CI passed 261 tests with 5 intentional skips and both builds, and all 17 SQLite browser tests passed after correcting the formatting failure reported by the first CI attempt.
 - [x] Review the complete diff for uncovered workspace operations, path alias acceptance, outside mutation, content changes, platform assumptions, and unrelated changes; the matrix matches all six service methods plus search, existing alias tests remain, outside bytes and absence are asserted, only tests/docs changed, and `git diff --check` passed.
-- [ ] Commit, push, and open one dedicated signed pull request linking this plan and Roadmap milestone.
+- [x] Commit, push, and open one dedicated signed pull request linking this plan and Roadmap milestone; signed implementation commit `c5842f1` is on `narumiruna/test/workspace-path-boundary` in PR [#20](https://github.com/narumiruna/pi-agent/pull/20).
 - [ ] Read all pull-request checks and feedback, fix every actionable item with regression coverage, and merge the clean pull request.
 - [ ] After merge, check the matching Roadmap milestone and archive this plan through an administrative documentation pull request.
 
