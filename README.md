@@ -168,6 +168,8 @@ The interface honors `prefers-reduced-motion` by suppressing animation and trans
 
 Current destinations use canonical paths at `/chats`, `/files`, `/heartbeat`, `/library`, and `/settings`.
 
+The Chats destination retains the Pi-backed conversation list, active selection, and New conversation action.
+
 Direct loads, reloads, Back, and Forward restore those pages, while root, unknown, malformed, and not-yet-enabled routes replace safely to `/chats`.
 
 A validated current path is carried through signed OIDC state so direct bookmarks survive sign-in without enabling open redirects.

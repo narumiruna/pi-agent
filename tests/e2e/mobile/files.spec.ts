@@ -31,14 +31,14 @@ test("keeps Files browsing and dirty navigation usable at 390px", async ({
   await expectNoSeriousAccessibilityViolations(page);
 
   await menu.click();
-  await page.getByRole("button", { name: "Chat" }).click();
+  await page.getByRole("button", { name: "Chats" }).click();
   await expect(page.getByText("Discard unsaved changes?")).toBeVisible();
   await page.getByRole("button", { name: "Cancel" }).click();
   await expect(page.getByRole("heading", { name: "Files" })).toBeVisible();
   await expect(editor).toHaveValue(/unsaved mobile change/);
 
   await menu.click();
-  await page.getByRole("button", { name: "Chat" }).click();
+  await page.getByRole("button", { name: "Chats" }).click();
   await page.getByRole("button", { name: "Discard changes" }).click();
-  await expect(page.getByRole("region", { name: "Chat" })).toBeVisible();
+  await expect(page.getByRole("region", { name: "Chats" })).toBeVisible();
 });

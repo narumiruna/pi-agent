@@ -38,8 +38,8 @@ test("keeps navigation and model selection keyboard operable at 390px", async ({
   await page.getByRole("button", { name: "Use this model" }).click();
 
   await menu.click();
-  await page.getByRole("button", { name: "Chat" }).click();
-  await expect(page.getByRole("region", { name: "Chat" })).toBeVisible();
+  await page.getByRole("button", { name: "Chats" }).click();
+  await expect(page.getByRole("region", { name: "Chats" })).toBeVisible();
   const template = await page.request.put("/api/templates/mobile-command", {
     data: { content: "A mobile command" },
     headers: { origin: appOrigin },

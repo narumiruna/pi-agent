@@ -144,9 +144,11 @@ describe("web application", () => {
 
   test("switches between English and Traditional Chinese without a reload", async () => {
     await setLanguage("en");
+    expect(i18n.t("chat")).toBe("Chats");
     expect(i18n.t("newConversation")).toBe("New conversation");
 
     await setLanguage("zh-TW");
+    expect(i18n.t("chat")).toBe("對話");
     expect(i18n.t("newConversation")).toBe("新增對話");
     expect(window.localStorage.getItem("pi-agent-language")).toBe("zh-TW");
   });
@@ -247,14 +249,14 @@ describe("web application", () => {
     await user.click(screen.getByRole("button", { name: "Cancel" }));
     expect(screen.getByRole("heading", { name: "Files" })).toBeVisible();
 
-    await user.click(screen.getByRole("button", { name: "Chat" }));
+    await user.click(screen.getByRole("button", { name: "Chats" }));
     expect(screen.getByText("Discard unsaved changes?")).toBeVisible();
     await user.click(screen.getByRole("button", { name: "Cancel" }));
     expect(screen.getByRole("heading", { name: "Files" })).toBeVisible();
 
-    await user.click(screen.getByRole("button", { name: "Chat" }));
+    await user.click(screen.getByRole("button", { name: "Chats" }));
     await user.click(screen.getByRole("button", { name: "Discard changes" }));
-    expect(await screen.findByRole("region", { name: "Chat" })).toBeVisible();
+    expect(await screen.findByRole("region", { name: "Chats" })).toBeVisible();
     expect(window.location.pathname).toBe("/chats");
   });
 

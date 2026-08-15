@@ -54,7 +54,7 @@ describe("Navigation accessibility", () => {
     expect(files.tagName).toBe("BUTTON");
     expect(files).toHaveAttribute("aria-current", "page");
     expect(
-      within(navigation).getByRole("button", { name: "Chat" }),
+      within(navigation).getByRole("button", { name: "Chats" }),
     ).not.toHaveAttribute("aria-current");
 
     files.focus();

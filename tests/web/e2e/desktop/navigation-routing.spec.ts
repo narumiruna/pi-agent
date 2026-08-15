@@ -8,7 +8,7 @@ import {
 function destinationContent(page: PlaywrightPage, destination: Page) {
   switch (destination) {
     case "chats":
-      return page.getByRole("region", { name: "Chat" });
+      return page.getByRole("region", { name: "Chats" });
     case "files":
       return page.getByRole("heading", { name: "Files" });
     case "heartbeat":

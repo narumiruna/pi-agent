@@ -17,8 +17,8 @@ test("keyboard-operates every drawer destination with visible focus and reduced 
   const destinations = [
     {
       page: "chats",
-      label: "Chat",
-      content: () => page.getByRole("region", { name: "Chat" }),
+      label: "Chats",
+      content: () => page.getByRole("region", { name: "Chats" }),
     },
     {
       page: "files",

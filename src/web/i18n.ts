@@ -5,7 +5,7 @@ const resources = {
   en: {
     translation: {
       appName: "Pi Agent",
-      chat: "Chat",
+      chat: "Chats",
       files: "Files",
       filesDescription: "Browse and edit safe files inside this workspace.",
       filesWorkspace: "Workspace",
