@@ -536,6 +536,242 @@ input:focus-visible,
   gap: 24px;
 }
 
+.filesPage {
+  width: min(100% - 40px, 1180px);
+  margin-inline: auto;
+  padding: 62px 0 80px;
+  display: grid;
+  gap: 18px;
+}
+
+.filesHeader,
+.filesEditorHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 20px;
+}
+
+.filesHeader p,
+.filesEditorHeader p,
+.fileNameDialog p,
+.confirmDialog p {
+  margin: 4px 0 0;
+}
+
+.filesSearch {
+  position: relative;
+  z-index: 4;
+}
+
+.filesSearchResults {
+  position: absolute;
+  top: calc(100% + 5px);
+  right: 0;
+  left: 0;
+  max-height: min(360px, 55vh);
+  padding: 5px;
+  overflow: auto;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: var(--surface);
+  box-shadow: 0 14px 36px rgb(0 0 0 / 16%);
+}
+
+.filesSearchResults button,
+.filesEntries button {
+  width: 100%;
+  min-width: 0;
+  border: 0;
+  color: var(--ink);
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+}
+
+.filesSearchResults button {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 9px;
+  padding: 9px 10px;
+  border-radius: 5px;
+}
+
+.filesSearchResults button:hover,
+.filesSearchResults button:focus-visible,
+.filesEntries button:hover,
+.filesEntries button:focus-visible,
+.filesEntries button.selected {
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+}
+
+.filesSearchResults button:disabled,
+.filesEntries button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.filesSearchResults span,
+.filesEntries span,
+.filesEditorHeader > div {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.filesSearchResults small,
+.filesEntries small {
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.filesSearchState {
+  min-height: 52px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  color: var(--muted);
+}
+
+.filesBreadcrumbs {
+  min-width: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.filesBreadcrumbs span {
+  min-width: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.filesBreadcrumbs button {
+  max-width: 260px;
+  padding: 3px 5px;
+  overflow: hidden;
+  border: 0;
+  border-radius: 4px;
+  color: var(--accent);
+  background: transparent;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.filesBreadcrumbs button:disabled {
+  color: var(--muted);
+  cursor: default;
+}
+
+.filesLayout {
+  min-height: 560px;
+  display: grid;
+  grid-template-columns: minmax(220px, 0.34fr) minmax(0, 1fr);
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  overflow: hidden;
+  background: var(--surface);
+}
+
+.filesBrowser,
+.filesEditor {
+  min-width: 0;
+  min-height: 0;
+}
+
+.filesBrowser {
+  border-right: 1px solid var(--line);
+  background: color-mix(in srgb, var(--canvas) 70%, var(--surface));
+}
+
+.filesEditor {
+  padding: 20px;
+  display: grid;
+  align-content: start;
+  gap: 16px;
+}
+
+.filesEntries {
+  max-height: 620px;
+  margin: 0;
+  padding: 5px;
+  overflow: auto;
+  list-style: none;
+}
+
+.filesEntries button {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 9px;
+  min-height: 39px;
+  padding: 8px 9px;
+  border-radius: 5px;
+}
+
+.filesPaneState,
+.filesUnsupported {
+  min-height: 220px;
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  color: var(--muted);
+  text-align: center;
+}
+
+.filesTextEditor textarea {
+  min-height: 430px;
+  resize: vertical;
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
+  line-height: 1.5;
+}
+
+.filesNotice {
+  margin: 10px;
+  padding: 10px 12px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  border-left: 3px solid var(--amber-9, #b9862e);
+  background: color-mix(in srgb, var(--amber-9, #b9862e) 10%, transparent);
+  overflow-wrap: anywhere;
+  font-size: 13px;
+}
+
+.filesEditor > .filesNotice {
+  margin: 0;
+}
+
+.filesNotice.error {
+  border-color: var(--danger);
+  background: color-mix(in srgb, var(--danger) 10%, transparent);
+}
+
+.filesNotice.success {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+}
+
+.fileNameDialog form {
+  padding-top: 18px;
+  display: grid;
+  gap: 18px;
+}
+
+.dialogActions {
+  padding-top: 20px;
+}
+
 .tabContent,
 .editorBlock {
   padding-top: 24px;
@@ -1187,6 +1423,55 @@ input:focus-visible,
   .composer,
   .pageColumn {
     width: min(100% - 24px, 820px);
+  }
+
+  .filesPage {
+    width: min(100% - 24px, 820px);
+    padding-top: 66px;
+  }
+
+  .filesHeader,
+  .filesEditorHeader {
+    flex-direction: column;
+  }
+
+  .filesHeader > button,
+  .filesEditorHeader > .rt-Flex {
+    width: 100%;
+  }
+
+  .filesEditorHeader > .rt-Flex > * {
+    flex: 1 1 auto;
+  }
+
+  .filesSearchResults button,
+  .filesEntries button {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  .filesSearchResults small,
+  .filesEntries small {
+    grid-column: 2;
+  }
+
+  .filesLayout {
+    min-height: 0;
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .filesBrowser {
+    max-height: 340px;
+    overflow: auto;
+    border-right: 0;
+    border-bottom: 1px solid var(--line);
+  }
+
+  .filesEditor {
+    padding: 14px;
+  }
+
+  .filesTextEditor textarea {
+    min-height: 340px;
   }
 
   .messageColumn {

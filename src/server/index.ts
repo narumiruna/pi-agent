@@ -13,6 +13,7 @@ import { McpManager } from "./mcp/manager.js";
 import { ResourceService } from "./resources/service.js";
 import { acquireRuntimeLock } from "./runtime-lock.js";
 import { createStore } from "./storage/index.js";
+import { WorkspaceService } from "./workspace/service.js";
 
 export async function main(): Promise<void> {
   const config = parseConfig();
@@ -38,6 +39,10 @@ export async function main(): Promise<void> {
       pi.packageManager,
       () => pi?.reload() ?? Promise.resolve(),
     );
+    const workspace = new WorkspaceService(config.workspace, [
+      config.agentDir,
+      config.dataDir,
+    ]);
     heartbeat = new HeartbeatScheduler({
       load: () => loadHeartbeat(join(config.agentDir, "HEARTBEAT.md")),
       coordinator: pi.coordinator,
@@ -54,7 +59,7 @@ export async function main(): Promise<void> {
       config,
       store,
       ready: () => ready,
-      services: { pi, interactions, resources, mcp, heartbeat },
+      services: { pi, interactions, resources, workspace, mcp, heartbeat },
     });
     app.use("/assets/*", serveStatic({ root: "./dist/public" }));
     app.get("/", serveStatic({ path: "./dist/public/index.html" }));

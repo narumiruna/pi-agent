@@ -158,11 +158,31 @@ Back up `/app/.pi/agent` and PostgreSQL at a consistent maintenance point for Po
 
 ## Workspace and tools
 
-`/workspace` is the fixed working directory for Pi tools.
+`/workspace` is the fixed working directory for Pi tools and the Files page.
 
-The chat composer offers slash-command completion and bounded `@file` search inside this directory.
+The Files page browses directories lazily and can preview, create, edit, rename, download, and delete regular files.
 
-Workspace search returns relative paths, skips symlinks, secret-like files, VCS metadata, `node_modules`, and private agent directories, and never returns host absolute paths.
+Text preview and editing are limited to valid UTF-8 files of 1 MB or less.
+
+Binary and larger files expose metadata and a download action, while downloads are streamed and limited to 100 MB.
+
+All Files APIs accept and return slash-separated workspace-relative paths and never return host absolute paths.
+
+Files skips symlinks, `.git`, `.hg`, `.svn`, `.local`, `.pi`, `.ssh`, `dist`, `node_modules`, credential-like files, and configured agent or application data directories.
+
+Writes use temporary files and atomic replacement, and updates, renames, and deletes require an opaque revision so an external change produces a conflict instead of a silent overwrite.
+
+Create and rename never replace an existing destination.
+
+Rename and delete are destructive, so keep workspace files in Git or an external backup when recovery matters.
+
+A trusted local process can still race filesystem checks, so Pi tools, extensions, packages, and other processes with workspace access remain part of the existing trusted-code boundary.
+
+The chat composer offers slash-command completion and bounded `@file` search inside this directory using the same visibility policy as Files.
+
+The authenticated owner can edit through Files even when Pi's `write` tool is disabled because `AGENT_TOOLS` controls model-generated tool calls, not owner UI actions.
+
+Filesystem permissions remain authoritative, so use a read-only mount to make Files preview-only.
 
 `AGENT_TOOLS` defaults to `read,grep,find,ls,write`, so Pi can create or completely rewrite files in container-writable locations.
 

@@ -6,6 +6,7 @@ import {
   type ApiServices,
   registerApi,
 } from "../../src/server/api.js";
+import { WorkspaceError } from "../../src/server/workspace/errors.js";
 
 function appWith(overrides: Partial<ApiServices> = {}) {
   const app = new Hono<ApiEnv>();
@@ -36,6 +37,7 @@ function appWith(overrides: Partial<ApiServices> = {}) {
     store: { listHeartbeatRuns: async () => [] },
     interactions: { replayPending: () => 0 },
     resources: {},
+    workspace: {},
     mcp: { diagnostics: () => [] },
     heartbeat: {},
     ...overrides,
@@ -631,6 +633,209 @@ describe("API contracts", () => {
     expect(replayText).toContain('data: {"status":"new"}');
     replayAbort.abort();
     await replayReader?.cancel();
+  });
+
+  test("lists and inspects workspace files through relative contracts", async () => {
+    const listDirectory = vi.fn(async () => ({
+      path: "src",
+      entries: [
+        {
+          path: "src/index.ts",
+          name: "index.ts",
+          kind: "file",
+          modifiedAt: 1,
+          size: 2,
+        },
+      ],
+      truncated: false,
+      writable: true,
+    }));
+    const inspectFile = vi.fn(async () => ({
+      path: "src/index.ts",
+      name: "index.ts",
+      kind: "file",
+      modifiedAt: 1,
+      size: 2,
+      revision: "revision",
+      editable: true,
+      writable: true,
+      content: "ok",
+    }));
+    const app = appWith({
+      workspace: { listDirectory, inspectFile } as never,
+    });
+
+    const listing = await app.request("/api/workspace/entries?path=src");
+    const file = await app.request("/api/workspace/file?path=src%2Findex.ts");
+
+    expect(listing.status).toBe(200);
+    expect(file.status).toBe(200);
+    expect(listDirectory).toHaveBeenCalledWith("src", expect.any(AbortSignal));
+    expect(inspectFile).toHaveBeenCalledWith(
+      "src/index.ts",
+      expect.any(AbortSignal),
+    );
+    expect(await file.text()).not.toContain("/tmp/");
+  });
+
+  test("validates workspace queries and mutation bodies", async () => {
+    const writeFile = vi.fn(async () => ({ path: "file.txt" }));
+    const renameFile = vi.fn(async () => ({ path: "renamed.txt" }));
+    const deleteFile = vi.fn(async () => undefined);
+    const app = appWith({
+      workspace: { writeFile, renameFile, deleteFile } as never,
+    });
+
+    const missingPath = await app.request("/api/workspace/file");
+    const extraQuery = await app.request(
+      "/api/workspace/entries?path=src&absolute=/tmp/private",
+    );
+    const invalidLimit = await app.request(
+      "/api/workspace/files?q=file&limit=invalid",
+    );
+    const oversizedPath = await app.request(
+      `/api/workspace/entries?path=${"x".repeat(1_025)}`,
+    );
+    const invalidRevision = await app.request("/api/workspace/file", {
+      method: "PUT",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        path: "file.txt",
+        content: "ok",
+        revision: "",
+      }),
+    });
+    const unknownField = await app.request("/api/workspace/file", {
+      method: "PUT",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        path: "file.txt",
+        content: "ok",
+        absolute: "/tmp/private",
+      }),
+    });
+    const create = await app.request("/api/workspace/file", {
+      method: "PUT",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ path: "file.txt", content: "ok" }),
+    });
+    const update = await app.request("/api/workspace/file", {
+      method: "PUT",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        path: "file.txt",
+        content: "updated",
+        revision: "revision",
+      }),
+    });
+    const rename = await app.request("/api/workspace/file", {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        path: "file.txt",
+        name: "renamed.txt",
+        revision: "revision",
+      }),
+    });
+    const deleted = await app.request("/api/workspace/file", {
+      method: "DELETE",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ path: "renamed.txt", revision: "revision-2" }),
+    });
+
+    expect(missingPath.status).toBe(400);
+    expect(extraQuery.status).toBe(400);
+    expect(invalidLimit.status).toBe(400);
+    expect(oversizedPath.status).toBe(400);
+    expect(invalidRevision.status).toBe(400);
+    expect(unknownField.status).toBe(400);
+    expect(create.status).toBe(201);
+    expect(update.status).toBe(200);
+    expect(rename.status).toBe(200);
+    expect(deleted.status).toBe(204);
+    expect(writeFile).toHaveBeenNthCalledWith(1, {
+      path: "file.txt",
+      content: "ok",
+    });
+    expect(writeFile).toHaveBeenNthCalledWith(2, {
+      path: "file.txt",
+      content: "updated",
+      revision: "revision",
+    });
+    expect(renameFile).toHaveBeenCalledWith({
+      path: "file.txt",
+      name: "renamed.txt",
+      revision: "revision",
+    });
+    expect(deleteFile).toHaveBeenCalledWith({
+      path: "renamed.txt",
+      revision: "revision-2",
+    });
+  });
+
+  test.each([
+    [400, "invalid_path", 400, "bad_request"],
+    [403, "read_only", 403, "forbidden"],
+    [404, "not_found", 404, "not_found"],
+    [409, "stale", 409, "conflict"],
+    [413, "too_large", 413, "bad_request"],
+    [415, "binary", 415, "bad_request"],
+  ] as const)(
+    "maps workspace failure %s/%s without filesystem details",
+    async (serviceStatus, reason, responseStatus, code) => {
+      const app = appWith({
+        workspace: {
+          inspectFile: vi.fn(async () => {
+            throw new WorkspaceError(serviceStatus, reason);
+          }),
+        } as never,
+      });
+
+      const response = await app.request(
+        "/api/workspace/file?path=private.txt",
+      );
+      const body = await response.text();
+
+      expect(response.status).toBe(responseStatus);
+      expect(JSON.parse(body)).toEqual({
+        error: { code, params: { reason } },
+      });
+      expect(body).not.toContain("/tmp/");
+    },
+  );
+
+  test("streams workspace downloads with injection-safe attachment headers", async () => {
+    const bytes = new TextEncoder().encode("download");
+    const app = appWith({
+      workspace: {
+        downloadFile: vi.fn(async () => ({
+          name: 'quo"te\n繁體.txt',
+          size: bytes.length,
+          stream: new ReadableStream({
+            start(controller) {
+              controller.enqueue(bytes);
+              controller.close();
+            },
+          }),
+        })),
+      } as never,
+    });
+
+    const response = await app.request(
+      "/api/workspace/download?path=nested%2Ffile.txt",
+    );
+    const disposition = response.headers.get("content-disposition") ?? "";
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get("content-type")).toBe(
+      "application/octet-stream",
+    );
+    expect(response.headers.get("x-content-type-options")).toBe("nosniff");
+    expect(response.headers.get("content-length")).toBe(String(bytes.length));
+    expect(disposition).toContain("filename*=UTF-8''");
+    expect(disposition).not.toContain("\n");
+    expect(disposition).not.toContain("nested/");
+    expect(await response.text()).toBe("download");
   });
 
   test("rejects unknown document kinds before touching the filesystem", async () => {

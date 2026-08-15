@@ -7,11 +7,13 @@ import {
   AuthNotification,
   type AuthNotificationData,
 } from "./components/AuthNotification.js";
+import { ConfirmDialog } from "./components/ConfirmDialog.js";
 import { InteractionDialog } from "./components/InteractionDialog.js";
 import { Navigation, type Page } from "./components/Navigation.js";
 import { ProviderAuthDialog } from "./components/ProviderAuthDialog.js";
 import type { ProviderAuthTask } from "./model-access.js";
 import { ChatPage } from "./pages/ChatPage.js";
+import { FilesPage } from "./pages/FilesPage.js";
 import { HeartbeatPage } from "./pages/HeartbeatPage.js";
 import { LibraryPage } from "./pages/LibraryPage.js";
 import { SettingsPage } from "./pages/SettingsPage.js";
@@ -49,6 +51,9 @@ export function App() {
   const [activeId, setActiveId] = useState<string>();
   const [conversationPending, setConversationPending] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [filesDirty, setFilesDirty] = useState(false);
+  const [filesDiscardOpen, setFilesDiscardOpen] = useState(false);
+  const pendingFilesAction = useRef<(() => void) | undefined>(undefined);
   const [refresh, setRefresh] = useState(0);
   const [delta, setDelta] = useState("");
   const [running, setRunning] = useState(false);
@@ -308,7 +313,11 @@ export function App() {
   }, [activeId, loadAgentState, loadConversations, session]);
 
   const selectConversation = async (id: string) => {
-    if (conversationPending || running || id === activeId) return;
+    if (conversationPending || running) return;
+    if (id === activeId) {
+      setPage("chat");
+      return;
+    }
     setConversationPending(true);
     try {
       await api(`/api/conversations/${id}/activate`, mutation("POST"));
@@ -353,6 +362,30 @@ export function App() {
     }
   };
 
+  const afterFilesDiscard = (action: () => void) => {
+    if (page !== "files" || !filesDirty) {
+      action();
+      return;
+    }
+    pendingFilesAction.current = action;
+    setFilesDiscardOpen(true);
+  };
+
+  const confirmFilesDiscard = () => {
+    setFilesDiscardOpen(false);
+    setFilesDirty(false);
+    const action = pendingFilesAction.current;
+    pendingFilesAction.current = undefined;
+    action?.();
+  };
+
+  const chooseModel = () => {
+    afterFilesDiscard(() => {
+      setPage("settings");
+      setChooseModelRequest((value) => value + 1);
+    });
+  };
+
   return (
     <Theme
       accentColor="teal"
@@ -390,9 +423,19 @@ export function App() {
             mobileOpen={mobileOpen}
             newPending={conversationPending || running}
             onMobileOpen={setMobileOpen}
-            onPage={setPage}
-            onConversation={(id) => void selectConversation(id)}
-            onNew={() => void createConversation()}
+            onPage={(nextPage) => afterFilesDiscard(() => setPage(nextPage))}
+            onConversation={(id) =>
+              afterFilesDiscard(() => {
+                setPage("chat");
+                void selectConversation(id);
+              })
+            }
+            onNew={() =>
+              afterFilesDiscard(() => {
+                setPage("chat");
+                void createConversation();
+              })
+            }
           />
           <main className="workspace">
             {session.authDisabled && (
@@ -451,12 +494,10 @@ export function App() {
                     void loadAgentState(activeId).catch(() => undefined);
                   setRefresh((value) => value + 1);
                 }}
-                onChooseModel={() => {
-                  setPage("settings");
-                  setChooseModelRequest((value) => value + 1);
-                }}
+                onChooseModel={chooseModel}
               />
             )}
+            {page === "files" && <FilesPage onDirtyChange={setFilesDirty} />}
             {page === "heartbeat" && <HeartbeatPage refresh={refresh} />}
             {page === "library" && <LibraryPage />}
             {page === "settings" && (
@@ -466,6 +507,17 @@ export function App() {
               />
             )}
           </main>
+          <ConfirmDialog
+            open={filesDiscardOpen}
+            title={t("filesDiscardTitle")}
+            description={t("filesDiscardDescription")}
+            confirmLabel={t("filesDiscard")}
+            onOpenChange={(open) => {
+              setFilesDiscardOpen(open);
+              if (!open) pendingFilesAction.current = undefined;
+            }}
+            onConfirm={confirmFilesDiscard}
+          />
           <InteractionDialog
             interaction={
               interaction?.scope === "provider_auth" ? undefined : interaction
@@ -477,10 +529,7 @@ export function App() {
               interaction?.scope === "provider_auth" ? interaction : undefined
             }
             task={providerAuth}
-            onChooseModel={() => {
-              setPage("settings");
-              setChooseModelRequest((value) => value + 1);
-            }}
+            onChooseModel={chooseModel}
             onDismiss={() => {
               void api("/api/provider-auth", mutation("DELETE")).catch(
                 () => undefined,

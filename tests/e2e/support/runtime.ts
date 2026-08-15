@@ -1,5 +1,5 @@
-import { mkdir, rm, writeFile } from "node:fs/promises";
-import { resolve, sep } from "node:path";
+import { mkdir, open, rm, writeFile } from "node:fs/promises";
+import { join, resolve, sep } from "node:path";
 import postgres from "postgres";
 
 const E2E_ROOT = resolve(".local/e2e");
@@ -59,6 +59,22 @@ export async function prepareRuntime(): Promise<E2eRuntime> {
     mkdir(home, { recursive: true }),
     mkdir(STATE_ROOT, { recursive: true }),
   ]);
+  await Promise.all([
+    mkdir(join(workspace, "src")),
+    mkdir(join(workspace, ".git")),
+  ]);
+  await Promise.all([
+    writeFile(
+      join(workspace, "src", "existing.ts"),
+      "export const value = 1;\n",
+    ),
+    writeFile(join(workspace, "binary.dat"), Buffer.from([0, 1, 2, 3])),
+    writeFile(join(workspace, ".env"), "E2E_SECRET=hidden\n"),
+    writeFile(join(workspace, ".git", "config"), "private\n"),
+  ]);
+  const largePreview = await open(join(workspace, "large-preview.txt"), "w");
+  await largePreview.truncate(1_000_001);
+  await largePreview.close();
 
   const appPort = port(process.env.E2E_APP_PORT, 39_110);
   const mockPort = port(process.env.E2E_MOCK_PORT, 39_111);
