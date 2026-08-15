@@ -1099,6 +1099,71 @@ describe("API contracts", () => {
     expect(await response.text()).toBe("download");
   });
 
+  test("preserves system and user-template resource contracts for Prompts", async () => {
+    const readDocument = vi.fn(async () => "System instructions");
+    const writeDocument = vi.fn(async () => undefined);
+    const deleteDocument = vi.fn(async () => undefined);
+    const listTemplates = vi.fn(async () => [
+      {
+        name: "review",
+        content: "Review changes",
+        provenance: { scope: "user" as const, origin: "top-level" as const },
+      },
+    ]);
+    const app = appWith({
+      resources: {
+        readDocument,
+        writeDocument,
+        deleteDocument,
+        listTemplates,
+      } as never,
+    });
+
+    const document = await app.request("/api/documents/system");
+    const documentSave = await app.request("/api/documents/append", {
+      method: "PUT",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ content: "Append instructions" }),
+    });
+    const templates = await app.request("/api/templates");
+    const templateSave = await app.request("/api/templates/daily-review", {
+      method: "PUT",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ content: "Review daily" }),
+    });
+    const templateDelete = await app.request("/api/templates/daily-review", {
+      method: "DELETE",
+    });
+
+    expect(document.status).toBe(200);
+    expect(await document.json()).toEqual({ content: "System instructions" });
+    expect(documentSave.status).toBe(200);
+    expect(templates.status).toBe(200);
+    expect(await templates.json()).toEqual([
+      {
+        name: "review",
+        content: "Review changes",
+        provenance: { scope: "user", origin: "top-level" },
+      },
+    ]);
+    expect(templateSave.status).toBe(200);
+    expect(templateDelete.status).toBe(204);
+    expect(readDocument).toHaveBeenCalledWith("system");
+    expect(writeDocument).toHaveBeenNthCalledWith(
+      1,
+      "append",
+      undefined,
+      "Append instructions",
+    );
+    expect(writeDocument).toHaveBeenNthCalledWith(
+      2,
+      "template",
+      "daily-review",
+      "Review daily",
+    );
+    expect(deleteDocument).toHaveBeenCalledWith("template", "daily-review");
+  });
+
   test("rejects unknown document kinds before touching the filesystem", async () => {
     const readDocument = vi.fn();
     const app = appWith({ resources: { readDocument } as never });

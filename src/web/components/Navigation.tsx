@@ -7,6 +7,7 @@ import {
   GearIcon,
   HamburgerMenuIcon,
   HeartIcon,
+  Pencil2Icon,
   PlusIcon,
   ReaderIcon,
 } from "@radix-ui/react-icons";
@@ -51,6 +52,7 @@ const NAVIGATION_ICONS: Record<NavigationIconKey, typeof ChatBubbleIcon> = {
   file: FileIcon,
   heartbeat: HeartIcon,
   library: ReaderIcon,
+  prompt: Pencil2Icon,
   settings: GearIcon,
 };
 

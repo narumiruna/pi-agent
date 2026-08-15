@@ -5,6 +5,7 @@ export type NavigationIconKey =
   | "file"
   | "heartbeat"
   | "library"
+  | "prompt"
   | "settings";
 
 export type NavigationLabelKey =
@@ -12,6 +13,7 @@ export type NavigationLabelKey =
   | "files"
   | "heartbeat"
   | "library"
+  | "prompts"
   | "settings";
 
 export interface PrimaryNavigationItem {
@@ -33,6 +35,12 @@ export const PRIMARY_NAVIGATION_ITEMS = [
     page: "files",
     labelKey: "files",
     icon: "file",
+    access: "authenticated",
+  },
+  {
+    page: "prompts",
+    labelKey: "prompts",
+    icon: "prompt",
     access: "authenticated",
   },
   {

@@ -39,6 +39,7 @@ describe("app route contract", () => {
     expect(CURRENT_APP_ROUTES).toEqual([
       { id: "chats", path: "/chats" },
       { id: "files", path: "/files" },
+      { id: "prompts", path: "/prompts" },
       { id: "heartbeat", path: "/heartbeat" },
       { id: "library", path: "/library" },
       { id: "settings", path: "/settings" },
@@ -55,7 +56,6 @@ describe("app route contract", () => {
     "/unknown",
     "/nested/unknown",
     "/files/",
-    "/prompts",
     "/skills",
     "/extensions",
   ])("safely maps invalid or unavailable path %s to Chats", (pathname) => {
@@ -73,6 +73,7 @@ describe("app route contract", () => {
     expect(CURRENT_PAGE_IDS).toEqual([
       "chats",
       "files",
+      "prompts",
       "heartbeat",
       "library",
       "settings",

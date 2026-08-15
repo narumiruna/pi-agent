@@ -20,6 +20,12 @@ describe("primary navigation model", () => {
         access: "authenticated",
       },
       {
+        page: "prompts",
+        labelKey: "prompts",
+        icon: "prompt",
+        access: "authenticated",
+      },
+      {
         page: "heartbeat",
         labelKey: "heartbeat",
         icon: "heartbeat",
@@ -48,11 +54,11 @@ describe("primary navigation model", () => {
     expect(primaryNavigationFor({ authenticated: false })).toEqual([]);
   });
 
-  test("does not expose planned resource routes", () => {
+  test("exposes Prompts but not later planned resource routes", () => {
     const pages = primaryNavigationFor({ authenticated: true }).map(
       ({ page }) => page,
     );
-    expect(pages).not.toContain("prompts");
+    expect(pages).toContain("prompts");
     expect(pages).not.toContain("skills");
     expect(pages).not.toContain("extensions");
   });

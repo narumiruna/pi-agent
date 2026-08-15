@@ -170,7 +170,7 @@ The mobile drawer traps focus while open and restores focus to its trigger after
 
 The interface honors `prefers-reduced-motion` by suppressing animation and transition timing without hiding state changes.
 
-Current destinations use canonical paths at `/chats`, `/files`, `/heartbeat`, `/library`, and `/settings`.
+Current destinations use canonical paths at `/chats`, `/files`, `/prompts`, `/heartbeat`, `/library`, and `/settings`.
 
 The Chats destination retains the Pi-backed conversation list, active selection, and New conversation action.
 
@@ -301,7 +301,11 @@ Project trust controls input loading and is not a sandbox for Pi tools, extensio
 
 ## Prompts, skills, and extensions
 
-The Library page edits `SYSTEM.md`, `APPEND_SYSTEM.md`, and files under `prompts/` with atomic writes.
+The Prompts page edits global `SYSTEM.md`, `APPEND_SYSTEM.md`, and user files under `prompts/` through the existing resource API.
+
+Those files remain under Pi’s native agent directory, use atomic writes, and trigger Pi’s native reload lifecycle after each mutation; no data conversion or parallel prompt store is involved.
+
+Library retains package and MCP controls during the remaining resource migration.
 
 Skills and extensions are installed as native Pi packages from npm, git, or a relative or absolute path inside the container.
 

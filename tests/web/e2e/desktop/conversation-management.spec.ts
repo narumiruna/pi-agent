@@ -128,7 +128,11 @@ test("renames, confirms deletion, and switches to a native fork", async ({
 
   const clonedId = await activeId(page);
   expect(clonedId).not.toBe(cloneSourceId);
-  await expect(page.getByText(cloneMessage, { exact: true })).toBeVisible();
+  await expect(
+    page
+      .getByRole("region", { name: "Chats" })
+      .getByText(cloneMessage, { exact: true }),
+  ).toBeVisible();
 });
 
 test("rejects management during a run and restores the native queue after reload", async ({

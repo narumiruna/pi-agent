@@ -975,6 +975,15 @@ select:focus-visible,
   border-top: 1px solid var(--line);
 }
 
+.promptTemplateRow,
+.promptTemplateSummary {
+  min-width: 0;
+}
+
+.promptTemplateSummary {
+  overflow-wrap: anywhere;
+}
+
 .listRow,
 .settingRow {
   display: flex;
@@ -1760,6 +1769,15 @@ select:focus-visible,
   .listRow {
     align-items: flex-start;
     flex-direction: column;
+  }
+
+  .pageColumn .rt-TabsList {
+    max-width: 100%;
+    flex-wrap: wrap;
+  }
+
+  .promptTemplateRow > .rt-Flex {
+    width: 100%;
   }
 
   .settingsPage {

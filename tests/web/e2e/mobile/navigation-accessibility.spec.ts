@@ -26,6 +26,11 @@ test("keyboard-operates every drawer destination with visible focus and reduced 
       content: () => page.getByRole("heading", { name: "Files" }),
     },
     {
+      page: "prompts",
+      label: "Prompts",
+      content: () => page.getByRole("heading", { name: "Prompts" }),
+    },
+    {
       page: "library",
       label: "Library",
       content: () => page.getByRole("heading", { name: "Library" }),
