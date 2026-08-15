@@ -66,7 +66,7 @@ Keep advanced tree, fork/clone, compact, import, and export actions in the exist
 - [x] Update README with management scope, active-delete rule, native lifecycle, and recovery behavior.
 - [x] Run focused tests, `npm run ci`, full E2E, PostgreSQL storage verification, and production Docker build; record exact results.
 - [x] Audit native semantic fidelity, JSONL immutability/validity, active-run races, cancellation, path disclosure, stale state, duplicate actions, accessibility, test layout, and unrelated changes.
-- [ ] Commit, push, and open one dedicated signed pull request linking this plan and Roadmap milestone.
+- [x] Commit, push, and open dedicated pull request [#43](https://github.com/narumiruna/pi-agent/pull/43) with a signed implementation commit linking this plan and Roadmap milestone.
 - [ ] Resolve every pull-request check and feedback item with regression coverage, then merge the clean pull request.
 - [ ] After merge, check the matching Roadmap milestone and archive this plan through an administrative documentation pull request.
 
