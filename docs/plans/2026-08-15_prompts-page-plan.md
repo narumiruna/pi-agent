@@ -62,7 +62,7 @@ Keep all writes on `ResourceService`, so atomic replacement, safe paths, existin
 - [x] Update README route and resource-management documentation without claiming later discovery/diagnostic scope.
 - [x] Run focused tests, `npm run ci`, full E2E, PostgreSQL storage verification, and production Docker build; record exact results.
 - [x] Audit unchanged API/files, native reload reuse, no duplicate prompt UI/state, route history, errors, accessibility, responsive layout, and unrelated changes.
-- [ ] Commit, push, open one dedicated signed pull request linking this plan and Roadmap milestone, resolve all checks/review feedback with regressions, and merge.
+- [ ] Commit, push, and open dedicated pull request [#45](https://github.com/narumiruna/pi-agent/pull/45) linking this plan and Roadmap milestone; resolve all checks/review feedback with regressions, then merge.
 - [ ] After merge, check the matching Roadmap milestone and archive this plan through an administrative documentation pull request.
 
 ## Completion Checklist
