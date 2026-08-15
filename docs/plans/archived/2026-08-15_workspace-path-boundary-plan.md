@@ -1,6 +1,6 @@
 # Workspace Path Boundary Plan
 
-Status: In progress.
+Status: Completed on 2026-08-15.
 
 ## Goal
 
@@ -43,6 +43,14 @@ Over-tightening canonicalization can reject a configured workspace whose root it
 
 Mitigate with an explicit operation matrix, temporary real directories, a symlinked workspace root, nested escape fixtures, outside-content assertions, and the full existing browser suite.
 
+## Outcome
+
+PR #20 merged as `67241f2` after its automatic `verify` check passed.
+
+GitHub reported no submitted reviews, inline comments, conversation comments, or review threads, so no feedback required changes or replies.
+
+The post-merge administrative change checks the matching Roadmap milestone and archives this plan.
+
 ## Plan
 
 - [x] Inventory workspace routes, policy helpers, service/search consumers, and existing traversal and symlink tests; all current paths converge on `workspace/policy.ts`, while canonical-root and complete operation-matrix evidence are missing.
@@ -53,8 +61,8 @@ Mitigate with an explicit operation matrix, temporary real directories, a symlin
 - [x] Run focused server/API tests, `npm run ci`, and local E2E; 49 focused tests passed, CI passed 261 tests with 5 intentional skips and both builds, and all 17 SQLite browser tests passed after correcting the formatting failure reported by the first CI attempt.
 - [x] Review the complete diff for uncovered workspace operations, path alias acceptance, outside mutation, content changes, platform assumptions, and unrelated changes; the matrix matches all six service methods plus search, existing alias tests remain, outside bytes and absence are asserted, only tests/docs changed, and `git diff --check` passed.
 - [x] Commit, push, and open one dedicated signed pull request linking this plan and Roadmap milestone; signed implementation commit `c5842f1` is on `narumiruna/test/workspace-path-boundary` in PR [#20](https://github.com/narumiruna/pi-agent/pull/20).
-- [ ] Read all pull-request checks and feedback, fix every actionable item with regression coverage, and merge the clean pull request.
-- [ ] After merge, check the matching Roadmap milestone and archive this plan through an administrative documentation pull request.
+- [x] Read all pull-request checks and feedback, fix every actionable item with regression coverage, and merge the clean pull request; PR #20 `verify` passed, no feedback existed, and merge commit `67241f2` is on `main`.
+- [x] After merge, check the matching Roadmap milestone and archive this plan through an administrative documentation pull request.
 
 ## Completion Checklist
 
@@ -65,5 +73,5 @@ Mitigate with an explicit operation matrix, temporary real directories, a symlin
 - [x] Rejected operations neither expose outside content nor mutate outside files.
 - [x] Workspace responses continue returning only relative paths.
 - [x] Focused tests, `npm run ci`, and local E2E pass.
-- [ ] The dedicated pull request is merged with all feedback resolved.
-- [ ] The Roadmap milestone is checked and this plan is archived only after merge.
+- [x] The dedicated pull request is merged with all feedback resolved.
+- [x] The Roadmap milestone is checked and this plan is archived only after merge.
