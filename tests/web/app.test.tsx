@@ -827,7 +827,19 @@ describe("web application", () => {
         ]);
       if (url === "/api/conversations/session") {
         transcriptRequests++;
-        return json({ messages: [] });
+        return json({
+          messages:
+            transcriptRequests > 1
+              ? [
+                  {
+                    id: "recovered-message",
+                    role: "assistant",
+                    text: "Recovered transcript",
+                    timestamp: 1,
+                  },
+                ]
+              : [],
+        });
       }
       if (url === "/api/conversations/session/state") {
         stateRequests++;
@@ -871,7 +883,9 @@ describe("web application", () => {
             sessionId: "session",
             statuses: [],
             widgets: [],
-            editorText: "restored draft",
+            editorText: reconnected
+              ? "recovered editor update"
+              : "restored draft",
             workingVisible: true,
             toolsExpanded: false,
           },
@@ -894,6 +908,10 @@ describe("web application", () => {
     source.onopen?.();
 
     expect(await screen.findByText("reconnected follow-up")).toBeVisible();
+    expect(await screen.findByText("Recovered transcript")).toBeVisible();
+    expect(screen.getByLabelText(/Ask Pi anything/i)).toHaveValue(
+      "recovered editor update",
+    );
     await waitFor(() =>
       expect(screen.queryByRole("button", { name: "Stop" })).toBeNull(),
     );

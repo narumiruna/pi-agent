@@ -29,6 +29,7 @@ import type {
   InteractionEvent,
   LiveTool,
   SessionInfo,
+  TranscriptMessage,
 } from "./types.js";
 
 export function updateLiveTools(
@@ -115,6 +116,13 @@ export function App() {
   const [activity, setActivity] = useState<AgentActivity>();
   const [agentState, setAgentState] = useState<ConversationAgentState>();
   const [extensionUi, setExtensionUi] = useState<ExtensionUiSnapshot>();
+  const extensionUiRef = useRef(extensionUi);
+  extensionUiRef.current = extensionUi;
+  const [transcriptRecovery, setTranscriptRecovery] = useState<{
+    sessionId: string;
+    sequence: number;
+    messages: TranscriptMessage[];
+  }>();
   const [editorCommand, setEditorCommand] = useState<{
     sessionId: string;
     sequence: number;
@@ -300,6 +308,7 @@ export function App() {
     setActivity(undefined);
     setAgentState(undefined);
     setExtensionUi(undefined);
+    setTranscriptRecovery(undefined);
     setEditorCommand(undefined);
     void loadAgentState(activeId).catch(() => undefined);
   }, [activeId, loadAgentState, session]);
@@ -332,12 +341,30 @@ export function App() {
           native.find((conversation) => conversation.active)?.id ?? activeId;
         if (!recoveredId) return;
         setActiveId(recoveredId);
-        setRefresh((value) => value + 1);
-        await Promise.all([
+        const previousEditorText =
+          extensionUiRef.current?.sessionId === recoveredId
+            ? extensionUiRef.current.editorText
+            : undefined;
+        const [state, , transcript] = await Promise.all([
           loadAgentState(recoveredId),
           loadConversations(recoveredId),
+          api<{ messages: TranscriptMessage[] }>(
+            `/api/conversations/${recoveredId}`,
+          ),
         ]);
         if (closed || generation !== recoveryGeneration) return;
+        setTranscriptRecovery((current) => ({
+          sessionId: recoveredId,
+          sequence: (current?.sequence ?? 0) + 1,
+          messages: transcript.messages,
+        }));
+        if (state.extensionUi.editorText !== previousEditorText)
+          setEditorCommand((current) => ({
+            sessionId: recoveredId,
+            sequence: (current?.sequence ?? 0) + 1,
+            text: state.extensionUi.editorText,
+            mode: "replace",
+          }));
         setEventsConnectedFor(recoveredId);
       } catch (error) {
         if (closed || generation !== recoveryGeneration) return;
@@ -732,6 +759,11 @@ export function App() {
                 refresh={refresh}
                 delta={delta}
                 thinking={thinking}
+                transcriptRecovery={
+                  transcriptRecovery?.sessionId === activeId
+                    ? transcriptRecovery
+                    : undefined
+                }
                 running={running}
                 inputDisabled={conversationPending}
                 liveTools={liveTools}
