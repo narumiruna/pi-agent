@@ -88,7 +88,7 @@ Desktop and drawer controls coexist in the DOM; avoid duplicate element IDs and 
 - [x] Update README with native query syntax/sort semantics and the server-only searchable metadata boundary.
 - [x] Run focused tests, `npm run ci`, full local E2E, PostgreSQL storage verification, and the production Docker build; record exact results.
 - [x] Review the complete diff for native semantic drift, regex bounds, private metadata leakage, JSONL mutation/duplication, tree cycles, stale races, active-ID corruption, accessibility/responsive regressions, test-layout violations, and unrelated edits.
-- [ ] Commit, push, and open one dedicated signed pull request linking this plan and Roadmap milestone.
+- [x] Commit, push, and open dedicated pull request [#41](https://github.com/narumiruna/pi-agent/pull/41) with a signed implementation commit linking this plan and Roadmap milestone.
 - [ ] Resolve every pull-request check and feedback item with regression coverage, then merge the clean pull request.
 - [ ] After merge, check the matching Roadmap milestone and archive this plan through an administrative documentation pull request.
 
