@@ -49,7 +49,7 @@ Pi package 仍是 prompt、skill 與 extension 的共同安裝來源，不建立
 
 - [x] 定義 `Chats`、`Files`、`Prompts`、`Skills`、`Extensions`、`Heartbeat` 與 `Settings` 的 route contract。
 - [x] 讓 desktop sidebar 與 mobile navigation 共用相同的導覽資料與權限判斷。
-- [ ] 所有 API 只回傳 Web 所需的 opaque ID、相對路徑與安全 metadata。
+- [x] 所有 API 只回傳 Web 所需的 opaque ID、相對路徑與安全 metadata。
 - [ ] 所有 workspace 路徑都必須經過 `resolve`、`realpath`、containment 與 symlink escape 檢查。
 - [ ] 所有 Pi 資源都必須保留 `user`、`project`、`package` 與 `temporary` provenance。
 - [ ] Project-local skill 與 extension 只有在 Pi project trust 生效後才能載入或修改。

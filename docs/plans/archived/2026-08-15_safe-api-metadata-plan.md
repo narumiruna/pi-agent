@@ -1,6 +1,6 @@
 # Safe API Metadata Plan
 
-Status: In progress.
+Status: Completed on 2026-08-15.
 
 ## Goal
 
@@ -49,6 +49,14 @@ Over-broad diagnostic redaction can hide useful errors, while under-redaction ca
 
 Mitigate with service, API, and Web tests using absolute paths, credential-bearing URLs, unknown IDs, ANSI sequences, and both package scopes.
 
+## Outcome
+
+PR #18 merged as `88a8711` after its automatic `verify` check passed.
+
+GitHub reported no submitted reviews, inline comments, conversation comments, or review threads, so no feedback required changes or replies.
+
+The post-merge administrative change checks the matching Roadmap milestone and archives this plan.
+
 ## Plan
 
 - [x] Inventory all API routes, shared contracts, Web consumers, package projections, diagnostics, and existing path-safety tests; identify session owner, package metadata, and raw diagnostics as current unnecessary server metadata.
@@ -61,8 +69,8 @@ Mitigate with service, API, and Web tests using absolute paths, credential-beari
 - [x] Run focused server/Web tests, `npm run ci`, and local E2E; 129 focused tests passed, CI passed 258 tests with 5 intentional skips and both builds, and final SQLite E2E passed all 17 tests after updating two stale owner-field expectations exposed by the first runs.
 - [x] Review the complete diff for ID stability, hash input separation, stale package resolution, path/credential disclosure, content corruption, API compatibility, and unrelated changes; scope-separated hash tests, stale-ID guards, field/path scans, exact request tests, unchanged content subsystem files, final CI/E2E, and `git diff --check` found no unresolved issue.
 - [x] Commit, push, and open one dedicated signed pull request linking this plan and Roadmap milestone; implementation commit `b8a26e5` is on `narumiruna/fix/safe-api-metadata` in PR [#18](https://github.com/narumiruna/pi-agent/pull/18).
-- [ ] Read all pull-request checks and feedback, fix every actionable item with regression coverage, and merge the clean pull request.
-- [ ] After merge, check the matching Roadmap milestone and archive this plan through an administrative documentation pull request.
+- [x] Read all pull-request checks and feedback, fix every actionable item with regression coverage, and merge the clean pull request; PR #18 `verify` passed, no feedback existed, and merge commit `88a8711` is on `main`.
+- [x] After merge, check the matching Roadmap milestone and archive this plan through an administrative documentation pull request.
 
 ## Completion Checklist
 
@@ -74,5 +82,5 @@ Mitigate with service, API, and Web tests using absolute paths, credential-beari
 - [x] Existing relative workspace contracts and opaque conversation/session IDs remain intact.
 - [x] Explicit content-transfer endpoints remain functional and are not silently rewritten.
 - [x] Focused tests, `npm run ci`, and local E2E pass.
-- [ ] The dedicated pull request is merged with all feedback resolved.
-- [ ] The Roadmap milestone is checked and this plan is archived only after merge.
+- [x] The dedicated pull request is merged with all feedback resolved.
+- [x] The Roadmap milestone is checked and this plan is archived only after merge.
