@@ -46,7 +46,7 @@ Move the unchanged E2E matrix job back into `.github/workflows/ci.yaml` if autom
 - [x] Add `.github/workflows/e2e.yaml` with only `workflow_dispatch` and the preserved SQLite/PostgreSQL matrix; parsed YAML confirms the sole trigger, read-only permission, both stores, Chromium command, test command, and failure artifact step.
 - [x] Run `npm run ci` and `just e2e` to verify repository checks and the unchanged local SQLite browser suite; evidence: 244 Vitest tests passed with 5 intentional skips, both builds passed, and all 17 SQLite Playwright tests passed.
 - [x] Review the complete diff for accidental automatic triggers, workflow permission expansion, command drift, secret requirements, and unrelated changes; `git diff --check` passed, targeted scans found no automatic trigger or E2E command in `ci.yaml`, and only read-only contents permission is present.
-- [ ] Commit only the plan and workflow files with a signed Conventional Commit, push the branch, and open one dedicated pull request linking this plan.
+- [x] Commit only the plan and workflow files with a signed Conventional Commit, push the branch, and open one dedicated pull request linking this plan; evidence: signed commit `06c2669` is pushed in PR #12.
 - [ ] Read and classify all pull-request checks, reviews, inline comments, and conversation threads; resolve valid feedback only after fixes and verification.
 
 ## Completion Checklist
