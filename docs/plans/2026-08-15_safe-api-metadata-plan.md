@@ -60,7 +60,7 @@ Mitigate with service, API, and Web tests using absolute paths, credential-beari
 - [x] Add an API metadata regression audit covering representative session, package, diagnostics, conversation, and workspace responses without weakening explicit content endpoints; new regressions complement existing conversation-state, export, import, and workspace relative-path tests.
 - [x] Run focused server/Web tests, `npm run ci`, and local E2E; 129 focused tests passed, CI passed 258 tests with 5 intentional skips and both builds, and final SQLite E2E passed all 17 tests after updating two stale owner-field expectations exposed by the first runs.
 - [x] Review the complete diff for ID stability, hash input separation, stale package resolution, path/credential disclosure, content corruption, API compatibility, and unrelated changes; scope-separated hash tests, stale-ID guards, field/path scans, exact request tests, unchanged content subsystem files, final CI/E2E, and `git diff --check` found no unresolved issue.
-- [ ] Commit, push, and open one dedicated signed pull request linking this plan and Roadmap milestone.
+- [x] Commit, push, and open one dedicated signed pull request linking this plan and Roadmap milestone; implementation commit `b8a26e5` is on `narumiruna/fix/safe-api-metadata` in PR [#18](https://github.com/narumiruna/pi-agent/pull/18).
 - [ ] Read all pull-request checks and feedback, fix every actionable item with regression coverage, and merge the clean pull request.
 - [ ] After merge, check the matching Roadmap milestone and archive this plan through an administrative documentation pull request.
 
