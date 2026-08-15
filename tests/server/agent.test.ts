@@ -603,7 +603,7 @@ describe("native session operations", () => {
     expect(await readFile(branchPath as string, "utf8")).toContain("original");
   });
 
-  test("rejects destructive session operations during an active run", async () => {
+  test("rejects every idle-guarded operation during an active run", async () => {
     const coordinator = new RunCoordinator();
     let release: (() => void) | undefined;
     const active = coordinator.run(
@@ -613,22 +613,45 @@ describe("native session operations", () => {
           release = resolve;
         }),
     );
-    const fork = vi.fn();
+    const guardedAction = vi.fn();
     const service = Object.create(PiService.prototype) as PiService;
     Object.defineProperties(service, {
       coordinator: { value: coordinator },
       runtime: {
         value: {
-          session: { sessionId: "session", isIdle: false },
-          fork,
+          session: {
+            sessionId: "session",
+            isIdle: false,
+            setAutoRetryEnabled: guardedAction,
+            sessionManager: { getEntry: guardedAction },
+            navigateTree: guardedAction,
+            compact: guardedAction,
+          },
+          fork: guardedAction,
+          importFromJsonl: guardedAction,
         },
       },
     });
+    const operations: Array<[string, () => unknown]> = [
+      ["activate", () => service.activateConversation("other")],
+      ["preferences", () => service.setPreferences({ autoRetry: false })],
+      [
+        "tree navigation",
+        () => service.navigateConversationTree("session", "entry", {}),
+      ],
+      ["fork", () => service.forkConversation("session", "entry", "at")],
+      ["compact", () => service.compactConversation("session")],
+      ["export", () => service.exportConversation("session", "jsonl")],
+      ["import", () => service.importConversation('{"type":"session"}\n')],
+    ];
 
-    await expect(
-      service.forkConversation("session", "entry", "at"),
-    ).rejects.toMatchObject({ code: "agent_busy" });
-    expect(fork).not.toHaveBeenCalled();
+    for (const [name, operation] of operations) {
+      await expect(
+        Promise.resolve().then(operation),
+        `${name} should reject while the agent is busy`,
+      ).rejects.toMatchObject({ code: "agent_busy" });
+    }
+    expect(guardedAction).not.toHaveBeenCalled();
     release?.();
     await active;
   });
