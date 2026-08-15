@@ -273,12 +273,26 @@ export class PiService {
       agentDir: config.agentDir,
       settingsManager,
     });
+    let heartbeatSession: AgentSession | undefined;
     const createRuntime: CreateAgentSessionRuntimeFactory = async ({
       cwd,
       sessionManager,
       sessionStartEvent,
     }) => {
+      const previousTrust = settingsManager.isProjectTrusted();
       projectTrustPolicy.initialize();
+      if (
+        heartbeatSession &&
+        previousTrust !== settingsManager.isProjectTrusted()
+      ) {
+        try {
+          await heartbeatSession.reload();
+        } catch (error) {
+          settingsManager.setProjectTrusted(previousTrust);
+          await heartbeatSession.reload().catch(() => undefined);
+          throw error;
+        }
+      }
       const services = await createAgentSessionServices({
         cwd,
         agentDir: config.agentDir,
@@ -312,7 +326,7 @@ export class PiService {
       modelRuntime,
       resourceLoaderOptions: { noExtensions: true },
     });
-    const { session: heartbeatSession } = await createAgentSessionFromServices({
+    const heartbeatRuntime = await createAgentSessionFromServices({
       services: heartbeatServices,
       sessionManager: SessionManager.continueRecent(
         config.workspace,
@@ -320,6 +334,7 @@ export class PiService {
       ),
       tools: config.agentTools,
     });
+    heartbeatSession = heartbeatRuntime.session;
     const service = new PiService(
       config,
       events,

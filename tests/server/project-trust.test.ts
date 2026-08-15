@@ -113,6 +113,26 @@ describe("ProjectTrustPolicy", () => {
     expect(settings.isProjectTrusted()).toBe(false);
   });
 
+  test("reports active runtime trust until a changed saved decision is applied", () => {
+    let saved = true;
+    const settings = SettingsManager.inMemory(undefined, {
+      projectTrusted: false,
+    });
+    const policy = new ProjectTrustPolicy(
+      "/workspace",
+      "/agent",
+      settings,
+      { get: () => saved, set: vi.fn() },
+      () => true,
+    );
+
+    expect(policy.initialize()).toEqual({ required: true, trusted: true });
+    saved = false;
+    expect(policy.status()).toEqual({ required: true, trusted: true });
+    expect(policy.initialize()).toEqual({ required: true, trusted: false });
+    expect(policy.status()).toEqual({ required: true, trusted: false });
+  });
+
   test("fails closed when the native trust store cannot be read", () => {
     const settings = SettingsManager.inMemory(
       { defaultProjectTrust: "always" },

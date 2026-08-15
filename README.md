@@ -245,6 +245,8 @@ Project-local Pi settings, skills, packages, and extensions remain disabled unti
 
 Startup, every session rebuild, and every general resource reload honor the nearest saved `trust.json` decision and the global non-interactive `defaultProjectTrust`; `ask`, `never`, and trust-store read failures remain untrusted.
 
+The Settings status reports the effective runtime state, so an external `trust.json` change appears only when one of those synchronized resource-discovery boundaries applies it.
+
 The authenticated Settings page requires an executable-code acknowledgement before enabling project trust, waits for the agent to become idle, reloads chat and heartbeat through Pi, and persists the decision in Pi's native trust store.
 
 Disabling trust reloads and unloads project resources.

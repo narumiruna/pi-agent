@@ -46,11 +46,10 @@ export class ProjectTrustPolicy {
   }
 
   status(): WebProjectTrust {
-    const state = this.resolve();
-    if (!state.required) return state;
+    const required = this.requiresTrust(this.workspace);
     return {
-      ...state,
-      trusted: state.trusted && this.settings.isProjectTrusted(),
+      required,
+      trusted: !required || this.settings.isProjectTrusted(),
     };
   }
 
