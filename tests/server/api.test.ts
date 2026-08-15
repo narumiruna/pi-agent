@@ -635,6 +635,31 @@ describe("API contracts", () => {
     await replayReader?.cancel();
   });
 
+  test("returns path-free native provenance for resource commands", async () => {
+    const commands = vi.fn(() => [
+      {
+        name: "review",
+        description: "Review changes",
+        source: "prompt" as const,
+        provenance: { scope: "project" as const, origin: "package" as const },
+      },
+    ]);
+    const app = appWith({ pi: { commands } as never });
+
+    const response = await app.request("/api/commands");
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual([
+      {
+        name: "review",
+        description: "Review changes",
+        source: "prompt",
+        provenance: { scope: "project", origin: "package" },
+      },
+    ]);
+    expect(commands).toHaveBeenCalledOnce();
+  });
+
   test("returns only bounded path-safe diagnostics required by the Web", async () => {
     const diagnostics = vi.fn(() => ({
       runtime: { path: "/private/runtime/session.jsonl" },
@@ -675,6 +700,7 @@ describe("API contracts", () => {
         name: "example",
         scope: "user",
         filtered: false,
+        provenance: { scope: "user", origin: "package" },
       },
     ]);
     const updatePackage = vi.fn(async () => undefined);
@@ -716,6 +742,7 @@ describe("API contracts", () => {
         name: "example",
         scope: "user",
         filtered: false,
+        provenance: { scope: "user", origin: "package" },
       },
     ]);
     expect(updated.status).toBe(200);

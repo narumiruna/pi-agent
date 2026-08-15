@@ -71,11 +71,41 @@ export interface WorkspaceMatch {
   directory: boolean;
 }
 
+export type WebResourceScope = "project" | "temporary" | "user";
+export type WebResourceOrigin = "package" | "top-level";
+
+export interface WebResourceProvenance {
+  scope: WebResourceScope;
+  origin: WebResourceOrigin;
+}
+
+export function resourceProvenanceLabel(
+  provenance: WebResourceProvenance,
+): string {
+  return provenance.origin === "package"
+    ? `${provenance.scope} package`
+    : provenance.scope;
+}
+
+export interface WebResourceCommand {
+  name: string;
+  description?: string;
+  source: "extension" | "prompt" | "skill";
+  provenance: WebResourceProvenance;
+}
+
+export interface WebPromptTemplateDocument {
+  name: string;
+  content: string;
+  provenance: WebResourceProvenance;
+}
+
 export interface WebPackageSummary {
   id: string;
   name: string;
   scope: "project" | "user";
   filtered: boolean;
+  provenance: WebResourceProvenance;
 }
 
 export interface WebMcpDiagnostic {

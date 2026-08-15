@@ -8,17 +8,19 @@ import {
 } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import type { PackageManager } from "@earendil-works/pi-coding-agent";
-import type { WebPackageSummary } from "../../shared/contracts.js";
-import { opaquePackageId, projectPackageSummary } from "../api-metadata.js";
+import type {
+  WebPackageSummary,
+  WebPromptTemplateDocument,
+} from "../../shared/contracts.js";
+import {
+  opaquePackageId,
+  projectPackageSummary,
+  projectResourceProvenance,
+} from "../api-metadata.js";
 import { atomicWrite } from "./atomic-write.js";
 import { safeMarkdownPath } from "./paths.js";
 
 export type DocumentKind = "append" | "heartbeat" | "system" | "template";
-
-export interface TemplateDocument {
-  name: string;
-  content: string;
-}
 
 type PackageOperations = Pick<
   PackageManager,
@@ -117,7 +119,7 @@ export class ResourceService {
     await this.reload();
   }
 
-  async listTemplates(): Promise<TemplateDocument[]> {
+  async listTemplates(): Promise<WebPromptTemplateDocument[]> {
     await mkdir(this.promptDir, { recursive: true });
     const entries = await readdir(this.promptDir, { withFileTypes: true });
     const names = entries
@@ -128,6 +130,10 @@ export class ResourceService {
       names.map(async (name) => ({
         name,
         content: (await this.readDocument("template", name)) ?? "",
+        provenance: projectResourceProvenance({
+          scope: "user",
+          origin: "top-level",
+        }),
       })),
     );
     return documents;

@@ -29,8 +29,13 @@ import type {
   AgentStats,
   ConversationAgentState,
   QueueMode,
+  WebResourceCommand,
 } from "../../shared/contracts.js";
-import { projectPackageProgress, safeMetadataText } from "../api-metadata.js";
+import {
+  projectPackageProgress,
+  projectResourceProvenance,
+  safeMetadataText,
+} from "../api-metadata.js";
 import type { AppConfig } from "../config.js";
 import { HeartbeatExecutionError } from "../heartbeat/scheduler.js";
 import type { InteractionBroker } from "../interactions/broker.js";
@@ -1060,16 +1065,8 @@ export class PiService {
     return this.modelRuntime.getAvailableSnapshot();
   }
 
-  commands(): Array<{
-    name: string;
-    description?: string;
-    source: "extension" | "prompt" | "skill";
-  }> {
-    const result: Array<{
-      name: string;
-      description?: string;
-      source: "extension" | "prompt" | "skill";
-    }> = [];
+  commands(): WebResourceCommand[] {
+    const result: WebResourceCommand[] = [];
     for (const extension of this.runtime.services.resourceLoader.getExtensions()
       .extensions) {
       for (const [name, command] of extension.commands) {
@@ -1077,6 +1074,7 @@ export class PiService {
           name,
           ...(command.description ? { description: command.description } : {}),
           source: "extension",
+          provenance: projectResourceProvenance(command.sourceInfo),
         });
       }
     }
@@ -1085,6 +1083,7 @@ export class PiService {
         name: prompt.name,
         ...(prompt.description ? { description: prompt.description } : {}),
         source: "prompt",
+        provenance: projectResourceProvenance(prompt.sourceInfo),
       });
     }
     for (const skill of this.runtime.services.resourceLoader.getSkills()
@@ -1093,6 +1092,7 @@ export class PiService {
         name: `skill:${skill.name}`,
         description: skill.description,
         source: "skill",
+        provenance: projectResourceProvenance(skill.sourceInfo),
       });
     }
     return result;
