@@ -1,6 +1,6 @@
 # Server Boundary Acceptance Plan
 
-Status: In progress.
+Status: Completed on 2026-08-15.
 
 ## Goal
 
@@ -52,6 +52,16 @@ Active-run tests can pass for the wrong reason if conversation IDs are invalid o
 
 Mitigate with valid operation-shaped inputs, exact public error contracts, multibyte byte-size cases, and spies proving guarded native actions are untouched.
 
+## Outcome
+
+PR [#32](https://github.com/narumiruna/pi-agent/pull/32) merged as `b9f90be` after its automatic `verify` check passed.
+
+Codex identified one actionable false-positive risk because the active-run matrix initially exercised both busy predicates at once.
+
+The fix isolated coordinator-busy and native-session-busy cases, resolved the thread, and passed a final Codex rereview with no major issues.
+
+The post-merge administrative change checks the matching Roadmap acceptance milestone and archives this plan.
+
 ## Plan
 
 - [x] Inventory existing server coverage for authentication/authorization, traversal paths, symlink escapes, global and endpoint body limits, stale revisions, concurrent writes, and active-run conflicts.
@@ -65,8 +75,8 @@ Mitigate with valid operation-shaped inputs, exact public error contracts, multi
 - [x] Run focused server tests, `npm run ci`, full local E2E, and the production Docker build; record exact results.
 - [x] Review the complete diff for missing named boundaries, false-positive tests, wrong public error contracts, side effects before rejection, production behavior changes, test-layout violations, and unrelated edits.
 - [x] Commit, push, and open dedicated pull request [#32](https://github.com/narumiruna/pi-agent/pull/32) with a signed test commit linking this plan and Roadmap milestone.
-- [ ] Resolve every pull-request check and feedback item with regression coverage, then merge the clean pull request.
-- [ ] After merge, check the matching Roadmap acceptance milestone and archive this plan through an administrative documentation pull request.
+- [x] Resolve the conflated active-run predicate finding with separate regressions and merge clean pull request [#32](https://github.com/narumiruna/pi-agent/pull/32) as `b9f90be`; `verify` passed and final Codex rereview found no major issues.
+- [x] After merge, check the matching Roadmap acceptance milestone and archive this plan through an administrative documentation pull request.
 
 ## Completion Checklist
 
@@ -78,8 +88,8 @@ Mitigate with valid operation-shaped inputs, exact public error contracts, multi
 - [x] Outside files and guarded native actions remain unchanged after rejection.
 - [x] No production security boundary is weakened or duplicated.
 - [x] Server, CI, E2E, and Docker verification pass.
-- [ ] The dedicated pull request is merged with all feedback resolved.
-- [ ] The Roadmap milestone is checked and this plan is archived only after merge.
+- [x] The dedicated pull request is merged with all feedback resolved.
+- [x] The Roadmap milestone is checked and this plan is archived only after merge.
 
 ## Verification
 
