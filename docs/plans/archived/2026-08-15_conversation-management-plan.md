@@ -68,7 +68,7 @@ Keep advanced tree, fork/clone, compact, import, and export actions in the exist
 - [x] Audit native semantic fidelity, JSONL immutability/validity, active-run races, cancellation, path disclosure, stale state, duplicate actions, accessibility, test layout, and unrelated changes.
 - [x] Commit, push, and open dedicated pull request [#43](https://github.com/narumiruna/pi-agent/pull/43) with a signed implementation commit linking this plan and Roadmap milestone.
 - [x] Resolve every pull-request check and feedback item with regression coverage, then merge clean implementation pull request [#43](https://github.com/narumiruna/pi-agent/pull/43) as `cb29fc2`.
-- [x] After merge, check the matching Roadmap milestone and archive this plan through an administrative documentation pull request.
+- [x] After merge, check the matching Roadmap milestone and archive this plan through administrative documentation pull request [#44](https://github.com/narumiruna/pi-agent/pull/44).
 
 ## Completion Checklist
 
