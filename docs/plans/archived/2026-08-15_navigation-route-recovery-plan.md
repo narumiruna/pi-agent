@@ -1,6 +1,6 @@
 # Navigation Route Recovery Plan
 
-Status: In progress.
+Status: Completed on 2026-08-15.
 
 ## Goal
 
@@ -58,6 +58,18 @@ Tests can pass through client-side navigation while missing the production serve
 
 Mitigate with reserved-prefix and Accept-header tests, pure route parser tests, exact path matching, dirty-history coverage, direct `page.goto()` plus `page.reload()`, and production Docker verification.
 
+## Outcome
+
+PR [#34](https://github.com/narumiruna/pi-agent/pull/34) merged as `2b991dc` after its automatic `verify` check passed.
+
+Codex identified three actionable issues: duplicate history entries around dirty-file confirmation, loss of direct destinations through OIDC, and root HTML serving that bypassed Accept negotiation.
+
+Indexed history restoration, signed and revalidated shared-route state, and uniform HTML-only fallback handling resolved all three with server, Web, and browser regressions.
+
+Every thread was resolved, and final Codex rereview found no major issues.
+
+The post-merge administrative change checks the matching Roadmap acceptance milestone and archives this plan.
+
 ## Plan
 
 - [x] Audit the route contract, current navigation model, App page state, Files discard guard, production static serving, and route-related tests.
@@ -72,8 +84,8 @@ Mitigate with reserved-prefix and Accept-header tests, pure route parser tests, 
 - [x] Run focused tests, `npm run ci`, full local E2E, and the production Docker build; record exact results.
 - [x] Review the complete diff for API fallback leaks, route-contract duplication, planned-route exposure, history loops, dirty-draft loss, query/hash surprises, inaccessible navigation changes, test-layout violations, and unrelated edits.
 - [x] Commit, push, and open dedicated pull request [#34](https://github.com/narumiruna/pi-agent/pull/34) with a signed implementation commit linking this plan and Roadmap milestone.
-- [ ] Resolve every pull-request check and feedback item with regression coverage, then merge the clean pull request.
-- [ ] After merge, check the matching Roadmap acceptance milestone and archive this plan through an administrative documentation pull request.
+- [x] Resolve all three history, OIDC-return, and root-negotiation findings with regression coverage and merge clean pull request [#34](https://github.com/narumiruna/pi-agent/pull/34) as `2b991dc`; `verify` passed and final Codex rereview found no major issues.
+- [x] After merge, check the matching Roadmap acceptance milestone and archive this plan through an administrative documentation pull request.
 
 ## Completion Checklist
 
@@ -85,8 +97,8 @@ Mitigate with reserved-prefix and Accept-header tests, pure route parser tests, 
 - [x] Unknown reserved namespace and non-HTML requests remain server 404s rather than receiving the SPA.
 - [x] No local-storage route state, third-party router, planned page, or duplicate route registry exists.
 - [x] Server, Web, E2E, CI, and Docker verification pass.
-- [ ] The dedicated pull request is merged with all feedback resolved.
-- [ ] The Roadmap milestone is checked and this plan is archived only after merge.
+- [x] The dedicated pull request is merged with all feedback resolved.
+- [x] The Roadmap milestone is checked and this plan is archived only after merge.
 
 ## Verification
 

@@ -60,7 +60,7 @@ Pi package 仍是 prompt、skill 與 extension 的共同安裝來源，不建立
 
 - [x] Keyboard、screen reader、visible focus、mobile drawer 與 reduced motion 都能操作所有新入口。
 - [x] 未授權路徑、symlink escape、oversized body、stale write 與 active-run conflict 都有 server tests。
-- [ ] Navigation reload 後會回到有效頁面，失效 route 會安全返回 `Chats`。
+- [x] Navigation reload 後會回到有效頁面，失效 route 會安全返回 `Chats`。
 
 ## Phase 1：Chats
 
