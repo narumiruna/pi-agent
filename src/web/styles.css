@@ -1717,13 +1717,16 @@ input:focus-visible,
   }
 }
 
+/* biome-ignore-start lint/complexity/noImportantStyles: The user motion preference must override component and third-party animation styles. */
 @media (prefers-reduced-motion: reduce) {
-  *[class],
-  *[class]::before,
-  *[class]::after {
-    scroll-behavior: auto;
-    animation-duration: 0.001ms;
-    animation-iteration-count: 1;
-    transition-duration: 0.001ms;
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    transition-delay: 0ms !important;
   }
 }
+/* biome-ignore-end lint/complexity/noImportantStyles: The user motion preference must override component and third-party animation styles. */
