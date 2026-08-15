@@ -61,7 +61,7 @@ Static documentation alone can drift; pair it with native projection, activation
 - [x] Clarify the source-of-truth and database boundary in README without inventing a second storage layer.
 - [x] Run focused tests, `npm run ci`, full local E2E, and the production Docker build; record exact results.
 - [x] Review the complete diff for ID parsing, path exposure, copied JSONL state, schema drift, private-API coupling, test-layout violations, and unrelated edits.
-- [ ] Commit, push, and open one dedicated signed pull request linking this plan and Roadmap milestone.
+- [x] Commit, push, and open dedicated pull request [#38](https://github.com/narumiruna/pi-agent/pull/38) with a signed commit linking this plan and Roadmap milestone.
 - [ ] Resolve every pull-request check and feedback item with regression coverage, then merge the clean pull request.
 - [ ] After merge, check the matching Roadmap milestone and archive this plan through an administrative documentation pull request.
 
