@@ -60,7 +60,8 @@ Mitigate with mandatory acknowledgement, idle coordination, native reload, rollb
 - [x] Run focused server/Web tests, `npm run ci`, local E2E, and the production Docker build; record exact results.
 - [x] Review the complete diff for fail-open behavior, pre-trust execution, active-run races, persistence ordering, rollback, path disclosure, bypass writes, native behavior, and unrelated changes.
 - [x] Commit, push, and open dedicated pull request [#24](https://github.com/narumiruna/pi-agent/pull/24) with a signed implementation commit linking this plan and Roadmap milestone.
-- [ ] Read all pull-request checks and feedback, fix every actionable item with regression coverage, and merge the clean pull request.
+- [x] Read all pull-request checks and feedback; CI passed and no actionable review feedback remained.
+- [ ] Merge the clean pull request.
 - [ ] After merge, check the matching Roadmap milestone and archive this plan through an administrative documentation pull request.
 
 ## Completion Checklist
