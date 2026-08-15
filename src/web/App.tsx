@@ -329,6 +329,7 @@ export function App() {
     let reconnecting = false;
     let closed = false;
     let recoveryGeneration = 0;
+    let replayVersion = 0;
     let recoveryTimer: number | undefined;
     const source = new EventSource("/api/events");
     const recover = async (generation: number): Promise<void> => {
@@ -340,19 +341,41 @@ export function App() {
         const recoveredId =
           native.find((conversation) => conversation.active)?.id ?? activeId;
         if (!recoveredId) return;
-        setActiveId(recoveredId);
         const previousEditorText =
           extensionUiRef.current?.sessionId === recoveredId
             ? extensionUiRef.current.editorText
             : undefined;
-        const [state, , transcript] = await Promise.all([
-          loadAgentState(recoveredId),
-          loadConversations(recoveredId),
+        const stateRequest = agentStateRequest.current;
+        const listRequest = conversationListRequest.current;
+        const replayAtRequest = replayVersion;
+        const [state, filtered, transcript] = await Promise.all([
+          api<ConversationAgentState>(
+            `/api/conversations/${recoveredId}/state`,
+          ),
+          api<Conversation[]>(
+            conversationListPath(conversationFiltersRef.current),
+          ),
           api<{ messages: TranscriptMessage[] }>(
             `/api/conversations/${recoveredId}`,
           ),
         ]);
         if (closed || generation !== recoveryGeneration) return;
+        if (
+          replayAtRequest !== replayVersion ||
+          stateRequest !== agentStateRequest.current ||
+          listRequest !== conversationListRequest.current
+        ) {
+          recoveryTimer = window.setTimeout(() => void recover(generation), 0);
+          return;
+        }
+        agentStateRequest.current++;
+        conversationListRequest.current++;
+        setActiveId(recoveredId);
+        setAgentState(state);
+        setRunning(state.running);
+        setQueue(state.queue);
+        setExtensionUi(state.extensionUi);
+        setConversations(filtered);
         setTranscriptRecovery((current) => ({
           sessionId: recoveredId,
           sequence: (current?.sequence ?? 0) + 1,
@@ -385,6 +408,7 @@ export function App() {
       setDelta("");
       setThinking("");
       setLiveTools([]);
+      setActivity(undefined);
       const generation = ++recoveryGeneration;
       void recover(generation);
     };
@@ -397,6 +421,7 @@ export function App() {
         setDelta((current) => current + event.delta);
     });
     source.addEventListener("message_complete", (raw) => {
+      replayVersion++;
       const event = JSON.parse((raw as MessageEvent).data) as {
         sessionId: string;
       };
@@ -409,6 +434,7 @@ export function App() {
       setRefresh((value) => value + 1);
     });
     source.addEventListener("run_status", (raw) => {
+      replayVersion++;
       const event = JSON.parse((raw as MessageEvent).data) as {
         status: string;
         sessionId?: string;
@@ -444,6 +470,7 @@ export function App() {
         setThinking((current) => current + event.delta);
     });
     source.addEventListener("queue_update", (raw) => {
+      replayVersion++;
       const event = JSON.parse((raw as MessageEvent).data) as AgentQueueState;
       if (event.sessionId === activeId) setQueue(event);
     });
@@ -452,6 +479,7 @@ export function App() {
       if (event.sessionId === activeId) setActivity(event);
     });
     source.addEventListener("agent_config", (raw) => {
+      replayVersion++;
       const event = JSON.parse((raw as MessageEvent).data) as {
         sessionId: string;
         preferences: ConversationAgentState["preferences"];
@@ -462,6 +490,7 @@ export function App() {
         );
     });
     source.addEventListener("extension_ui", (raw) => {
+      replayVersion++;
       const event = JSON.parse((raw as MessageEvent).data) as {
         snapshot: ExtensionUiSnapshot;
         editor?: { text: string; mode: "append" | "replace" };
@@ -523,6 +552,7 @@ export function App() {
       setProviderAuth(event.phase === "dismissed" ? undefined : event);
     });
     source.addEventListener("reset", () => {
+      replayVersion++;
       setRefresh((value) => value + 1);
       if (activeId) void loadAgentState(activeId).catch(() => undefined);
     });

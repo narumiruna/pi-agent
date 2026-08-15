@@ -748,16 +748,37 @@ describe("web application", () => {
       static instances: FakeEventSource[] = [];
       onerror: (() => void) | null = null;
       onopen: (() => void) | null = null;
+      private listeners = new Map<
+        string,
+        Array<(event: MessageEvent) => void>
+      >();
       constructor() {
         FakeEventSource.instances.push(this);
       }
-      addEventListener(): void {}
+      addEventListener(
+        type: string,
+        listener: (event: MessageEvent) => void,
+      ): void {
+        this.listeners.set(type, [
+          ...(this.listeners.get(type) ?? []),
+          listener,
+        ]);
+      }
+      emit(type: string, value: unknown): void {
+        for (const listener of this.listeners.get(type) ?? [])
+          listener({ data: JSON.stringify(value) } as MessageEvent);
+      }
       close(): void {}
     }
     vi.stubGlobal("EventSource", FakeEventSource);
     let stateRequests = 0;
     let transcriptRequests = 0;
     let recoveryListRequests = 0;
+    let releaseHydration: (() => void) | undefined;
+    let markHydrationStarted: (() => void) | undefined;
+    const hydrationStarted = new Promise<void>((resolve) => {
+      markHydrationStarted = resolve;
+    });
     let releaseStaleList: (() => void) | undefined;
     let markStaleListStarted: (() => void) | undefined;
     const staleListStarted = new Promise<void>((resolve) => {
@@ -780,7 +801,7 @@ describe("web application", () => {
       if (url === "/api/provider-auth") return json(null);
       if (url === "/api/conversations?sort=recent") {
         recoveryListRequests++;
-        if (recoveryListRequests === 3) {
+        if (recoveryListRequests === 4) {
           markStaleListStarted?.();
           return new Promise<Response>((resolve) => {
             releaseStaleList = () =>
@@ -845,7 +866,7 @@ describe("web application", () => {
         stateRequests++;
         reconnectOperations.push("state");
         const reconnected = stateRequests > 1;
-        return json({
+        const response = {
           sessionId: "session",
           running: !reconnected,
           queue: {
@@ -889,7 +910,14 @@ describe("web application", () => {
             workingVisible: true,
             toolsExpanded: false,
           },
-        });
+        };
+        if (stateRequests === 2) {
+          markHydrationStarted?.();
+          return new Promise<Response>((resolve) => {
+            releaseHydration = () => resolve(json(response));
+          });
+        }
+        return json(response);
       }
       throw new Error(`Unexpected request: ${url}`);
     });
@@ -903,11 +931,22 @@ describe("web application", () => {
     );
     const source = FakeEventSource.instances.at(-1);
     if (!source) throw new Error("EventSource was not created");
+    source.emit("agent_status", {
+      sessionId: "session",
+      kind: "retry",
+      status: "waiting",
+      message: "stale activity",
+    });
+    expect(await screen.findByText("retry: stale activity")).toBeVisible();
     reconnectOperations.length = 0;
     source.onerror?.();
     source.onopen?.();
+    await hydrationStarted;
+    source.emit("message_complete", { sessionId: "session" });
+    releaseHydration?.();
 
     expect(await screen.findByText("reconnected follow-up")).toBeVisible();
+    expect(screen.queryByText("retry: stale activity")).toBeNull();
     expect(await screen.findByText("Recovered transcript")).toBeVisible();
     expect(screen.getByLabelText(/Ask Pi anything/i)).toHaveValue(
       "recovered editor update",
@@ -917,8 +956,8 @@ describe("web application", () => {
     );
     expect(stateRequests).toBeGreaterThanOrEqual(2);
     expect(transcriptRequests).toBeGreaterThanOrEqual(2);
-    expect(recoveryListRequests).toBe(2);
-    expect(reconnectOperations).toEqual(["state"]);
+    expect(recoveryListRequests).toBe(3);
+    expect(reconnectOperations).toEqual(["state", "state"]);
 
     const stateBeforeStaleRecovery = stateRequests;
     source.onerror?.();
