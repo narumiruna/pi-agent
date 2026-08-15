@@ -46,7 +46,7 @@ Mitigate with exact metadata, access, desktop rendering, mobile rendering, and e
 - [x] Pass authenticated state from App and compute one filtered item array for both desktop and mobile NavContent; both component instances receive the same `items` value, while existing App and browser navigation tests preserve rendering and close behavior.
 - [x] Run focused tests, `npm run ci`, and desktop/mobile navigation E2E; 46 focused tests passed, CI passed 250 tests with 5 intentional skips and both builds, and all 17 SQLite browser tests passed.
 - [x] Review the complete diff for duplicated navigation data, divergent permission decisions, premature route exposure, accessibility regressions, and unrelated changes; one metadata list and filter remain, both surfaces receive one computed array, planned-route scans are empty, browser accessibility passed, no dependency changed, and `git diff --check` passed.
-- [ ] Commit, push, and open one dedicated signed pull request linking this plan and Roadmap milestone.
+- [x] Commit, push, and open one dedicated signed pull request linking this plan and Roadmap milestone; signed commit `1b6deba` is pushed in PR #16.
 - [ ] Read all pull-request checks and feedback, fix every actionable item with coverage, and merge the clean pull request.
 - [ ] After merge, check the matching Roadmap milestone and archive this plan through an administrative documentation pull request.
 
