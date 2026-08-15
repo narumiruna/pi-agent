@@ -65,6 +65,22 @@ const MessageBody = Type.Object({
     ),
   ),
 });
+const ConversationListQuery = Type.Object(
+  {
+    q: Type.Optional(Type.String({ minLength: 1, maxLength: 500 })),
+    name: Type.Optional(
+      Type.Union([Type.Literal("all"), Type.Literal("named")]),
+    ),
+    sort: Type.Optional(
+      Type.Union([
+        Type.Literal("recent"),
+        Type.Literal("relevance"),
+        Type.Literal("threaded"),
+      ]),
+    ),
+  },
+  { additionalProperties: false },
+);
 const RenameBody = Type.Object({
   name: Type.String({ minLength: 1, maxLength: 120 }),
 });
@@ -248,8 +264,19 @@ export function registerApi<E extends ApiEnv>(
 ): void {
   const mcpPath = join(services.config.agentDir, "mcp.json");
 
-  app.get("/api/conversations", async (context) =>
-    context.json(await services.pi.listConversations()),
+  app.get(
+    "/api/conversations",
+    tbValidator("query", ConversationListQuery),
+    async (context) => {
+      const query = context.req.valid("query");
+      return context.json(
+        await services.pi.listConversations({
+          ...(query.q ? { query: query.q } : {}),
+          nameFilter: query.name ?? "all",
+          sort: query.sort ?? "threaded",
+        }),
+      );
+    },
   );
   app.post("/api/conversations", async (context) =>
     context.json({ id: await services.pi.createConversation() }, 201),

@@ -52,6 +52,40 @@ function appWith(overrides: Partial<ApiServices> = {}) {
 }
 
 describe("API contracts", () => {
+  test("validates and forwards native conversation discovery options", async () => {
+    const listConversations = vi.fn(async () => []);
+    const app = appWith({ pi: { listConversations } as never });
+    const response = await app.request(
+      "/api/conversations?q=navigation+%22browser+tests%22&name=named&sort=relevance",
+    );
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual([]);
+    expect(listConversations).toHaveBeenCalledWith({
+      query: 'navigation "browser tests"',
+      nameFilter: "named",
+      sort: "relevance",
+    });
+  });
+
+  test("rejects invalid or unbounded conversation discovery input", async () => {
+    const listConversations = vi.fn(async () => []);
+    const app = appWith({ pi: { listConversations } as never });
+
+    const invalidName = await app.request("/api/conversations?name=unnamed");
+    const invalidSort = await app.request("/api/conversations?sort=tokens");
+    const extra = await app.request("/api/conversations?path=%2Ftmp%2Fx");
+    const longSearch = await app.request(
+      `/api/conversations?q=${"x".repeat(501)}`,
+    );
+
+    expect(invalidName.status).toBe(400);
+    expect(invalidSort.status).toBe(400);
+    expect(extra.status).toBe(400);
+    expect(longSearch.status).toBe(400);
+    expect(listConversations).not.toHaveBeenCalled();
+  });
+
   test("accepts an image-only conversation message", async () => {
     const prompt = vi.fn(async () => "run-1");
     const app = appWith({ pi: { prompt } as never });

@@ -36,6 +36,12 @@ export interface Conversation {
   active: boolean;
 }
 
+export interface ConversationFilters {
+  search: string;
+  name: "all" | "named";
+  sort: "recent" | "relevance" | "threaded";
+}
+
 export interface TranscriptToolResult {
   text: string;
   diff?: string;

@@ -11,7 +11,12 @@ import {
 } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
-import { App, updateLiveTools } from "../../src/web/App.js";
+import {
+  App,
+  conversationListPath,
+  DEFAULT_CONVERSATION_FILTERS,
+  updateLiveTools,
+} from "../../src/web/App.js";
 import { AuthNotification } from "../../src/web/components/AuthNotification.js";
 import { DisconnectProviderDialog } from "../../src/web/components/DisconnectProviderDialog.js";
 import { InteractionDialog } from "../../src/web/components/InteractionDialog.js";
@@ -70,6 +75,31 @@ vi.mock("../../src/web/components/CodeEditor.js", () => ({
 }));
 
 describe("web application", () => {
+  test("builds bounded native conversation discovery queries", () => {
+    expect(conversationListPath(DEFAULT_CONVERSATION_FILTERS)).toBe(
+      "/api/conversations",
+    );
+    const path = conversationListPath({
+      search: ' navigation "browser tests" ',
+      name: "named",
+      sort: "relevance",
+    });
+    const query = new URL(path, "http://localhost").searchParams;
+
+    expect(query.get("q")).toBe('navigation "browser tests"');
+    expect(query.get("name")).toBe("named");
+    expect(query.get("sort")).toBe("relevance");
+    expect(
+      new URL(
+        conversationListPath({
+          ...DEFAULT_CONVERSATION_FILTERS,
+          search: "x".repeat(600),
+        }),
+        "http://localhost",
+      ).searchParams.get("q"),
+    ).toHaveLength(500);
+  });
+
   test("deduplicates live tool updates and ignores another conversation", () => {
     const initial = [
       {

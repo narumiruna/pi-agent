@@ -6,6 +6,7 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { Navigation } from "../../src/web/components/Navigation.js";
 import { setLanguage } from "../../src/web/i18n.js";
+import type { ConversationFilters } from "../../src/web/types.js";
 
 beforeEach(async () => {
   await setLanguage("en");
@@ -20,9 +21,11 @@ function renderNavigation(
   options: {
     page?: "chats" | "files" | "heartbeat" | "library" | "settings";
     mobileOpen?: boolean;
+    conversationFilters?: ConversationFilters;
   } = {},
 ) {
   const onMobileOpen = vi.fn();
+  const onConversationFilters = vi.fn();
   const onPage = vi.fn();
   render(
     <Theme>
@@ -30,16 +33,24 @@ function renderNavigation(
         page={options.page ?? "files"}
         authenticated
         conversations={[]}
+        conversationFilters={
+          options.conversationFilters ?? {
+            search: "",
+            name: "all",
+            sort: "threaded",
+          }
+        }
         mobileOpen={options.mobileOpen ?? false}
         newPending={false}
         onMobileOpen={onMobileOpen}
+        onConversationFilters={onConversationFilters}
         onPage={onPage}
         onConversation={vi.fn()}
         onNew={vi.fn()}
       />
     </Theme>,
   );
-  return { onMobileOpen, onPage };
+  return { onConversationFilters, onMobileOpen, onPage };
 }
 
 describe("Navigation accessibility", () => {
@@ -62,6 +73,38 @@ describe("Navigation accessibility", () => {
 
     expect(onPage).toHaveBeenCalledWith("files");
     expect(onMobileOpen).toHaveBeenCalledWith(false);
+  });
+
+  test("searches, filters names, and selects native sort modes with keyboard controls", async () => {
+    const user = userEvent.setup();
+    const { onConversationFilters } = renderNavigation({ page: "chats" });
+    const discovery = document.querySelector("search");
+    expect(discovery).not.toBeNull();
+    expect(discovery).toHaveAttribute("aria-label", "Find conversations");
+    const content = within(discovery as HTMLElement);
+
+    await user.type(
+      content.getByRole("searchbox", { name: "Search conversations" }),
+      "n",
+    );
+    await user.selectOptions(
+      content.getByRole("combobox", { name: "Name" }),
+      "named",
+    );
+    await user.selectOptions(
+      content.getByRole("combobox", { name: "Sort" }),
+      "relevance",
+    );
+
+    expect(onConversationFilters).toHaveBeenCalledWith(
+      expect.objectContaining({ search: "n" }),
+    );
+    expect(onConversationFilters).toHaveBeenCalledWith(
+      expect.objectContaining({ name: "named" }),
+    );
+    expect(onConversationFilters).toHaveBeenCalledWith(
+      expect.objectContaining({ sort: "relevance" }),
+    );
   });
 
   test("labels the open mobile dialog and exposes its active destination", async () => {

@@ -46,6 +46,12 @@ import {
 } from "../interactions/web-state.js";
 import type { McpManager } from "../mcp/manager.js";
 import type { HeartbeatRunDetails } from "../storage/types.js";
+import {
+  type ConversationDiscoveryRecord,
+  type ConversationListOptions,
+  conversationMessagesText,
+  discoverConversations,
+} from "./conversation-discovery.js";
 import type { EventHub } from "./events.js";
 import {
   ProjectTrustPolicy,
@@ -213,6 +219,11 @@ export interface ProviderAccess {
   };
 }
 
+/**
+ * Single lifecycle facade for one mutable Pi runtime and its coordinator.
+ * Keeping ownership together prevents competing session/tool/provider state; pure
+ * projections and policies live in focused sibling modules as they grow.
+ */
 export class PiService {
   readonly coordinator = new RunCoordinator();
   readonly modelRuntime: ModelRuntime;
@@ -449,29 +460,61 @@ export class PiService {
     );
   }
 
-  async listConversations(): Promise<ConversationSummary[]> {
+  async listConversations(
+    options: ConversationListOptions = {},
+  ): Promise<ConversationSummary[]> {
     const sessions = await this.nativeSessions();
-    const conversations = sessions.map((session) => ({
-      id: session.id,
-      ...(session.name ? { name: session.name } : {}),
-      createdAt: session.created.toISOString(),
-      modifiedAt: session.modified.toISOString(),
-      messageCount: session.messageCount,
-      active: session.id === this.activeSessionId,
-    }));
-    if (!conversations.some((conversation) => conversation.active)) {
+    const records: ConversationDiscoveryRecord[] = sessions.flatMap(
+      (session) =>
+        Number.isFinite(session.created.getTime()) &&
+        Number.isFinite(session.modified.getTime())
+          ? [
+              {
+                id: session.id,
+                ...(session.name ? { name: session.name } : {}),
+                created: session.created,
+                modified: session.modified,
+                messageCount: session.messageCount,
+                active: session.id === this.activeSessionId,
+                cwd: session.cwd,
+                allMessagesText: session.allMessagesText,
+                path: session.path,
+                ...(session.parentSessionPath
+                  ? { parentSessionPath: session.parentSessionPath }
+                  : {}),
+              },
+            ]
+          : [],
+    );
+    if (!records.some((record) => record.active)) {
       const active = this.activeSession;
-      const timestamp = new Date().toISOString();
-      conversations.unshift({
+      const timestamps = active.messages
+        .map((message) => message.timestamp)
+        .filter((value) => Number.isFinite(value));
+      const now = Date.now();
+      records.push({
         id: active.sessionId,
         ...(active.sessionName ? { name: active.sessionName } : {}),
-        createdAt: timestamp,
-        modifiedAt: timestamp,
+        created: new Date(
+          timestamps.length > 0 ? Math.min(...timestamps) : now,
+        ),
+        modified: new Date(
+          timestamps.length > 0 ? Math.max(...timestamps) : now,
+        ),
         messageCount: active.messages.length,
         active: true,
+        cwd: this.config.workspace,
+        allMessagesText: conversationMessagesText(active.messages),
       });
     }
-    return conversations;
+    return discoverConversations(records, options).map((record) => ({
+      id: record.id,
+      ...(record.name ? { name: record.name } : {}),
+      createdAt: record.created.toISOString(),
+      modifiedAt: record.modified.toISOString(),
+      messageCount: record.messageCount,
+      active: record.active,
+    }));
   }
 
   async createConversation(): Promise<string> {

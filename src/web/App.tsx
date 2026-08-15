@@ -24,6 +24,7 @@ import type {
   AgentQueueState,
   Conversation,
   ConversationAgentState,
+  ConversationFilters,
   ExtensionUiSnapshot,
   InteractionEvent,
   LiveTool,
@@ -62,6 +63,22 @@ function routeHistoryState(state: unknown, index: number) {
   };
 }
 
+export const DEFAULT_CONVERSATION_FILTERS: ConversationFilters = {
+  search: "",
+  name: "all",
+  sort: "threaded",
+};
+
+export function conversationListPath(filters: ConversationFilters): string {
+  const query = new URLSearchParams();
+  const search = filters.search.trim();
+  if (search) query.set("q", search.slice(0, 500));
+  if (filters.name !== "all") query.set("name", filters.name);
+  if (filters.sort !== "threaded") query.set("sort", filters.sort);
+  const serialized = query.toString();
+  return serialized ? `/api/conversations?${serialized}` : "/api/conversations";
+}
+
 export function App() {
   const { t } = useTranslation();
   const [session, setSession] = useState<SessionInfo>();
@@ -71,6 +88,11 @@ export function App() {
     pageFromPathname(window.location.pathname),
   );
   const [conversations, setConversations] = useState<Conversation[]>([]);
+  const [conversationFilters, setConversationFilters] =
+    useState<ConversationFilters>(DEFAULT_CONVERSATION_FILTERS);
+  const conversationFiltersRef = useRef(conversationFilters);
+  const conversationListRequest = useRef(0);
+  const conversationFilterReady = useRef(false);
   const [activeId, setActiveId] = useState<string>();
   const [conversationPending, setConversationPending] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -204,20 +226,28 @@ export function App() {
     return result;
   }, []);
 
-  const loadConversations = useCallback(async (preferredId?: string) => {
-    const result = await api<Conversation[]>("/api/conversations");
-    setConversations(result);
-    const active =
-      result.find((conversation) => conversation.active) ?? result[0];
-    setActiveId((current) =>
-      preferredId &&
-      result.some((conversation) => conversation.id === preferredId)
-        ? preferredId
-        : current && result.some((conversation) => conversation.id === current)
-          ? current
-          : active?.id,
-    );
-  }, []);
+  const loadConversations = useCallback(
+    async (preferredId?: string, filters = conversationFiltersRef.current) => {
+      const request = ++conversationListRequest.current;
+      let result: Conversation[];
+      try {
+        result = await api<Conversation[]>(conversationListPath(filters));
+      } catch (error) {
+        if (request !== conversationListRequest.current) return;
+        throw error;
+      }
+      if (request !== conversationListRequest.current) return;
+      setConversations(result);
+      const active = result.find((conversation) => conversation.active);
+      setActiveId((current) => preferredId ?? active?.id ?? current);
+    },
+    [],
+  );
+
+  const changeConversationFilters = (next: ConversationFilters) => {
+    conversationFiltersRef.current = next;
+    setConversationFilters(next);
+  };
 
   useEffect(() => {
     const query = window.matchMedia?.("(prefers-color-scheme: dark)");
@@ -243,6 +273,23 @@ export function App() {
         else setError(reason instanceof Error ? reason.message : "load_failed");
       });
   }, [loadConversations]);
+
+  useEffect(() => {
+    if (!session) return;
+    if (!conversationFilterReady.current) {
+      conversationFilterReady.current = true;
+      return;
+    }
+    const timer = window.setTimeout(() => {
+      void loadConversations(undefined, conversationFilters).catch(() =>
+        setNotification({
+          message: t("conversationListRefreshFailed"),
+          type: "warning",
+        }),
+      );
+    }, 200);
+    return () => window.clearTimeout(timer);
+  }, [conversationFilters, loadConversations, session, t]);
 
   useEffect(() => {
     if (!session || !activeId) return;
@@ -535,10 +582,12 @@ export function App() {
             page={page}
             authenticated={session.authenticated}
             conversations={conversations}
+            conversationFilters={conversationFilters}
             activeId={activeId}
             mobileOpen={mobileOpen}
             newPending={conversationPending || running}
             onMobileOpen={setMobileOpen}
+            onConversationFilters={changeConversationFilters}
             onPage={(nextPage) => afterFilesDiscard(() => navigate(nextPage))}
             onConversation={(id) =>
               afterFilesDiscard(() => {

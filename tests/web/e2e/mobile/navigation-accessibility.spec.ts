@@ -106,6 +106,38 @@ test("keyboard-operates every drawer destination with visible focus and reduced 
     0.001,
   );
   expect(durationInMilliseconds(timing.transitionDelay)).toBe(0);
+  const discovery = dialog.getByRole("search", {
+    name: "Find conversations",
+  });
+  const search = discovery.getByRole("searchbox", {
+    name: "Search conversations",
+  });
+  await search.focus();
+  await page.keyboard.type("NO_MOBILE_DISCOVERY_MATCH");
+  await expect(dialog.getByText("No matching conversations.")).toBeVisible();
+  expect(
+    await search.evaluate((element) => element.matches(":focus-visible")),
+  ).toBe(true);
+
+  const nameFilter = discovery.getByRole("combobox", { name: "Name" });
+  await nameFilter.focus();
+  await page.keyboard.press("End");
+  await expect(nameFilter).toHaveValue("named");
+  const sort = discovery.getByRole("combobox", { name: "Sort" });
+  await sort.focus();
+  await page.keyboard.press("End");
+  await expect(sort).toHaveValue("relevance");
+  const reset = discovery.getByRole("button", { name: "Reset" });
+  await reset.focus();
+  await page.keyboard.press("Enter");
+  await expect(search).toHaveValue("");
+  await expect(nameFilter).toHaveValue("all");
+  await expect(sort).toHaveValue("threaded");
+  expect(
+    await dialog.evaluate(
+      (element) => element.scrollWidth <= element.clientWidth,
+    ),
+  ).toBe(true);
   await expectNoSeriousAccessibilityViolations(page);
 
   await page.keyboard.press("Escape");
