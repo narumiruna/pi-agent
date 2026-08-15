@@ -419,6 +419,7 @@ export function App() {
         <div className="appShell">
           <Navigation
             page={page}
+            authenticated={session.authenticated}
             conversations={conversations}
             activeId={activeId}
             mobileOpen={mobileOpen}

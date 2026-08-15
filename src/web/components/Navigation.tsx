@@ -17,12 +17,18 @@ import {
   Tooltip,
 } from "@radix-ui/themes";
 import { useTranslation } from "react-i18next";
+import {
+  type NavigationIconKey,
+  type PrimaryNavigationItem,
+  primaryNavigationFor,
+} from "../navigation.js";
 import type { Page } from "../routes.js";
 import type { Conversation } from "../types.js";
 import { DialogPortal } from "./DialogPortal.js";
 
 interface Props {
   page: Page;
+  authenticated: boolean;
   conversations: Conversation[];
   activeId?: string;
   mobileOpen: boolean;
@@ -33,19 +39,20 @@ interface Props {
   onNew: () => void;
 }
 
-function NavContent(props: Props) {
+const NAVIGATION_ICONS: Record<NavigationIconKey, typeof ChatBubbleIcon> = {
+  chat: ChatBubbleIcon,
+  file: FileIcon,
+  heartbeat: HeartIcon,
+  library: ReaderIcon,
+  settings: GearIcon,
+};
+
+interface NavContentProps extends Props {
+  items: readonly PrimaryNavigationItem[];
+}
+
+function NavContent(props: NavContentProps) {
   const { t } = useTranslation();
-  const items: Array<{
-    page: Page;
-    label: string;
-    icon: typeof ChatBubbleIcon;
-  }> = [
-    { page: "chats", label: t("chat"), icon: ChatBubbleIcon },
-    { page: "files", label: t("files"), icon: FileIcon },
-    { page: "heartbeat", label: t("heartbeat"), icon: HeartIcon },
-    { page: "library", label: t("library"), icon: ReaderIcon },
-    { page: "settings", label: t("settings"), icon: GearIcon },
-  ];
   return (
     <div className="navContent">
       <div className="brand">
@@ -53,23 +60,24 @@ function NavContent(props: Props) {
         <Text weight="bold">{t("appName")}</Text>
       </div>
       <nav className="primaryNav" aria-label="Primary">
-        {items.map(({ page, label, icon: Icon }) => (
-          <button
-            type="button"
-            key={page}
-            className={props.page === page ? "navItem active" : "navItem"}
-            onClick={() => {
-              props.onPage(page);
-              props.onMobileOpen(false);
-            }}
-          >
-            <Icon />
-            <span>{label}</span>
-            {page === "heartbeat" && (
-              <span className="pulseRail" aria-hidden="true" />
-            )}
-          </button>
-        ))}
+        {props.items.map(({ page, labelKey, icon, pulse }) => {
+          const Icon = NAVIGATION_ICONS[icon];
+          return (
+            <button
+              type="button"
+              key={page}
+              className={props.page === page ? "navItem active" : "navItem"}
+              onClick={() => {
+                props.onPage(page);
+                props.onMobileOpen(false);
+              }}
+            >
+              <Icon />
+              <span>{t(labelKey)}</span>
+              {pulse && <span className="pulseRail" aria-hidden="true" />}
+            </button>
+          );
+        })}
       </nav>
       <div className="conversationHeader">
         <Text size="1" color="gray">
@@ -117,10 +125,11 @@ function NavContent(props: Props) {
 
 export function Navigation(props: Props) {
   const { t } = useTranslation();
+  const items = primaryNavigationFor({ authenticated: props.authenticated });
   return (
     <>
       <aside className="sidebar">
-        <NavContent {...props} />
+        <NavContent {...props} items={items} />
       </aside>
       <Dialog.Root open={props.mobileOpen} onOpenChange={props.onMobileOpen}>
         <Dialog.Trigger asChild>
@@ -145,7 +154,7 @@ export function Navigation(props: Props) {
                 <Cross1Icon />
               </Button>
             </Dialog.Close>
-            <NavContent {...props} />
+            <NavContent {...props} items={items} />
           </Dialog.Content>
         </DialogPortal>
       </Dialog.Root>
