@@ -4,6 +4,11 @@ import { bodyLimit } from "hono/body-limit";
 import { deleteCookie, getCookie, setCookie } from "hono/cookie";
 import { secureHeaders } from "hono/secure-headers";
 import { apiError } from "../shared/contracts.js";
+import {
+  DEFAULT_APP_ROUTE,
+  isCurrentPagePathname,
+  pathnameForPage,
+} from "../shared/routes.js";
 import { type ApiServices, registerApi } from "./api.js";
 import { type AuthService, createAuthService } from "./auth/service.js";
 import type { AppConfig } from "./config.js";
@@ -24,6 +29,12 @@ export interface CreateAppOptions {
   authService?: AuthService;
   ready?: () => boolean;
   services?: Omit<ApiServices, "config" | "store">;
+}
+
+function safeLoginReturnPath(value: string | undefined): string {
+  return value && isCurrentPagePathname(value)
+    ? value
+    : pathnameForPage(DEFAULT_APP_ROUTE);
 }
 
 function hash(value: string): string {
@@ -121,13 +132,15 @@ export function createApp(options: CreateAppOptions): Hono<AppBindings> {
   );
 
   app.get("/auth/login", async (context) => {
-    if (!auth) return context.redirect("/");
+    const returnTo = safeLoginReturnPath(context.req.query("returnTo"));
+    if (!auth) return context.redirect(returnTo);
     const login = await auth.beginLogin();
     const state = encodeOidcState(
       {
         state: login.state,
         nonce: login.nonce,
         codeVerifier: login.codeVerifier,
+        returnTo,
       },
       options.config.auth.mode === "oidc"
         ? options.config.auth.clientSecret
@@ -144,11 +157,16 @@ export function createApp(options: CreateAppOptions): Hono<AppBindings> {
   });
 
   app.get("/auth/callback", async (context) => {
-    if (!auth) return context.redirect("/");
+    if (!auth) return context.redirect(pathnameForPage(DEFAULT_APP_ROUTE));
     const encoded = getCookie(context, STATE_COOKIE);
     deleteCookie(context, STATE_COOKIE, { path: "/auth/callback" });
     if (!encoded) return context.json(apiError("unauthorized"), 401);
-    let expected: { state: string; nonce: string; codeVerifier: string };
+    let expected: {
+      state: string;
+      nonce: string;
+      codeVerifier: string;
+      returnTo?: string;
+    };
     try {
       expected = decodeOidcState<typeof expected>(
         encoded,
@@ -177,7 +195,7 @@ export function createApp(options: CreateAppOptions): Hono<AppBindings> {
         path: "/",
         maxAge: 86_400,
       });
-      return context.redirect("/");
+      return context.redirect(safeLoginReturnPath(expected.returnTo));
     } catch {
       return context.json(apiError("unauthorized"), 401);
     }

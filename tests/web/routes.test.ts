@@ -4,6 +4,7 @@ import {
   CURRENT_APP_ROUTES,
   CURRENT_PAGE_IDS,
   DEFAULT_APP_ROUTE,
+  isCurrentPagePathname,
   LEGACY_LIBRARY_ROUTE,
   pageFromPathname,
   pathnameForPage,
@@ -43,6 +44,7 @@ describe("app route contract", () => {
       { id: "settings", path: "/settings" },
     ]);
     for (const route of CURRENT_APP_ROUTES) {
+      expect(isCurrentPagePathname(route.path)).toBe(true);
       expect(pageFromPathname(route.path)).toBe(route.id);
       expect(pathnameForPage(route.id)).toBe(route.path);
     }
@@ -57,6 +59,7 @@ describe("app route contract", () => {
     "/skills",
     "/extensions",
   ])("safely maps invalid or unavailable path %s to Chats", (pathname) => {
+    expect(isCurrentPagePathname(pathname)).toBe(false);
     expect(pageFromPathname(pathname)).toBe("chats");
   });
 

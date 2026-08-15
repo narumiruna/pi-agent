@@ -223,11 +223,8 @@ describe("web application", () => {
     const editor = await screen.findByLabelText("Contents of notes.txt");
     await user.type(editor, " changed");
 
-    act(() => {
-      window.history.replaceState(null, "", "/chats");
-      window.dispatchEvent(new PopStateEvent("popstate"));
-    });
-    expect(screen.getByText("Discard unsaved changes?")).toBeVisible();
+    act(() => window.history.back());
+    expect(await screen.findByText("Discard unsaved changes?")).toBeVisible();
     expect(window.location.pathname).toBe("/files");
     await user.click(screen.getByRole("button", { name: "Cancel" }));
 

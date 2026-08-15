@@ -90,9 +90,11 @@ Mitigate with reserved-prefix and Accept-header tests, pure route parser tests, 
 
 ## Verification
 
-- `npm test -- tests/web/routes.test.ts tests/web/app.test.tsx tests/server/web-fallback.test.ts`: 67 tests passed.
-- `npm run ci`: 25 files passed, 327 tests passed, 5 PostgreSQL-dependent tests skipped, and both builds passed.
+- `npm test -- tests/web/routes.test.ts tests/web/app.test.tsx tests/server/http-auth.test.ts tests/server/web-fallback.test.ts`: 77 tests passed after review fixes.
+- `npm run ci`: 25 files passed, 328 tests passed, 5 PostgreSQL-dependent tests skipped, and both builds passed.
 - Initial focused browser runs exposed the intentionally changed post-login canonical URL and a hidden Monaco edit-context selector; the shared sign-in expectation and test interaction were corrected before the full run.
-- `npx playwright test`: all 21 setup, desktop, route-reload, dirty-history, accessibility, and mobile tests passed.
+- `npx playwright test`: all 22 setup, desktop, route-reload, OIDC-return, dirty-history, accessibility, and mobile tests passed.
 - Direct browser navigation exercises the production `main()` server, proving its HTML fallback rather than only a development-server fallback.
-- `docker build -t pi-agent:local .`: production image built successfully as `sha256:a513592c9a1ce0091485c7c76bdca8d4ddb3520b9034b6342f09607c7f3cc193`.
+- `docker build -t pi-agent:local .`: post-review production image built successfully as `sha256:07c112d8e1912cdb6aee93e3720b498e87a213791e845694f75999a9ee8cbe8a`.
+- Codex review identified duplicate history entries around dirty-file confirmation and loss of direct routes through OIDC; shared route definitions now validate a signed OIDC return path, and indexed history state restores then replays Back/Forward without adding entries.
+- Browser regressions cover cancel and confirm in both Back and Forward directions, verify preserved history indexes, and prove direct `/files` sign-in returns to `/files`.

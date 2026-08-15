@@ -43,6 +43,25 @@ export function updateLiveTools(
   );
 }
 
+const ROUTE_HISTORY_INDEX = "piAgentRouteIndex";
+
+function routeHistoryIndex(state: unknown): number | undefined {
+  if (!state || typeof state !== "object") return undefined;
+  const value = (state as Record<string, unknown>)[ROUTE_HISTORY_INDEX];
+  return typeof value === "number" && Number.isInteger(value) && value >= 0
+    ? value
+    : undefined;
+}
+
+function routeHistoryState(state: unknown, index: number) {
+  return {
+    ...(state && typeof state === "object"
+      ? (state as Record<string, unknown>)
+      : {}),
+    [ROUTE_HISTORY_INDEX]: index,
+  };
+}
+
 export function App() {
   const { t } = useTranslation();
   const [session, setSession] = useState<SessionInfo>();
@@ -58,6 +77,12 @@ export function App() {
   const [filesDirty, setFilesDirty] = useState(false);
   const [filesDiscardOpen, setFilesDiscardOpen] = useState(false);
   const pendingFilesAction = useRef<(() => void) | undefined>(undefined);
+  const currentHistoryIndex = useRef(0);
+  const restoringHistory = useRef(false);
+  const acceptingHistory = useRef(false);
+  const pendingHistoryNavigation = useRef<{ delta: number } | undefined>(
+    undefined,
+  );
   const [refresh, setRefresh] = useState(0);
   const [delta, setDelta] = useState("");
   const [running, setRunning] = useState(false);
@@ -86,34 +111,85 @@ export function App() {
   const navigate = useCallback((nextPage: Page) => {
     const pathname = pathnameForPage(nextPage);
     setPage(nextPage);
-    if (window.location.pathname !== pathname)
-      window.history.pushState(null, "", pathname);
+    if (window.location.pathname === pathname) return;
+    const nextIndex = currentHistoryIndex.current + 1;
+    currentHistoryIndex.current = nextIndex;
+    window.history.pushState(
+      routeHistoryState(window.history.state, nextIndex),
+      "",
+      pathname,
+    );
   }, []);
 
   useEffect(() => {
     const initialPage = pageFromPathname(window.location.pathname);
     const canonicalPath = pathnameForPage(initialPage);
-    if (window.location.pathname !== canonicalPath)
-      window.history.replaceState(null, "", canonicalPath);
+    const initialIndex = routeHistoryIndex(window.history.state) ?? 0;
+    currentHistoryIndex.current = initialIndex;
+    const url =
+      window.location.pathname === canonicalPath
+        ? `${window.location.pathname}${window.location.search}${window.location.hash}`
+        : canonicalPath;
+    window.history.replaceState(
+      routeHistoryState(window.history.state, initialIndex),
+      "",
+      url,
+    );
   }, []);
 
   useEffect(() => {
-    const onPopState = () => {
+    const onPopState = (event: PopStateEvent) => {
       const nextPage = pageFromPathname(window.location.pathname);
       const canonicalPath = pathnameForPage(nextPage);
-      if (page === "files" && filesDirty && nextPage !== page) {
-        window.history.pushState(null, "", pathnameForPage(page));
-        pendingFilesAction.current = () => navigate(nextPage);
-        setFilesDiscardOpen(true);
+      const nextIndex = routeHistoryIndex(event.state);
+
+      if (acceptingHistory.current) {
+        acceptingHistory.current = false;
+        pendingHistoryNavigation.current = undefined;
+        if (nextIndex !== undefined) currentHistoryIndex.current = nextIndex;
+      } else if (restoringHistory.current) {
+        restoringHistory.current = false;
+        if (nextIndex !== undefined) currentHistoryIndex.current = nextIndex;
+        const pending = pendingHistoryNavigation.current;
+        if (pending) {
+          pendingFilesAction.current = () => {
+            acceptingHistory.current = true;
+            window.history.go(pending.delta);
+          };
+          setFilesDiscardOpen(true);
+        }
         return;
+      } else {
+        const delta =
+          nextIndex === undefined
+            ? undefined
+            : nextIndex - currentHistoryIndex.current;
+        if (
+          page === "files" &&
+          filesDirty &&
+          nextPage !== page &&
+          delta !== undefined &&
+          delta !== 0
+        ) {
+          pendingHistoryNavigation.current = { delta };
+          restoringHistory.current = true;
+          window.history.go(-delta);
+          return;
+        }
+        if (nextIndex !== undefined) currentHistoryIndex.current = nextIndex;
       }
+
       if (window.location.pathname !== canonicalPath)
-        window.history.replaceState(null, "", canonicalPath);
+        window.history.replaceState(
+          routeHistoryState(window.history.state, currentHistoryIndex.current),
+          "",
+          canonicalPath,
+        );
       setPage(nextPage);
     };
     window.addEventListener("popstate", onPopState);
     return () => window.removeEventListener("popstate", onPopState);
-  }, [filesDirty, navigate, page]);
+  }, [filesDirty, page]);
 
   const loadAgentState = useCallback(async (id: string) => {
     const request = ++agentStateRequest.current;
@@ -436,7 +512,11 @@ export function App() {
           <Button
             highContrast
             size="3"
-            onClick={() => window.location.assign("/auth/login")}
+            onClick={() =>
+              window.location.assign(
+                `/auth/login?returnTo=${encodeURIComponent(pathnameForPage(page))}`,
+              )
+            }
           >
             {t("signIn")}
           </Button>
@@ -555,7 +635,10 @@ export function App() {
             confirmLabel={t("filesDiscard")}
             onOpenChange={(open) => {
               setFilesDiscardOpen(open);
-              if (!open) pendingFilesAction.current = undefined;
+              if (!open) {
+                pendingFilesAction.current = undefined;
+                pendingHistoryNavigation.current = undefined;
+              }
             }}
             onConfirm={confirmFilesDiscard}
           />
