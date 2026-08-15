@@ -1,6 +1,6 @@
 # Manual E2E Workflow Plan
 
-Status: In progress.
+Status: Completed on 2026-08-15.
 
 ## Goal
 
@@ -38,6 +38,14 @@ The accepted mitigation is to keep both database variants available in one manua
 
 Move the unchanged E2E matrix job back into `.github/workflows/ci.yaml` if automatic browser coverage is required again.
 
+## Outcome
+
+PR #12 merged as `b4beda7`, leaving `verify` as the only automatic GitHub CI job.
+
+Manual workflow run [31859911655](https://github.com/narumiruna/pi-agent/actions/runs/31859911655) completed both SQLite and PostgreSQL E2E jobs successfully.
+
+The run emitted only GitHub's Node.js 20 action-runtime deprecation annotation for `actions/checkout@v4` and `actions/setup-node@v4`; GitHub forced those actions to Node.js 24 and both jobs passed.
+
 ## Plan
 
 - [x] Inspect `.github/workflows/ci.yaml`, `package.json`, and `justfile` to identify the automatic E2E job and unchanged local entry points; evidence: the workflow has one `e2e` matrix and local commands remain separate from `npm run ci`.
@@ -53,8 +61,8 @@ Move the unchanged E2E matrix job back into `.github/workflows/ci.yaml` if autom
 
 - [x] Automatic GitHub CI has no E2E job or Playwright installation step.
 - [x] The manual E2E workflow has no trigger other than `workflow_dispatch`.
-- [ ] One manual dispatch runs both SQLite and PostgreSQL E2E variants and preserves failure artifacts.
+- [x] One manual dispatch runs both SQLite and PostgreSQL E2E variants and preserves failure artifacts; run `31859911655` passed both matrix jobs, and the failure-only artifact step remained correctly skipped.
 - [x] Local E2E scripts and test files are unchanged.
 - [x] Focused workflow validation, `npm run ci`, and local SQLite E2E pass.
 - [x] The dedicated pull request is open, required checks pass, and every review item has an evidence-backed outcome.
-- [ ] The pull request is merged before this plan is archived.
+- [x] The pull request is merged before this plan is archived; PR #12 merged as `b4beda7` on 2026-08-15.
