@@ -23,17 +23,19 @@ import {
   primaryNavigationFor,
 } from "../navigation.js";
 import type { Page } from "../routes.js";
-import type { Conversation } from "../types.js";
+import type { Conversation, ConversationFilters } from "../types.js";
 import { DialogPortal } from "./DialogPortal.js";
 
 interface Props {
   page: Page;
   authenticated: boolean;
   conversations: Conversation[];
+  conversationFilters: ConversationFilters;
   activeId?: string;
   mobileOpen: boolean;
   newPending: boolean;
   onMobileOpen: (open: boolean) => void;
+  onConversationFilters: (filters: ConversationFilters) => void;
   onPage: (page: Page) => void;
   onConversation: (id: string) => void;
   onNew: () => void;
@@ -53,6 +55,12 @@ interface NavContentProps extends Props {
 
 function NavContent(props: NavContentProps) {
   const { t } = useTranslation();
+  const updateFilters = (patch: Partial<ConversationFilters>) =>
+    props.onConversationFilters({ ...props.conversationFilters, ...patch });
+  const filtersActive =
+    props.conversationFilters.search !== "" ||
+    props.conversationFilters.name !== "all" ||
+    props.conversationFilters.sort !== "threaded";
   return (
     <div className="navContent">
       <div className="brand">
@@ -96,28 +104,100 @@ function NavContent(props: NavContentProps) {
           </IconButton>
         </Tooltip>
       </div>
+      <search
+        className="conversationDiscovery"
+        aria-label={t("conversationDiscovery")}
+      >
+        <label className="conversationSearch">
+          <span className="srOnly">{t("conversationSearch")}</span>
+          <input
+            type="search"
+            value={props.conversationFilters.search}
+            maxLength={500}
+            placeholder={t("conversationSearchPlaceholder")}
+            title={t("conversationSearchHint")}
+            onChange={(event) => updateFilters({ search: event.target.value })}
+          />
+        </label>
+        <div className="conversationFilterFields">
+          <label>
+            <span>{t("conversationNameFilter")}</span>
+            <select
+              value={props.conversationFilters.name}
+              onChange={(event) =>
+                updateFilters({
+                  name: event.target.value as ConversationFilters["name"],
+                })
+              }
+            >
+              <option value="all">{t("conversationNameAll")}</option>
+              <option value="named">{t("conversationNameNamed")}</option>
+            </select>
+          </label>
+          <label>
+            <span>{t("conversationSort")}</span>
+            <select
+              value={props.conversationFilters.sort}
+              onChange={(event) =>
+                updateFilters({
+                  sort: event.target.value as ConversationFilters["sort"],
+                })
+              }
+            >
+              <option value="threaded">{t("conversationSortThreaded")}</option>
+              <option value="recent">{t("conversationSortRecent")}</option>
+              <option value="relevance">{t("conversationSortFuzzy")}</option>
+            </select>
+          </label>
+        </div>
+        <div className="conversationDiscoveryFooter">
+          <Text size="1" color="gray" aria-live="polite">
+            {t("conversationResults", { count: props.conversations.length })}
+          </Text>
+          <button
+            type="button"
+            className="conversationReset"
+            disabled={!filtersActive}
+            onClick={() =>
+              props.onConversationFilters({
+                search: "",
+                name: "all",
+                sort: "threaded",
+              })
+            }
+          >
+            {t("conversationReset")}
+          </button>
+        </div>
+      </search>
       <ScrollArea className="conversationScroll">
         <div className="conversationList">
-          {props.conversations.map((conversation) => (
-            <button
-              type="button"
-              aria-label={conversation.name ?? conversation.id}
-              title={conversation.name ?? conversation.id}
-              key={conversation.id}
-              disabled={props.newPending}
-              className={
-                props.activeId === conversation.id
-                  ? "conversationItem active"
-                  : "conversationItem"
-              }
-              onClick={() => {
-                props.onConversation(conversation.id);
-                props.onMobileOpen(false);
-              }}
-            >
-              {conversation.name || conversation.id.slice(-8)}
-            </button>
-          ))}
+          {props.conversations.length === 0 ? (
+            <Text className="conversationEmpty" size="1" color="gray">
+              {t("conversationNoResults")}
+            </Text>
+          ) : (
+            props.conversations.map((conversation) => (
+              <button
+                type="button"
+                aria-label={conversation.name ?? conversation.id}
+                title={conversation.name ?? conversation.id}
+                key={conversation.id}
+                disabled={props.newPending}
+                className={
+                  props.activeId === conversation.id
+                    ? "conversationItem active"
+                    : "conversationItem"
+                }
+                onClick={() => {
+                  props.onConversation(conversation.id);
+                  props.onMobileOpen(false);
+                }}
+              >
+                {conversation.name || conversation.id.slice(-8)}
+              </button>
+            ))
+          )}
         </div>
       </ScrollArea>
     </div>

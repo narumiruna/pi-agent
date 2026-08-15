@@ -174,6 +174,10 @@ Current destinations use canonical paths at `/chats`, `/files`, `/heartbeat`, `/
 
 The Chats destination retains the Pi-backed conversation list, active selection, and New conversation action.
 
+Conversation discovery follows Pi’s resume selector with fuzzy terms, quoted exact phrases, `re:<pattern>` regular expressions, All or Named-only filtering, and Threaded, Recent, or Fuzzy sorting.
+
+Search runs over native session metadata and user/assistant text on the server; message text, cwd, JSONL paths, parent paths, and scores never enter the list response.
+
 Direct loads, reloads, Back, and Forward restore those pages, while root, unknown, malformed, and not-yet-enabled routes replace safely to `/chats`.
 
 A validated current path is carried through signed OIDC state so direct bookmarks survive sign-in without enabling open redirects.

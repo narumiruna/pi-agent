@@ -515,6 +515,7 @@ describe("conversation listing", () => {
   test("includes the active in-memory conversation before Pi persists it", async () => {
     const service = Object.create(PiService.prototype) as PiService;
     Object.defineProperties(service, {
+      config: { value: { workspace: "/workspace" } },
       nativeSessions: { value: vi.fn(async () => []) },
       runtime: {
         value: {
