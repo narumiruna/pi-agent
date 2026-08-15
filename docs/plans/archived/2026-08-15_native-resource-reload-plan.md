@@ -1,6 +1,6 @@
 # Native Resource Reload Plan
 
-Status: In progress.
+Status: Completed on 2026-08-15.
 
 ## Goal
 
@@ -52,6 +52,16 @@ A redundant E2E `/api/reload` call can mask a missing mutation-triggered reload.
 
 Mitigate by retaining propagated reload errors, calling only `PiService.reload()`, testing operation order and failure behavior, and removing the redundant E2E call.
 
+## Outcome
+
+PR [#28](https://github.com/narumiruna/pi-agent/pull/28) merged as `b07ad05` after its automatic `verify` check passed.
+
+Codex identified one actionable stale-runtime case for an externally removed document.
+
+The fix retained idempotent deletion, always ran native reload to reconcile command discovery, added a regression, resolved the thread, and passed a final Codex rereview with no major issues.
+
+The post-merge administrative change checks the matching Roadmap milestone and archives this plan.
+
 ## Plan
 
 - [x] Inspect current document, package, MCP, project-trust, command-discovery, and reload paths.
@@ -66,8 +76,8 @@ Mitigate by retaining propagated reload errors, calling only `PiService.reload()
 - [x] Run focused tests, `npm run ci`, full local E2E, and the production Docker build; record exact results.
 - [x] Review the complete diff for bypassed native APIs, direct runtime collection mutation, missed resource mutations, redundant reloads, active-run bypass, security regressions, and unrelated edits.
 - [x] Commit, push, and open dedicated pull request [#28](https://github.com/narumiruna/pi-agent/pull/28) with a signed implementation commit linking this plan and Roadmap milestone.
-- [ ] Resolve every pull-request check and feedback item with regression coverage, then merge the clean pull request.
-- [ ] After merge, check the matching Roadmap milestone and archive this plan through an administrative documentation pull request.
+- [x] Resolve the stale idempotent-deletion finding with regression coverage and merge clean pull request [#28](https://github.com/narumiruna/pi-agent/pull/28) as `b07ad05`; `verify` passed and the final Codex rereview found no major issues.
+- [x] After merge, check the matching Roadmap milestone and archive this plan through an administrative documentation pull request.
 
 ## Completion Checklist
 
@@ -78,8 +88,8 @@ Mitigate by retaining propagated reload errors, calling only `PiService.reload()
 - [x] Failed package operations and no-op package removals do not invoke reload; idempotent document deletion still reloads to reconcile external changes, and native reload errors remain visible to callers.
 - [x] No parallel resource, command, package, settings, or reload state exists.
 - [x] Server, Web/E2E, CI, and Docker verification pass.
-- [ ] The dedicated pull request is merged with all feedback resolved.
-- [ ] The Roadmap milestone is checked and this plan is archived only after merge.
+- [x] The dedicated pull request is merged with all feedback resolved.
+- [x] The Roadmap milestone is checked and this plan is archived only after merge.
 
 ## Verification
 
