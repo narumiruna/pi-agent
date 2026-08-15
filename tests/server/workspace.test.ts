@@ -5,6 +5,7 @@ import {
   open,
   readdir,
   readFile,
+  realpath,
   rm,
   stat,
   symlink,
@@ -16,8 +17,12 @@ import { afterEach, describe, expect, test, vi } from "vitest";
 import { WorkspaceError } from "../../src/server/workspace/errors.js";
 import {
   createOperationGuard,
+  createWorkspaceBoundary,
+  isPathContained,
   parseWorkspaceBasename,
   parseWorkspacePath,
+  resolveWorkspaceParent,
+  resolveWorkspaceTarget,
 } from "../../src/server/workspace/policy.js";
 import { searchWorkspace } from "../../src/server/workspace/search.js";
 import {
@@ -106,6 +111,57 @@ describe("workspace path policy", () => {
     ]) {
       expect(() => parseWorkspaceBasename(name)).toThrow(WorkspaceError);
     }
+  });
+
+  test("canonicalizes a symlinked workspace root before resolving targets", async () => {
+    const root = await temporaryWorkspace();
+    const links = await temporaryWorkspace();
+    await mkdir(join(root, "src"));
+    await mkdir(join(root, "private"));
+    await writeFile(join(root, "src", "index.ts"), "export {};");
+    const workspaceLink = join(links, "workspace");
+    await symlink(root, workspaceLink);
+
+    const boundary = await createWorkspaceBoundary(workspaceLink, [
+      join(workspaceLink, "private"),
+    ]);
+    const target = await resolveWorkspaceTarget(
+      boundary,
+      "src/index.ts",
+      "file",
+    );
+    const destination = await resolveWorkspaceParent(
+      boundary,
+      "src/new-file.ts",
+    );
+
+    expect(boundary.root).toBe(await realpath(root));
+    expect(target).toMatchObject({ path: "src/index.ts" });
+    expect(target.absolute).toBe(await realpath(join(root, "src", "index.ts")));
+    expect(destination).toMatchObject({ path: "src/new-file.ts" });
+    expect(destination.parent.path).toBe("src");
+    expect(isPathContained(boundary.root, target.absolute)).toBe(true);
+    expect(isPathContained(boundary.root, destination.absolute)).toBe(true);
+    expect(isPathContained(boundary.root, links)).toBe(false);
+    await expect(
+      resolveWorkspaceTarget(boundary, "private", "directory"),
+    ).rejects.toMatchObject({ status: 404, reason: "not_found" });
+  });
+
+  test("rejects nested symlink targets and mutation parents", async () => {
+    const root = await temporaryWorkspace();
+    const outside = await temporaryWorkspace();
+    await mkdir(join(root, "nested"));
+    await writeFile(join(outside, "secret.txt"), "outside");
+    await symlink(outside, join(root, "nested", "escape"));
+    const boundary = await createWorkspaceBoundary(root);
+
+    await expect(
+      resolveWorkspaceTarget(boundary, "nested/escape/secret.txt", "file"),
+    ).rejects.toMatchObject({ status: 404, reason: "not_found" });
+    await expect(
+      resolveWorkspaceParent(boundary, "nested/escape/new.txt"),
+    ).rejects.toMatchObject({ status: 404, reason: "not_found" });
   });
 });
 
@@ -223,6 +279,68 @@ describe("workspace service", () => {
     });
     await expect(service.listDirectory("private-agent")).rejects.toMatchObject({
       reason: "not_found",
+    });
+  });
+
+  test("rejects symlink escapes across every public path operation", async () => {
+    const root = await temporaryWorkspace();
+    const outside = await temporaryWorkspace();
+    await mkdir(join(root, "safe"));
+    await writeFile(join(root, "safe", "source.txt"), "source");
+    await writeFile(join(outside, "victim.txt"), "outside");
+    await symlink(outside, join(root, "safe", "escape"));
+    const service = new WorkspaceService(root);
+    const escapingPath = "safe/escape/victim.txt";
+
+    const rejectedOperations: Array<() => Promise<unknown>> = [
+      () => service.listDirectory("safe/escape"),
+      () => service.inspectFile(escapingPath),
+      () =>
+        service.writeFile({
+          path: "safe/escape/new.txt",
+          content: "created",
+        }),
+      () =>
+        service.writeFile({
+          path: escapingPath,
+          content: "updated",
+          revision: "untrusted-revision",
+        }),
+      () =>
+        service.renameFile({
+          path: escapingPath,
+          name: "renamed.txt",
+          revision: "untrusted-revision",
+        }),
+      () =>
+        service.deleteFile({
+          path: escapingPath,
+          revision: "untrusted-revision",
+        }),
+      () => service.downloadFile(escapingPath),
+    ];
+    for (const operation of rejectedOperations) {
+      await expect(operation()).rejects.toMatchObject({
+        status: 404,
+        reason: "not_found",
+      });
+    }
+
+    const source = await service.inspectFile("safe/source.txt");
+    await expect(
+      service.renameFile({
+        path: source.path,
+        name: "escape",
+        revision: source.revision,
+      }),
+    ).rejects.toMatchObject({ status: 409, reason: "exists" });
+    await expect(searchWorkspace(root, "victim")).resolves.toEqual([]);
+    await expect(service.listDirectory("safe")).resolves.toMatchObject({
+      entries: [expect.objectContaining({ path: "safe/source.txt" })],
+    });
+    expect(await readFile(join(outside, "victim.txt"), "utf8")).toBe("outside");
+    await expect(readFile(join(outside, "new.txt"))).rejects.toMatchObject({
+      code: "ENOENT",
     });
   });
 
