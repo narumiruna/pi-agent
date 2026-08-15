@@ -1,6 +1,6 @@
 # Native Conversation Storage Plan
 
-Status: In progress.
+Status: Completed on 2026-08-15.
 
 ## Goal
 
@@ -50,6 +50,18 @@ A database-schema assertion can become noisy if legitimate app metadata tables a
 
 Static documentation alone can drift; pair it with native projection, activation, API redaction, and SQLite schema regressions.
 
+## Outcome
+
+PR [#38](https://github.com/narumiruna/pi-agent/pull/38) merged as `1a9dd44` after its automatic `verify` check passed with PostgreSQL enabled.
+
+Codex identified five actionable test gaps: exact-ID selection lacked a decoy, switch assertions allowed extra calls, inactive sessions were absent from the list fixture, SQLite assertions froze unrelated metadata tables, and PostgreSQL lacked equivalent catalog coverage.
+
+Prefixed decoys, single-call and active/inactive projections, plus targeted SQLite/PostgreSQL schema checks resolved every finding.
+
+Every thread was resolved, and final Codex rereview found no major issues.
+
+The post-merge administrative change checks the matching Roadmap milestone and archives this plan.
+
 ## Plan
 
 - [x] Inventory PiService list/create/activate/transcript/import/export behavior, shared contracts, API projections, SQLite/PostgreSQL schemas, README architecture, and tests.
@@ -62,8 +74,8 @@ Static documentation alone can drift; pair it with native projection, activation
 - [x] Run focused tests, `npm run ci`, full local E2E, and the production Docker build; record exact results.
 - [x] Review the complete diff for ID parsing, path exposure, copied JSONL state, schema drift, private-API coupling, test-layout violations, and unrelated edits.
 - [x] Commit, push, and open dedicated pull request [#38](https://github.com/narumiruna/pi-agent/pull/38) with a signed commit linking this plan and Roadmap milestone.
-- [ ] Resolve every pull-request check and feedback item with regression coverage, then merge the clean pull request.
-- [ ] After merge, check the matching Roadmap milestone and archive this plan through an administrative documentation pull request.
+- [x] Resolve all five exact-ID, switch-call, inactive-list, SQLite-scope, and PostgreSQL-coverage findings with regression coverage and merge clean pull request [#38](https://github.com/narumiruna/pi-agent/pull/38) as `1a9dd44`; `verify` passed and final Codex rereview found no major issues.
+- [x] After merge, check the matching Roadmap milestone and archive this plan through an administrative documentation pull request.
 
 ## Completion Checklist
 
@@ -74,8 +86,8 @@ Static documentation alone can drift; pair it with native projection, activation
 - [x] The app database contains no normal conversation/transcript/JSONL mirror table.
 - [x] README describes Pi JSONL as the sole conversation source of truth in both database modes.
 - [x] Focused service/storage/API tests, CI, E2E, and Docker verification pass.
-- [ ] The dedicated pull request is merged with all feedback resolved.
-- [ ] The Roadmap milestone is checked and this plan is archived only after merge.
+- [x] The dedicated pull request is merged with all feedback resolved.
+- [x] The Roadmap milestone is checked and this plan is archived only after merge.
 
 ## Verification
 
