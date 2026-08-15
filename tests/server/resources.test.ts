@@ -57,17 +57,18 @@ describe("ResourceService", () => {
     expect(reload).toHaveBeenCalledTimes(2);
   });
 
-  test("reloads after a document deletion but not a missing-file no-op", async () => {
+  test("reloads after an idempotent delete reconciles an externally removed document", async () => {
     const { agentDir, reload, service } = await setup();
+    const path = join(agentDir, "prompts", "temporary.md");
     await service.writeDocument("template", "temporary", "Delete me.\n");
+    await rm(path);
     reload.mockClear();
 
     await service.deleteDocument("template", "temporary");
-    await service.deleteDocument("template", "temporary");
 
-    await expect(
-      readFile(join(agentDir, "prompts", "temporary.md"), "utf8"),
-    ).rejects.toMatchObject({ code: "ENOENT" });
+    await expect(readFile(path, "utf8")).rejects.toMatchObject({
+      code: "ENOENT",
+    });
     expect(reload).toHaveBeenCalledOnce();
   });
 

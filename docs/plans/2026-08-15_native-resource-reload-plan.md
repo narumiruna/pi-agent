@@ -60,7 +60,7 @@ Mitigate by retaining propagated reload errors, calling only `PiService.reload()
 - [x] Create fresh branch `narumiruna/refactor/native-resource-reload` from current `main` before implementation.
 - [x] Replace the generic resource reload callback with a narrow native reloader dependency and inject `PiService`.
 - [x] Preserve native persistence paths for documents, packages, MCP, and project trust.
-- [x] Add server regressions covering reload-after-success, operation ordering, no reload after failed/no-op mutations, and MCP reload.
+- [x] Add server regressions covering reload-after-success, operation ordering, failed package operations, no-op package removal, idempotent document reconciliation, and MCP reload.
 - [x] Update Web/E2E coverage so prompt command discovery succeeds without a separate manual reload call.
 - [x] Document the native persistence-plus-reload invariant and explicit ban on internal collection mutation.
 - [x] Run focused tests, `npm run ci`, full local E2E, and the production Docker build; record exact results.
@@ -75,7 +75,7 @@ Mitigate by retaining propagated reload errors, calling only `PiService.reload()
 - [x] `PiService.reload()` remains the sole application adapter for ordinary resource reload.
 - [x] Resource code cannot receive or invoke an arbitrary internal-collection mutation callback.
 - [x] Prompt autocomplete refreshes after prompt creation without a second reload API request.
-- [x] Failed or no-op mutations do not invoke reload; native reload errors remain visible to callers.
+- [x] Failed package operations and no-op package removals do not invoke reload; idempotent document deletion still reloads to reconcile external changes, and native reload errors remain visible to callers.
 - [x] No parallel resource, command, package, settings, or reload state exists.
 - [x] Server, Web/E2E, CI, and Docker verification pass.
 - [ ] The dedicated pull request is merged with all feedback resolved.
@@ -86,5 +86,6 @@ Mitigate by retaining propagated reload errors, calling only `PiService.reload()
 - `npm test -- tests/server/resources.test.ts tests/server/api.test.ts`: 46 tests passed.
 - `npm run ci`: 23 files passed, 299 tests passed, 5 PostgreSQL-dependent tests skipped, and both builds passed.
 - `npx playwright test`: all 18 setup, desktop, accessibility, and 390px mobile tests passed; prompt autocomplete refreshed without calling `/api/reload` explicitly.
-- `docker build -t pi-agent:local .`: production image built successfully as `sha256:d07c7580681f4932aee9a1bc5d377b039f7ba32a9d0e95d6fb0f788177e57f7c`.
+- `docker build -t pi-agent:local .`: post-review production image built successfully as `sha256:4634d9ee80f8466f5ec550c8c0f477f23857879f8ab0646a2eea392907081028`.
 - A source audit found no writes to Pi loader-returned prompt, command, skill, or extension collections.
+- Codex review identified that skipping reload for a missing document could leave an externally deleted prompt in runtime command discovery; the delete remains idempotent but now always invokes native reload, with a regression for that race.

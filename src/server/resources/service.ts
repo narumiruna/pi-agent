@@ -120,12 +120,7 @@ export class ResourceService {
   async deleteDocument(kind: DocumentKind, name?: string): Promise<void> {
     const path = this.documentPath(kind, name);
     await this.assertSafeParent(path);
-    try {
-      await rm(path);
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code === "ENOENT") return;
-      throw error;
-    }
+    await rm(path, { force: true });
     await this.reloader.reload();
   }
 
