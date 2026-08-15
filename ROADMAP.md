@@ -22,6 +22,10 @@ Milestone 應包含一組相關且可在單一 focused PR 中合理 review 的�
 
 每一個 PR-sized milestone 都必須獨立完成以下流程。
 
+這項規則適用於本次重整後開始的未完成 milestone。
+
+重整前已完成的 checked aggregate 是歷史完成摘要；其 nested bullets 仍分別對應既有 archived plan 與已合併 PR，不要求追溯合併成單一交付。
+
 1. 實作前建立一份專屬 plan，存放於 `docs/plans/YYYY-MM-DD_<topic>-plan.md`。
 2. Plan 必須連結對應的 Roadmap milestone，並列出可驗證的完成條件、測試與風險。
 3. 一份 plan 只能實作一個 Roadmap milestone，不得將多份 plan 合併到同一個 implementation branch 或 pull request。
@@ -115,15 +119,16 @@ Pi package 仍是 prompt、skill 與 extension 的共同安裝來源，不建立
   - 將 `SYSTEM.md` 與 `APPEND_SYSTEM.md` editor 移到 `Prompts`。
   - 將目前 `prompts/` template list、create、edit 與 delete 移到 `Prompts`。
   - Existing `SYSTEM.md`、`APPEND_SYSTEM.md` 與 prompt template 不需資料轉換。
+  - System prompt 與 template CRUD 有 matching server、Web 與 E2E coverage。
 - [ ] 接上 Pi native prompt discovery、provenance、permission 與 reload flow。
   - 顯示 prompt 的 scope、source、path、package provenance 與是否可編輯。
   - Package 或 temporary prompt 預設為唯讀，避免直接修改 managed installation。
   - User 與 trusted project prompt 使用 Pi 認可的位置與原生 resource discovery。
   - 儲存後執行 native reload，並更新 `/command` autocomplete。
-  - Command invocation 有 regression coverage。
+  - Discovery、permission、reload 與 command invocation 有 matching regression coverage。
 - [ ] 補齊 prompt validation diagnostics 與測試覆蓋。
   - 對 prompt name、frontmatter、內容大小與命名衝突顯示 validation diagnostics。
-  - Prompt CRUD、reload、command invocation 與 collision diagnostics 有 server、Web 與 E2E coverage。
+  - Validation 與 collision diagnostics 有 matching server、Web 與 E2E coverage。
 
 ## Phase 4：Skills
 
@@ -132,16 +137,19 @@ Pi package 仍是 prompt、skill 與 extension 的共同安裝來源，不建立
   - 顯示 skill name、description、scope、source、package provenance、validation warning 與實際入口檔。
   - 支援檢視 `SKILL.md`、references、scripts 與 assets，但 binary assets 只顯示 metadata。
   - Global、trusted project、package 與 settings-added skill 都會顯示正確 provenance。
+  - Inventory、viewer 與 provenance projection 有 matching server、Web 與 E2E coverage。
 - [ ] 支援受信任 skill CRUD、activation settings 與 native reload。
   - 支援建立 user skill，並產生符合 Agent Skills standard 的 `SKILL.md` 骨架。
   - 支援編輯與刪除 user skill，以及 trusted project skill。
   - 支援 `/skill:name` 啟用狀態與 `enableSkillCommands` 設定。
   - 新增或修改 skill 後，native reload 會更新 system prompt 與 `/skill:name` command。
   - Untrusted project skill 不會被 Web 啟用或修改。
+  - CRUD、activation、trust rejection 與 reload 有 matching regression coverage。
 - [ ] 補齊 skill package guardrails、diagnostics、trusted-code warning 與 coverage。
   - Package-managed skill 維持唯讀，更新與移除必須走 Pi package manager。
   - 顯示 missing description、invalid name、duplicate name 與 compatibility diagnostics。
   - 明確警告 skill 可以指示模型執行程式，也可以包含 executable helper scripts。
+  - Package guardrail、diagnostics 與 warning 有 matching regression coverage。
 
 ## Phase 5：Extensions
 
@@ -149,18 +157,20 @@ Pi package 仍是 prompt、skill 與 extension 的共同安裝來源，不建立
   - 使用 Pi resource loader 與 extension diagnostics 顯示所有 loaded extensions。
   - 顯示 scope、source、package provenance、loaded path、commands、tools 與 diagnostics。
   - Web 只支援已定義的 RPC-safe extension UI，不執行 terminal component factory 或任意 browser code。
+  - Inventory、diagnostics、provenance 與 RPC-safe projection 有 matching server、Web 與 E2E coverage。
 - [ ] 支援受信任 extension management、native settings filters 與 reload lifecycle。
   - 支援建立與編輯 user extension 的 `.ts` 或 directory `index.ts`。
   - Trusted project extension 可管理，但必須再次顯示 executable-code 警告。
   - 使用 native settings 與 package filters 啟用或停用 extension resources。
   - 儲存或切換 extension 後使用 Pi native reload lifecycle。
   - Reload 必須等待 active run 結束，並顯示 `session_shutdown`、`session_start` 與 diagnostics 結果。
+  - Management、trust、settings filter、reload、syntax/runtime failure、duplicate command 與 tool provenance 有 matching coverage。
 - [ ] 補齊 extension package guardrails、failure coverage 與 executable-code 安全確認。
   - Package-managed extension 維持唯讀，install、update、filter 與 remove 必須走 Pi package manager。
   - Extension source editor 不提供自動執行按鈕，避免把 typo 直接變成 production code execution。
-  - Extension reload、syntax failure、runtime failure、duplicate command 與 tool provenance 有測試。
   - Extension install、update、filter、disable 與 remove 後，Pi settings 仍是唯一真實來源。
   - 所有 executable-code 操作都有明確確認，而且錯誤不會破壞目前可用 session。
+  - Package guardrail、failure containment 與 confirmation flow 有 matching regression coverage。
 
 ## Phase 6：移除舊資源庫入口
 
