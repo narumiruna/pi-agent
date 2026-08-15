@@ -379,6 +379,13 @@ export function App() {
     action?.();
   };
 
+  const chooseModel = () => {
+    afterFilesDiscard(() => {
+      setPage("settings");
+      setChooseModelRequest((value) => value + 1);
+    });
+  };
+
   return (
     <Theme
       accentColor="teal"
@@ -418,9 +425,17 @@ export function App() {
             onMobileOpen={setMobileOpen}
             onPage={(nextPage) => afterFilesDiscard(() => setPage(nextPage))}
             onConversation={(id) =>
-              afterFilesDiscard(() => void selectConversation(id))
+              afterFilesDiscard(() => {
+                setPage("chat");
+                void selectConversation(id);
+              })
             }
-            onNew={() => afterFilesDiscard(() => void createConversation())}
+            onNew={() =>
+              afterFilesDiscard(() => {
+                setPage("chat");
+                void createConversation();
+              })
+            }
           />
           <main className="workspace">
             {session.authDisabled && (
@@ -479,10 +494,7 @@ export function App() {
                     void loadAgentState(activeId).catch(() => undefined);
                   setRefresh((value) => value + 1);
                 }}
-                onChooseModel={() => {
-                  setPage("settings");
-                  setChooseModelRequest((value) => value + 1);
-                }}
+                onChooseModel={chooseModel}
               />
             )}
             {page === "files" && (
@@ -522,10 +534,7 @@ export function App() {
               interaction?.scope === "provider_auth" ? interaction : undefined
             }
             task={providerAuth}
-            onChooseModel={() => {
-              setPage("settings");
-              setChooseModelRequest((value) => value + 1);
-            }}
+            onChooseModel={chooseModel}
             onDismiss={() => {
               void api("/api/provider-auth", mutation("DELETE")).catch(
                 () => undefined,
