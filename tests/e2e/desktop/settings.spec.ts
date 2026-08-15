@@ -1,4 +1,4 @@
-import { mkdir, writeFile } from "node:fs/promises";
+import { mkdir, rm, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { expect, test } from "@playwright/test";
 import { appOrigin, mockOrigin } from "../support/test-helpers.js";
@@ -61,6 +61,7 @@ test("enables and disables project resources only with acknowledged trust", asyn
   expect(await commandNames()).toContain("project-e2e");
   expect(await commandNames()).toContain("skill:project-e2e");
 
+  await rm(join(workspace, ".pi"), { force: true, recursive: true });
   await page.getByRole("button", { name: "Disable project resources" }).click();
   await expect(
     page.getByText("Project resources are disabled and reloaded."),

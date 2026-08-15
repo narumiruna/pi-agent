@@ -116,6 +116,26 @@ describe("ProjectTrustPolicy", () => {
     expect(settings.isProjectTrusted()).toBe(false);
   });
 
+  test("keeps trusted runtime resources disableable after their source is removed", () => {
+    let required = true;
+    const settings = SettingsManager.inMemory(undefined, {
+      projectTrusted: false,
+    });
+    const policy = new ProjectTrustPolicy(
+      "/workspace",
+      "/agent",
+      settings,
+      { get: () => true, set: vi.fn() },
+      () => required,
+    );
+
+    policy.initialize();
+    required = false;
+    expect(policy.status()).toEqual({ required: true, trusted: true });
+    settings.setProjectTrusted(false);
+    expect(policy.status()).toEqual({ required: false, trusted: true });
+  });
+
   test("reports active runtime trust until a changed saved decision is applied", () => {
     let saved = true;
     const settings = SettingsManager.inMemory(undefined, {
