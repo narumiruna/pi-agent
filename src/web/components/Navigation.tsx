@@ -59,7 +59,7 @@ function NavContent(props: NavContentProps) {
         <span className="brandMark">π</span>
         <Text weight="bold">{t("appName")}</Text>
       </div>
-      <nav className="primaryNav" aria-label="Primary">
+      <nav className="primaryNav" aria-label={t("primaryNavigation")}>
         {props.items.map(({ page, labelKey, icon, pulse }) => {
           const Icon = NAVIGATION_ICONS[icon];
           return (
@@ -67,12 +67,13 @@ function NavContent(props: NavContentProps) {
               type="button"
               key={page}
               className={props.page === page ? "navItem active" : "navItem"}
+              aria-current={props.page === page ? "page" : undefined}
               onClick={() => {
                 props.onPage(page);
                 props.onMobileOpen(false);
               }}
             >
-              <Icon />
+              <Icon aria-hidden="true" />
               <span>{t(labelKey)}</span>
               {pulse && <span className="pulseRail" aria-hidden="true" />}
             </button>

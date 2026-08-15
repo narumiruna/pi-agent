@@ -156,6 +156,16 @@ Back up `/app/.pi/agent` and `/app/data` together for SQLite deployments.
 
 Back up `/app/.pi/agent` and PostgreSQL at a consistent maintenance point for PostgreSQL deployments.
 
+## Navigation and accessibility
+
+The desktop sidebar and 390px mobile drawer share one authenticated destination model.
+
+Primary destinations use native keyboard controls, a localized navigation landmark, `aria-current` state, and visible focus indicators.
+
+The mobile drawer traps focus while open and restores focus to its trigger after a destination is selected or the drawer is dismissed.
+
+The interface honors `prefers-reduced-motion` by suppressing animation and transition timing without hiding state changes.
+
 ## Workspace and tools
 
 `/workspace` is the fixed working directory for Pi tools and the Files page.
