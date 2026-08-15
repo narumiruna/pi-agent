@@ -1,3 +1,6 @@
+import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { Hono } from "hono";
 import { describe, expect, test, vi } from "vitest";
 import { EventHub } from "../../src/server/agent/events.js";
@@ -729,6 +732,33 @@ describe("API contracts", () => {
       ],
     });
     expect(diagnostics).not.toHaveBeenCalled();
+  });
+
+  test("persists MCP configuration before invoking native reload", async () => {
+    const agentDir = await mkdtemp(join(tmpdir(), "pi-agent-api-mcp-"));
+    const mcpPath = join(agentDir, "mcp.json");
+    let configAtReload: unknown;
+    const reload = vi.fn(async () => {
+      configAtReload = JSON.parse(await readFile(mcpPath, "utf8"));
+    });
+    const app = appWith({
+      config: { agentDir, dataDir: agentDir, workspace: agentDir } as never,
+      pi: { reload } as never,
+    });
+
+    try {
+      const response = await app.request("/api/mcp", {
+        method: "PUT",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ mcpServers: {} }),
+      });
+
+      expect(response.status).toBe(200);
+      expect(configAtReload).toEqual({ mcpServers: {} });
+      expect(reload).toHaveBeenCalledOnce();
+    } finally {
+      await rm(agentDir, { force: true, recursive: true });
+    }
   });
 
   test("uses opaque package IDs for update and remove API contracts", async () => {
