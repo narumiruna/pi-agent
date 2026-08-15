@@ -57,7 +57,7 @@ Mitigate with an exact shared two-dimensional contract, one projection helper, a
 - [x] Update resource documentation to explain Pi's two-dimensional provenance model and safe Web projection in README.
 - [x] Run focused server/Web tests, `npm run ci`, and local E2E; 130 focused tests passed, CI passed 270 tests with 5 intentional skips and both builds, and all 17 SQLite browser tests passed after correcting the formatting failure reported by the first focused gate.
 - [x] Review the complete diff for lost provenance, path leakage, inferred ownership, changed discovery order, UI ambiguity, API compatibility, and unrelated changes; all six scope/origin combinations are covered, source/path fields are absent, native loaders are unchanged, existing package scope remains compatible, one label helper serves every Web surface, and `git diff --check` passed.
-- [ ] Commit, push, and open one dedicated signed pull request linking this plan and Roadmap milestone.
+- [x] Commit, push, and open one dedicated signed pull request linking this plan and Roadmap milestone; signed implementation commit `7e411ae` is on `narumiruna/feat/resource-provenance` in PR [#22](https://github.com/narumiruna/pi-agent/pull/22).
 - [ ] Read all pull-request checks and feedback, fix every actionable item with regression coverage, and merge the clean pull request.
 - [ ] After merge, check the matching Roadmap milestone and archive this plan through an administrative documentation pull request.
 
