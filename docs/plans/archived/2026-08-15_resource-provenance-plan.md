@@ -1,6 +1,6 @@
 # Pi Resource Provenance Plan
 
-Status: In progress.
+Status: Completed on 2026-08-15.
 
 ## Goal
 
@@ -45,6 +45,14 @@ UI labels can become inconsistent if each surface invents its own provenance map
 
 Mitigate with an exact shared two-dimensional contract, one projection helper, all scope/origin combinations, sensitive-path assertions, shared Web labeling, and end-to-end regressions.
 
+## Outcome
+
+PR #22 merged as `3d45755` after its automatic `verify` check passed.
+
+GitHub reported no submitted reviews, inline comments, conversation comments, or review threads, so no feedback required changes or replies.
+
+The post-merge administrative change checks the matching Roadmap milestone and archives this plan.
+
 ## Plan
 
 - [x] Read Pi's main README plus complete package, prompt-template, skill, extension, and SDK documentation and inspect the installed `SourceInfo`, `ResourceLoader`, prompt, skill, extension, and package declarations.
@@ -58,8 +66,8 @@ Mitigate with an exact shared two-dimensional contract, one projection helper, a
 - [x] Run focused server/Web tests, `npm run ci`, and local E2E; 130 focused tests passed, CI passed 270 tests with 5 intentional skips and both builds, and all 17 SQLite browser tests passed after correcting the formatting failure reported by the first focused gate.
 - [x] Review the complete diff for lost provenance, path leakage, inferred ownership, changed discovery order, UI ambiguity, API compatibility, and unrelated changes; all six scope/origin combinations are covered, source/path fields are absent, native loaders are unchanged, existing package scope remains compatible, one label helper serves every Web surface, and `git diff --check` passed.
 - [x] Commit, push, and open one dedicated signed pull request linking this plan and Roadmap milestone; signed implementation commit `7e411ae` is on `narumiruna/feat/resource-provenance` in PR [#22](https://github.com/narumiruna/pi-agent/pull/22).
-- [ ] Read all pull-request checks and feedback, fix every actionable item with regression coverage, and merge the clean pull request.
-- [ ] After merge, check the matching Roadmap milestone and archive this plan through an administrative documentation pull request.
+- [x] Read all pull-request checks and feedback, fix every actionable item with regression coverage, and merge the clean pull request; PR #22 `verify` passed, no feedback existed, and merge commit `3d45755` is on `main`.
+- [x] After merge, check the matching Roadmap milestone and archive this plan through an administrative documentation pull request.
 
 ## Completion Checklist
 
@@ -72,5 +80,5 @@ Mitigate with an exact shared two-dimensional contract, one projection helper, a
 - [x] No native source path, package source, installation path, or `baseDir` is returned.
 - [x] Native Pi discovery, trust, collision, and reload behavior remain unchanged.
 - [x] Focused tests, `npm run ci`, and local E2E pass.
-- [ ] The dedicated pull request is merged with all feedback resolved.
-- [ ] The Roadmap milestone is checked and this plan is archived only after merge.
+- [x] The dedicated pull request is merged with all feedback resolved.
+- [x] The Roadmap milestone is checked and this plan is archived only after merge.
