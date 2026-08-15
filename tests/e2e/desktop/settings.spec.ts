@@ -1,5 +1,9 @@
+import { mkdir, writeFile } from "node:fs/promises";
+import { join, resolve } from "node:path";
 import { expect, test } from "@playwright/test";
-import { mockOrigin } from "../support/test-helpers.js";
+import { appOrigin, mockOrigin } from "../support/test-helpers.js";
+
+const workspace = resolve(".local/e2e/runtime/workspace");
 
 interface ModelOption {
   id: string;
@@ -15,6 +19,23 @@ interface ModelData {
 test("enables and disables project resources only with acknowledged trust", async ({
   page,
 }) => {
+  const extensionDirectory = join(workspace, ".pi", "extensions");
+  const skillDirectory = join(workspace, ".pi", "skills", "project-e2e");
+  await mkdir(extensionDirectory, { recursive: true });
+  await mkdir(skillDirectory, { recursive: true });
+  await writeFile(
+    join(extensionDirectory, "project-e2e.js"),
+    'export default function (pi) { pi.registerCommand("project-e2e", { handler() {} }); }\n',
+  );
+  await writeFile(
+    join(skillDirectory, "SKILL.md"),
+    "---\nname: project-e2e\ndescription: Project trust E2E skill\n---\nUse only after trust.\n",
+  );
+  const replacement = await page.request.post("/api/conversations", {
+    headers: { origin: appOrigin },
+  });
+  expect(replacement.status()).toBe(201);
+
   await page.goto("/");
   await page.getByRole("button", { name: "Settings" }).click();
 

@@ -41,12 +41,13 @@ export class ProjectTrustPolicy {
 
   initialize(): WebProjectTrust {
     const state = this.resolve();
-    this.settings.setProjectTrusted(state.trusted);
+    this.settings.setProjectTrusted(state.required && state.trusted);
     return state;
   }
 
   status(): WebProjectTrust {
     const state = this.resolve();
+    if (!state.required) return state;
     return {
       ...state,
       trusted: state.trusted && this.settings.isProjectTrusted(),

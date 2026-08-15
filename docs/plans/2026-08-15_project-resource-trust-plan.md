@@ -18,7 +18,7 @@ No current Web endpoint edits project skills or extensions, so this milestone mu
 
 ## Architecture
 
-Resolve initial trust before resource discovery from Pi's canonical trust-requiring-resource detector, nearest saved native decision, and global `defaultProjectTrust`; `ask` remains untrusted because the server startup has no synchronous trust UI.
+Resolve trust before initial and factory-driven resource discovery from Pi's canonical trust-requiring-resource detector, nearest saved native decision, and global `defaultProjectTrust`; `ask` remains untrusted because the server has no synchronous trust UI.
 
 Keep one shared `SettingsManager` trust flag for chat and heartbeat resource loaders.
 
@@ -60,13 +60,13 @@ Mitigate with mandatory acknowledgement, idle coordination, native reload, rollb
 - [x] Run focused server/Web tests, `npm run ci`, local E2E, and the production Docker build; record exact results.
 - [x] Review the complete diff for fail-open behavior, pre-trust execution, active-run races, persistence ordering, rollback, path disclosure, bypass writes, native behavior, and unrelated changes.
 - [x] Commit, push, and open dedicated pull request [#24](https://github.com/narumiruna/pi-agent/pull/24) with a signed implementation commit linking this plan and Roadmap milestone.
-- [x] Read all pull-request checks and feedback; CI passed and no actionable review feedback remained.
+- [x] Resolve all pull-request checks and feedback; stale no-resource trust now fails closed across factory-driven session rebuilds with unit and E2E coverage.
 - [ ] Merge the clean pull request.
 - [ ] After merge, check the matching Roadmap milestone and archive this plan through an administrative documentation pull request.
 
 ## Completion Checklist
 
-- [x] Project trust starts from Pi's saved decision or non-interactive global default and fails closed for `ask` or errors.
+- [x] Project trust starts and re-resolves before session discovery from Pi's saved decision or non-interactive global default and fails closed for `ask` or errors.
 - [x] Project skills and extensions do not load while trust is false.
 - [x] Explicit trust requires authenticated owner access and risk acknowledgement.
 - [x] Trust changes wait for an idle agent, hold a maintenance lease, and use native reload for chat and heartbeat sessions.
@@ -85,4 +85,4 @@ Mitigate with mandatory acknowledgement, idle coordination, native reload, rollb
 - `npm test -- tests/server/project-trust.test.ts tests/server/agent.test.ts tests/server/api.test.ts tests/server/http-auth.test.ts tests/server/workspace.test.ts tests/web/app.test.tsx`: 155 tests passed.
 - `npm run ci`: 23 files passed, 289 tests passed, 5 PostgreSQL-dependent tests skipped, and both builds passed.
 - `npx playwright test`: all 18 setup, desktop, accessibility, and mobile tests passed.
-- `docker build -t pi-agent:local .`: production image built successfully as `sha256:8e42b399454c37fdcfe75145729ef54be96a43289ee90b7a07af063ab4e43bd9`.
+- `docker build -t pi-agent:local .`: production image built successfully as `sha256:d440575514d42a47ad2a974d22102e57e71e2ebd305fb6e668949a32dcf926df`.

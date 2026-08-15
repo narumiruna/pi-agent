@@ -87,7 +87,7 @@ describe("ProjectTrustPolicy", () => {
     );
 
     expect(policy.initialize()).toEqual({ required, trusted });
-    expect(settings.isProjectTrusted()).toBe(trusted);
+    expect(settings.isProjectTrusted()).toBe(required && trusted);
     expect(store.get).toHaveBeenCalledTimes(required ? 1 : 0);
   });
 
@@ -106,6 +106,7 @@ describe("ProjectTrustPolicy", () => {
     );
 
     expect(policy.initialize()).toEqual({ required: false, trusted: true });
+    expect(settings.isProjectTrusted()).toBe(false);
     required = true;
     expect(policy.status()).toEqual({ required: true, trusted: false });
     expect(policy.initialize()).toEqual({ required: true, trusted: false });

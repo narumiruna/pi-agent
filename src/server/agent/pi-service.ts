@@ -278,6 +278,7 @@ export class PiService {
       sessionManager,
       sessionStartEvent,
     }) => {
+      projectTrustPolicy.initialize();
       const services = await createAgentSessionServices({
         cwd,
         agentDir: config.agentDir,
@@ -460,8 +461,10 @@ export class PiService {
 
   async createConversation(): Promise<string> {
     await this.coordinator.waitForIdle();
-    await this.runtime.newSession();
-    return this.activeSessionId;
+    return this.coordinator.run("maintenance", async () => {
+      await this.runtime.newSession();
+      return this.activeSessionId;
+    });
   }
 
   async activateConversation(id: string): Promise<void> {
@@ -498,12 +501,14 @@ export class PiService {
   async switchConversation(id: string): Promise<void> {
     if (id === this.activeSessionId) return;
     await this.coordinator.waitForIdle();
-    const target = (await this.nativeSessions()).find(
-      (session) => session.id === id,
-    );
-    if (!target) throw new Error("Conversation not found");
-    await this.runtime.switchSession(target.path, {
-      cwdOverride: this.config.workspace,
+    await this.coordinator.run("maintenance", async () => {
+      const target = (await this.nativeSessions()).find(
+        (session) => session.id === id,
+      );
+      if (!target) throw new Error("Conversation not found");
+      await this.runtime.switchSession(target.path, {
+        cwdOverride: this.config.workspace,
+      });
     });
   }
 

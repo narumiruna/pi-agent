@@ -243,7 +243,7 @@ The Web renders those path-free fields directly and does not infer ownership fro
 
 Project-local Pi settings, skills, packages, and extensions remain disabled until Pi's native project trust is effective.
 
-Startup and every general resource reload honor the nearest saved `trust.json` decision and the global non-interactive `defaultProjectTrust`; `ask`, `never`, and trust-store read failures remain untrusted.
+Startup, every session rebuild, and every general resource reload honor the nearest saved `trust.json` decision and the global non-interactive `defaultProjectTrust`; `ask`, `never`, and trust-store read failures remain untrusted.
 
 The authenticated Settings page requires an executable-code acknowledgement before enabling project trust, waits for the agent to become idle, reloads chat and heartbeat through Pi, and persists the decision in Pi's native trust store.
 
