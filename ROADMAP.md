@@ -83,7 +83,7 @@ Pi package 仍是 prompt、skill 與 extension 的共同安裝來源，不建立
 - [x] 完成 `Chats` rename 與 native conversation baseline。
   - 將目前「對話」重新命名為 `Chats`，並保留現有 conversation list 與 new-chat 操作。
   - 沿用 `SessionManager` 與目前的 opaque conversation ID，不複製 JSONL session state。
-- [ ] 補齊 conversation 搜尋、named-only filter 與排序。
+- [x] 補齊 conversation 搜尋、named-only filter 與排序。
   - 新舊 session 與未持久化 session 都能正確切換。
   - Search 在 desktop 和 mobile 都有 E2E coverage。
 - [ ] 統一 conversation 管理操作與執行中 session recovery。

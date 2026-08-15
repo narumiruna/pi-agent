@@ -103,8 +103,8 @@ Desktop and drawer controls coexist in the DOM; avoid duplicate element IDs and 
 - [x] Controls are keyboard-operable, localized, accessible, and usable at 390px.
 - [x] JSONL remains the sole session state and list/search does not mutate it.
 - [x] Focused server/Web tests, CI, desktop/mobile E2E, PostgreSQL verification, and Docker build pass.
-- [ ] The dedicated pull request is merged with all feedback resolved.
-- [ ] The Roadmap milestone is checked and this plan is archived only after merge.
+- [x] Dedicated implementation PR [#41](https://github.com/narumiruna/pi-agent/pull/41) merged as `9d52a02` with all five review findings resolved and a clean final review.
+- [x] The Roadmap milestone is checked and this plan is archived after the implementation merge.
 
 ## Verification
 
