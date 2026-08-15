@@ -14,6 +14,12 @@ test("keeps Files browsing and dirty navigation usable at 390px", async ({
   await page.getByRole("button", { name: /existing\.ts/i }).click();
   const editor = page.getByLabel("Contents of existing.ts");
   await expect(editor).toBeVisible();
+  await expect(
+    page.locator(
+      '[data-editor-mode="plain"][data-editor-language="typescript"]',
+    ),
+  ).toBeVisible();
+  await expect(page.locator(".monaco-editor")).toHaveCount(0);
   await editor.press("End");
   await editor.pressSequentially("// unsaved mobile change");
 

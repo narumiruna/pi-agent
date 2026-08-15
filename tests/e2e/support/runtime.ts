@@ -61,6 +61,7 @@ export async function prepareRuntime(): Promise<E2eRuntime> {
   ]);
   await Promise.all([
     mkdir(join(workspace, "src")),
+    mkdir(join(workspace, "workers")),
     mkdir(join(workspace, ".git")),
   ]);
   await Promise.all([
@@ -71,6 +72,12 @@ export async function prepareRuntime(): Promise<E2eRuntime> {
     writeFile(join(workspace, "binary.dat"), Buffer.from([0, 1, 2, 3])),
     writeFile(join(workspace, ".env"), "E2E_SECRET=hidden\n"),
     writeFile(join(workspace, ".git", "config"), "private\n"),
+    writeFile(join(workspace, "workers", "config.json"), '{"valid":true}\n'),
+    writeFile(join(workspace, "workers", "page.html"), "<main>worker</main>\n"),
+    writeFile(
+      join(workspace, "workers", "style.css"),
+      "main { color: teal; }\n",
+    ),
   ]);
   const largePreview = await open(join(workspace, "large-preview.txt"), "w");
   await largePreview.truncate(1_000_001);

@@ -485,7 +485,12 @@ export function App() {
                 }}
               />
             )}
-            {page === "files" && <FilesPage onDirtyChange={setFilesDirty} />}
+            {page === "files" && (
+              <FilesPage
+                appearance={dark ? "dark" : "light"}
+                onDirtyChange={setFilesDirty}
+              />
+            )}
             {page === "heartbeat" && <HeartbeatPage refresh={refresh} />}
             {page === "library" && <LibraryPage />}
             {page === "settings" && (

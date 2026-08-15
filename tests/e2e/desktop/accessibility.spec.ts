@@ -13,9 +13,29 @@ test("has no serious accessibility violations in primary owner flows", async ({
   await page.getByRole("button", { name: /src.*Directory/i }).click();
   await page.getByRole("button", { name: /existing\.ts/i }).click();
   const fileEditor = page.getByLabel("Contents of existing.ts");
-  await expect(fileEditor).toBeVisible();
+  await expect(fileEditor).toHaveCount(1);
+  const editorSurface = fileEditor.locator(
+    "xpath=ancestor::div[contains(@class, 'monaco-editor')][1]",
+  );
+  await expect(editorSurface).toBeVisible();
   await expectNoSeriousAccessibilityViolations(page);
-  await fileEditor.pressSequentially(" unsaved");
+  await page.getByRole("button", { name: "Editor settings" }).click();
+  await expectNoSeriousAccessibilityViolations(page);
+  await page
+    .getByRole("combobox", { name: "Word wrap" })
+    .selectOption("enabled");
+  await page.getByRole("button", { name: "Done" }).click();
+  await editorSurface.click();
+  await page.keyboard.insertText(" unsaved");
+  await expect(
+    page.getByRole("button", { name: "Save changes" }),
+  ).toBeEnabled();
+  await page.getByRole("button", { name: "Tab inserts indentation" }).click();
+  await editorSurface.click();
+  await page.keyboard.press("Tab");
+  await expect(
+    page.getByRole("button", { name: "Save changes" }),
+  ).toBeFocused();
   await page.getByRole("button", { name: "Workspace" }).click();
   await expect(page.getByText("Discard unsaved changes?")).toBeVisible();
   await expectNoSeriousAccessibilityViolations(page);

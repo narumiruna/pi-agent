@@ -21,6 +21,53 @@ import { ChatPage } from "../../src/web/pages/ChatPage.js";
 import { HeartbeatPage } from "../../src/web/pages/HeartbeatPage.js";
 import { SettingsPage } from "../../src/web/pages/SettingsPage.js";
 
+interface MockCodeEditorProps {
+  ariaLabel: string;
+  readOnly: boolean;
+  value: string;
+  onChange: (value: string) => void;
+}
+
+interface MockCodeDiffEditorProps {
+  modified: string;
+  modifiedLabel: string;
+  original: string;
+  originalLabel: string;
+  onModifiedChange: (value: string) => void;
+}
+
+vi.mock("../../src/web/components/CodeEditor.js", () => ({
+  CodeEditor: ({
+    ariaLabel,
+    readOnly,
+    value,
+    onChange,
+  }: MockCodeEditorProps) => (
+    <textarea
+      aria-label={ariaLabel}
+      readOnly={readOnly}
+      value={value}
+      onChange={(event) => onChange(event.target.value)}
+    />
+  ),
+  CodeDiffEditor: ({
+    modified,
+    modifiedLabel,
+    original,
+    originalLabel,
+    onModifiedChange,
+  }: MockCodeDiffEditorProps) => (
+    <div>
+      <textarea aria-label={originalLabel} readOnly value={original} />
+      <textarea
+        aria-label={modifiedLabel}
+        value={modified}
+        onChange={(event) => onModifiedChange(event.target.value)}
+      />
+    </div>
+  ),
+}));
+
 describe("web application", () => {
   test("deduplicates live tool updates and ignores another conversation", () => {
     const initial = [
