@@ -60,7 +60,7 @@ Keep advanced tree, fork/clone, compact, import, and export actions in the exist
 - [x] Make rename/delete coordinator-guarded, rename inactive sessions without activation, and honor native new/resume cancellation.
 - [x] Add server regressions for active-run conflicts, inactive rename isolation, active-delete rejection, cancellation, fork switching, JSONL validity, and safe transfer behavior.
 - [x] Add a shared accessible conversation management dialog and non-nested per-row action trigger for rename and confirmed inactive delete.
-- [x] Reconcile native run, queue, editor, transcript, and list state after EventSource reconnection without changing the active ID.
+- [x] Reconcile native run, queue, editor, transcript, list, and authoritative active-ID state after EventSource reconnection.
 - [x] Add Web regressions for management success/failure, duplicate-submit protection, hidden/active state, and reconnect reconciliation.
 - [x] Add desktop and 390px mobile E2E for rename, delete, fork/clone switching, running isolation, queue restoration, reconnect recovery, keyboard focus, overflow, and accessibility.
 - [x] Update README with management scope, active-delete rule, native lifecycle, and recovery behavior.
@@ -93,5 +93,5 @@ Keep advanced tree, fork/clone, compact, import, and export actions in the exist
 - The management browser flow renamed active sessions, rejected active deletion, confirmed inactive deletion, switched to native fork and clone IDs, parsed exported JSONL, rejected four mutation classes during a held run, and restored the native queue after reload.
 - `TEST_POSTGRES_URL=postgresql://pi_agent:test_password@127.0.0.1:55433/pi_agent npm test -- tests/server/storage.test.ts`: all 14 SQLite/PostgreSQL storage tests passed against a temporary PostgreSQL 17 container.
 - `docker build -t pi-agent:local .`: final production image built successfully as `sha256:a58fc0d2f16f609db5e2cecb3b91bcf0dd918c30549c6d5ab6fc9a750d24426b`.
-- Codex review found a server-restart reconnect mismatch and a delete/activate time-of-check race; reconnect now reactivates a preserved persisted ID or adopts the authoritative server ID, while rename/delete hold the coordinator across lookup and recheck active identity before writing, with ordering and race regressions.
+- Codex review found a server-restart mismatch, stale/permanently-disabled reconnect paths, and a delete/activate time-of-check race; reconnect now adopts the authoritative server ID with generation cancellation and in-stream retries, while rename/delete hold the coordinator across lookup and recheck active identity before writing, with ordering, retry, cancellation, and race regressions.
 - Native-source and diff audits confirmed inactive rename follows Pi’s selector, runtime replacements honor cancellation, coordinator admission prevents write races, active delete is rejected, JSONL paths stay private, native files remain parseable, reconnect hydrates a valid active ID, and desktop/mobile dialogs avoid nested interactive controls.

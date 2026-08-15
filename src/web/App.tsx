@@ -318,7 +318,37 @@ export function App() {
     if (!session) return;
     setEventsConnectedFor(undefined);
     let reconnecting = false;
+    let closed = false;
+    let recoveryGeneration = 0;
+    let recoveryTimer: number | undefined;
     const source = new EventSource("/api/events");
+    const recover = async (generation: number): Promise<void> => {
+      try {
+        const native = await api<Conversation[]>(
+          "/api/conversations?sort=recent",
+        );
+        if (closed || generation !== recoveryGeneration) return;
+        const recoveredId =
+          native.find((conversation) => conversation.active)?.id ?? activeId;
+        if (!recoveredId) return;
+        setActiveId(recoveredId);
+        setRefresh((value) => value + 1);
+        await Promise.all([
+          loadAgentState(recoveredId),
+          loadConversations(recoveredId),
+        ]);
+        if (closed || generation !== recoveryGeneration) return;
+        setEventsConnectedFor(recoveredId);
+      } catch (error) {
+        if (closed || generation !== recoveryGeneration) return;
+        if (error instanceof ApiError && error.status === 401) {
+          source.close();
+          setSignedOut(true);
+          return;
+        }
+        recoveryTimer = window.setTimeout(() => void recover(generation), 500);
+      }
+    };
     source.onopen = () => {
       if (!reconnecting || !activeId) {
         setEventsConnectedFor(activeId);
@@ -328,37 +358,8 @@ export function App() {
       setDelta("");
       setThinking("");
       setLiveTools([]);
-      void (async () => {
-        const native = await api<Conversation[]>(
-          "/api/conversations?sort=recent",
-        );
-        const serverActive = native.find((conversation) => conversation.active);
-        let recoveredId = serverActive?.id ?? activeId;
-        if (
-          serverActive?.id !== activeId &&
-          native.some((conversation) => conversation.id === activeId)
-        ) {
-          try {
-            await api(
-              `/api/conversations/${activeId}/activate`,
-              mutation("POST"),
-            );
-            recoveredId = activeId;
-          } catch {
-            // Another tab or a native lifecycle hook may keep the server session.
-          }
-        }
-        setActiveId(recoveredId);
-        setRefresh((value) => value + 1);
-        await Promise.all([
-          loadAgentState(recoveredId),
-          loadConversations(recoveredId),
-        ]);
-        setEventsConnectedFor(recoveredId);
-      })().catch(() => {
-        setEventsConnectedFor(undefined);
-        void loadConversations().catch(() => undefined);
-      });
+      const generation = ++recoveryGeneration;
+      void recover(generation);
     };
     source.addEventListener("message_delta", (raw) => {
       const event = JSON.parse((raw as MessageEvent).data) as {
@@ -500,6 +501,8 @@ export function App() {
     });
     source.onerror = () => {
       reconnecting = true;
+      recoveryGeneration++;
+      if (recoveryTimer !== undefined) window.clearTimeout(recoveryTimer);
       setEventsConnectedFor(undefined);
       setNotification({ message: "Connection interrupted; retrying…" });
       void api<SessionInfo>("/api/session").catch((reason) => {
@@ -509,7 +512,12 @@ export function App() {
         }
       });
     };
-    return () => source.close();
+    return () => {
+      closed = true;
+      recoveryGeneration++;
+      if (recoveryTimer !== undefined) window.clearTimeout(recoveryTimer);
+      source.close();
+    };
   }, [activeId, loadAgentState, loadConversations, session]);
 
   const selectConversation = async (id: string) => {

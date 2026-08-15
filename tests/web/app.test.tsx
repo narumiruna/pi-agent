@@ -757,8 +757,14 @@ describe("web application", () => {
     vi.stubGlobal("EventSource", FakeEventSource);
     let stateRequests = 0;
     let transcriptRequests = 0;
+    let recoveryListRequests = 0;
+    let releaseStaleList: (() => void) | undefined;
+    let markStaleListStarted: (() => void) | undefined;
+    const staleListStarted = new Promise<void>((resolve) => {
+      markStaleListStarted = resolve;
+    });
     const reconnectOperations: string[] = [];
-    vi.mocked(fetch).mockImplementation(async (input, init) => {
+    vi.mocked(fetch).mockImplementation(async (input) => {
       const url = String(input);
       const json = (value: unknown) =>
         new Response(JSON.stringify(value), {
@@ -772,29 +778,42 @@ describe("web application", () => {
           tools: ["read"],
         });
       if (url === "/api/provider-auth") return json(null);
-      if (url === "/api/conversations?sort=recent")
+      if (url === "/api/conversations?sort=recent") {
+        recoveryListRequests++;
+        if (recoveryListRequests === 3) {
+          markStaleListStarted?.();
+          return new Promise<Response>((resolve) => {
+            releaseStaleList = () =>
+              resolve(
+                json([
+                  {
+                    id: "server-session",
+                    createdAt: new Date(0).toISOString(),
+                    modifiedAt: new Date(1).toISOString(),
+                    messageCount: 0,
+                    active: true,
+                  },
+                ]),
+              );
+          });
+        }
+        if (recoveryListRequests === 1)
+          return new Response(
+            JSON.stringify({ error: { code: "internal_error" } }),
+            {
+              status: 503,
+              headers: { "content-type": "application/json" },
+            },
+          );
         return json([
-          {
-            id: "server-session",
-            createdAt: new Date(0).toISOString(),
-            modifiedAt: new Date(1).toISOString(),
-            messageCount: 0,
-            active: true,
-          },
           {
             id: "session",
             createdAt: new Date(0).toISOString(),
             modifiedAt: new Date(0).toISOString(),
             messageCount: 1,
-            active: false,
+            active: true,
           },
         ]);
-      if (
-        url === "/api/conversations/session/activate" &&
-        init?.method === "POST"
-      ) {
-        reconnectOperations.push("activate");
-        return json({ ok: true });
       }
       if (url === "/api/conversations")
         return json([
@@ -880,7 +899,17 @@ describe("web application", () => {
     );
     expect(stateRequests).toBeGreaterThanOrEqual(2);
     expect(transcriptRequests).toBeGreaterThanOrEqual(2);
-    expect(reconnectOperations).toEqual(["activate", "state"]);
+    expect(recoveryListRequests).toBe(2);
+    expect(reconnectOperations).toEqual(["state"]);
+
+    const stateBeforeStaleRecovery = stateRequests;
+    source.onerror?.();
+    source.onopen?.();
+    await staleListStarted;
+    cleanup();
+    releaseStaleList?.();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(stateRequests).toBe(stateBeforeStaleRecovery);
   });
 
   test("keeps a forked draft out of the conversation being replaced", async () => {
