@@ -264,7 +264,7 @@ export class PiService {
       config.agentDir,
       settingsManager,
     );
-    projectTrustPolicy.initialize();
+    await projectTrustPolicy.refresh();
     await settingsManager.reload();
     const heartbeatGuidance = heartbeatFileGuidance(config.agentDir);
     const modelRuntime = await ModelRuntime.create({
@@ -284,8 +284,8 @@ export class PiService {
     }) =>
       withProjectTrustRollback(
         settingsManager,
-        () => {
-          projectTrustPolicy.initialize();
+        async () => {
+          await projectTrustPolicy.refresh();
         },
         async (trustChanged) => {
           if (trustChanged) await heartbeatSession?.reload();
@@ -1096,8 +1096,8 @@ export class PiService {
     await this.coordinator.run("maintenance", () =>
       withProjectTrustRollback(
         this.settingsManager,
-        () => {
-          this.projectTrustPolicy.initialize();
+        async () => {
+          await this.projectTrustPolicy.refresh();
         },
         () => this.reloadSessions(),
         () => this.reloadSessions(),

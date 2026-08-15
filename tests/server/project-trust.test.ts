@@ -94,6 +94,34 @@ describe("ProjectTrustPolicy", () => {
     expect(store.get).toHaveBeenCalledTimes(required ? 1 : 0);
   });
 
+  test("refreshes the global default before resolving trust", async () => {
+    const workspace = await temporaryDirectory("pi-agent-trust-refresh-");
+    const agentDir = await temporaryDirectory("pi-agent-trust-settings-");
+    await mkdir(join(workspace, ".pi", "extensions"), { recursive: true });
+    await writeFile(
+      join(agentDir, "settings.json"),
+      '{"defaultProjectTrust":"always"}\n',
+    );
+    const settings = SettingsManager.create(workspace, agentDir, {
+      projectTrusted: false,
+    });
+    const policy = new ProjectTrustPolicy(workspace, agentDir, settings);
+
+    await expect(policy.refresh()).resolves.toEqual({
+      required: true,
+      trusted: true,
+    });
+    await writeFile(
+      join(agentDir, "settings.json"),
+      '{"defaultProjectTrust":"never"}\n',
+    );
+    await expect(policy.refresh()).resolves.toEqual({
+      required: true,
+      trusted: false,
+    });
+    expect(settings.isProjectTrusted()).toBe(false);
+  });
+
   test("fails closed if gated resources appear after startup", () => {
     let required = false;
     const settings = SettingsManager.inMemory(

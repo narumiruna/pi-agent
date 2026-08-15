@@ -243,7 +243,7 @@ The Web renders those path-free fields directly and does not infer ownership fro
 
 Project-local Pi settings, skills, packages, and extensions remain disabled until Pi's native project trust is effective.
 
-Startup, every session rebuild, and every general resource reload honor the nearest saved `trust.json` decision and the global non-interactive `defaultProjectTrust`; `ask`, `never`, and trust-store read failures remain untrusted.
+Startup, every session rebuild, and every general resource reload first refresh native settings and then honor the nearest saved `trust.json` decision and the global non-interactive `defaultProjectTrust`; `ask`, `never`, and trust-store read failures remain untrusted.
 
 The Settings status reports the effective runtime state, so an external `trust.json` change appears only when one of those synchronized resource-discovery boundaries applies it, and loaded resources remain disableable after their source files are removed.
 

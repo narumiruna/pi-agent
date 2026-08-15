@@ -17,16 +17,18 @@ interface RuntimeTrustSettings {
 
 export async function withProjectTrustRollback<T>(
   settings: RuntimeTrustSettings,
-  apply: () => void,
+  apply: () => Promise<void> | void,
   operation: (changed: boolean) => Promise<T>,
   rollback: () => Promise<void>,
 ): Promise<T> {
   const previous = settings.isProjectTrusted();
-  apply();
-  const changed = previous !== settings.isProjectTrusted();
+  let changed = false;
   try {
+    await apply();
+    changed = previous !== settings.isProjectTrusted();
     return await operation(changed);
   } catch (error) {
+    changed = changed || previous !== settings.isProjectTrusted();
     if (changed) {
       settings.setProjectTrusted(previous);
       await rollback().catch(() => undefined);
@@ -68,6 +70,11 @@ export class ProjectTrustPolicy {
     const state = this.resolve();
     this.settings.setProjectTrusted(state.required && state.trusted);
     return state;
+  }
+
+  async refresh(): Promise<WebProjectTrust> {
+    await this.settings.reload();
+    return this.initialize();
   }
 
   status(): WebProjectTrust {

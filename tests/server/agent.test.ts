@@ -372,7 +372,7 @@ describe("Pi project trust", () => {
     const setProjectTrusted = vi.fn((value: boolean) => {
       trusted = value;
     });
-    const initialize = vi.fn(() => {
+    const refresh = vi.fn(async () => {
       setProjectTrusted(false);
       return { required: true, trusted: false };
     });
@@ -384,7 +384,7 @@ describe("Pi project trust", () => {
       settingsManager: {
         value: { isProjectTrusted: () => trusted, setProjectTrusted },
       },
-      projectTrustPolicy: { value: { initialize } },
+      projectTrustPolicy: { value: { refresh } },
       runtime: { value: { session: { reload: chatReload } } },
       heartbeatSession: { value: { reload: heartbeatReload } },
     });
@@ -393,8 +393,8 @@ describe("Pi project trust", () => {
 
     expect(waitForIdle).toHaveBeenCalledOnce();
     expect(run).toHaveBeenCalledWith("maintenance", expect.any(Function));
-    expect(initialize).toHaveBeenCalledOnce();
-    expect(initialize.mock.invocationCallOrder[0]).toBeLessThan(
+    expect(refresh).toHaveBeenCalledOnce();
+    expect(refresh.mock.invocationCallOrder[0]).toBeLessThan(
       chatReload.mock.invocationCallOrder[0] ?? 0,
     );
     expect(chatReload).toHaveBeenCalledOnce();
@@ -420,7 +420,7 @@ describe("Pi project trust", () => {
       },
       projectTrustPolicy: {
         value: {
-          initialize: () => {
+          refresh: async () => {
             setProjectTrusted(false);
           },
         },
