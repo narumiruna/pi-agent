@@ -7,6 +7,7 @@ export const MAX_WORKSPACE_PATH_LENGTH = 1_024;
 export const WORKSPACE_OPERATION_TIMEOUT_MS = 2_000;
 
 const EXCLUDED_DIRECTORIES = new Set([
+  ".agents",
   ".git",
   ".hg",
   ".local",

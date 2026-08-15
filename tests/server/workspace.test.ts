@@ -105,6 +105,8 @@ describe("workspace path policy", () => {
       "private.pem",
       "private.key",
       "secrets.json",
+      ".agents",
+      ".pi",
       "node_modules",
       "nested/name",
       "line\nbreak",
@@ -359,6 +361,36 @@ describe("workspace service", () => {
     expect(
       listing.entries.some((entry) => entry.name.includes("pi-agent")),
     ).toBe(false);
+  });
+
+  test("hides and rejects project resource mutation paths", async () => {
+    const root = await temporaryWorkspace();
+    const skillDirectory = join(root, ".agents", "skills", "project-skill");
+    const extensionDirectory = join(root, ".pi", "extensions");
+    await mkdir(skillDirectory, { recursive: true });
+    await mkdir(extensionDirectory, { recursive: true });
+    await writeFile(join(skillDirectory, "SKILL.md"), "private skill");
+    await writeFile(
+      join(extensionDirectory, "project.ts"),
+      "private extension",
+    );
+    const service = new WorkspaceService(root);
+
+    await expect(service.listDirectory("")).resolves.toMatchObject({
+      entries: [],
+    });
+    await expect(
+      service.inspectFile(".agents/skills/project-skill/SKILL.md"),
+    ).rejects.toMatchObject({ status: 404, reason: "not_found" });
+    await expect(
+      service.writeFile({
+        path: ".agents/skills/project-skill/SKILL.md",
+        content: "modified",
+      }),
+    ).rejects.toMatchObject({ status: 404, reason: "not_found" });
+    expect(await readFile(join(skillDirectory, "SKILL.md"), "utf8")).toBe(
+      "private skill",
+    );
   });
 
   test("previews UTF-8 and classifies binary, invalid, oversized, and unsupported files", async () => {

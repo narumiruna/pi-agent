@@ -166,6 +166,21 @@ const resources = {
       configuredAccess: "Configured access",
       configuredAccessDescription:
         "Credentials available to this Pi agent instance.",
+      projectTrust: "Project trust",
+      projectTrustDescription:
+        "Project-local Pi settings, skills, packages, and extensions stay disabled until trusted.",
+      projectTrustStatusTrusted:
+        "Trusted. Project resources can load and extensions can execute.",
+      projectTrustStatusUntrusted:
+        "Not trusted. Project skills and extensions are not loaded.",
+      projectTrustStatusNotRequired:
+        "This workspace has no project resources that require trust.",
+      projectTrustAcknowledge:
+        "I understand project extensions and packages can execute arbitrary code, and skills can direct Pi actions.",
+      enableProjectTrust: "Trust project resources",
+      disableProjectTrust: "Disable project resources",
+      projectTrustEnabled: "Project resources are trusted and reloaded.",
+      projectTrustDisabled: "Project resources are disabled and reloaded.",
       noAccessConfigured: "No model access configured",
       currentModel: "Current model",
       noModelSelected: "No model selected",
@@ -478,6 +493,20 @@ const resources = {
       connecting: "連線中…",
       configuredAccess: "已設定的存取方式",
       configuredAccessDescription: "這個 Pi Agent 實例可使用的憑證。",
+      projectTrust: "Project trust",
+      projectTrustDescription:
+        "信任前，不會載入專案內的 Pi 設定、skills、packages 與 extensions。",
+      projectTrustStatusTrusted:
+        "已信任。專案資源可以載入，extensions 也可以執行。",
+      projectTrustStatusUntrusted:
+        "尚未信任。不會載入專案 skills 與 extensions。",
+      projectTrustStatusNotRequired: "此工作區沒有需要信任的專案資源。",
+      projectTrustAcknowledge:
+        "我了解專案 extensions 與 packages 可執行任意程式碼，skills 也可引導 Pi 執行操作。",
+      enableProjectTrust: "信任專案資源",
+      disableProjectTrust: "停用專案資源",
+      projectTrustEnabled: "已信任並重新載入專案資源。",
+      projectTrustDisabled: "已停用並重新載入專案資源。",
       noAccessConfigured: "尚未設定模型存取方式",
       currentModel: "目前模型",
       noModelSelected: "尚未選擇模型",

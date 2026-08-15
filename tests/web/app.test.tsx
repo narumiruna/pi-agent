@@ -1000,6 +1000,74 @@ describe("web application", () => {
     );
   });
 
+  test("requires acknowledgement to trust and reload project resources", async () => {
+    let trusted = false;
+    const mutations: boolean[] = [];
+    vi.mocked(fetch).mockImplementation(async (input, init) => {
+      const url = String(input);
+      if (url === "/api/models")
+        return new Response(
+          JSON.stringify({
+            thinkingLevel: "off",
+            thinkingLevels: ["off"],
+            authPending: false,
+            projectTrust: { required: true, trusted },
+            models: [],
+            providers: [],
+          }),
+          { status: 200, headers: { "content-type": "application/json" } },
+        );
+      if (url === "/api/project-trust" && init?.method === "PUT") {
+        const body = JSON.parse(String(init.body)) as {
+          trusted: boolean;
+          acknowledgeRisk: boolean;
+        };
+        expect(body.acknowledgeRisk).toBe(true);
+        trusted = body.trusted;
+        mutations.push(trusted);
+        return new Response(JSON.stringify({ required: true, trusted }), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        });
+      }
+      throw new Error(`Unexpected request: ${url}`);
+    });
+    const user = userEvent.setup();
+
+    render(
+      <Theme>
+        <SettingsPage
+          session={{ authenticated: true, authDisabled: false, tools: [] }}
+        />
+      </Theme>,
+    );
+
+    expect(
+      await screen.findByText(/project skills and extensions are not loaded/i),
+    ).toBeVisible();
+    const enable = screen.getByRole("button", {
+      name: /trust project resources/i,
+    });
+    expect(enable).toBeDisabled();
+    await user.click(
+      screen.getByRole("checkbox", {
+        name: /extensions and packages can execute arbitrary code/i,
+      }),
+    );
+    await user.click(enable);
+    expect(
+      await screen.findByText(/project resources are trusted and reloaded/i),
+    ).toBeVisible();
+
+    await user.click(
+      screen.getByRole("button", { name: /disable project resources/i }),
+    );
+    expect(
+      await screen.findByText(/project resources are disabled and reloaded/i),
+    ).toBeVisible();
+    expect(mutations).toEqual([true, false]);
+  });
+
   test("adds an API key through a focused access flow", async () => {
     vi.mocked(fetch).mockImplementation(async (input, init) => {
       if (String(input) === "/api/models") {

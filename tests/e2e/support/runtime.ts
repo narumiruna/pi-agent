@@ -63,6 +63,10 @@ export async function prepareRuntime(): Promise<E2eRuntime> {
     mkdir(join(workspace, "src")),
     mkdir(join(workspace, "workers")),
     mkdir(join(workspace, ".git")),
+    mkdir(join(workspace, ".pi", "extensions"), { recursive: true }),
+    mkdir(join(workspace, ".pi", "skills", "project-e2e"), {
+      recursive: true,
+    }),
   ]);
   await Promise.all([
     writeFile(
@@ -72,6 +76,14 @@ export async function prepareRuntime(): Promise<E2eRuntime> {
     writeFile(join(workspace, "binary.dat"), Buffer.from([0, 1, 2, 3])),
     writeFile(join(workspace, ".env"), "E2E_SECRET=hidden\n"),
     writeFile(join(workspace, ".git", "config"), "private\n"),
+    writeFile(
+      join(workspace, ".pi", "extensions", "project-e2e.js"),
+      'export default function (pi) { pi.registerCommand("project-e2e", { handler() {} }); }\n',
+    ),
+    writeFile(
+      join(workspace, ".pi", "skills", "project-e2e", "SKILL.md"),
+      "---\nname: project-e2e\ndescription: Project trust E2E skill\n---\nUse only after trust.\n",
+    ),
     writeFile(join(workspace, "workers", "config.json"), '{"valid":true}\n'),
     writeFile(join(workspace, "workers", "page.html"), "<main>worker</main>\n"),
     writeFile(

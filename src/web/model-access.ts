@@ -1,4 +1,4 @@
-import type { AgentPreferences } from "../shared/contracts.js";
+import type { AgentPreferences, WebProjectTrust } from "../shared/contracts.js";
 
 export type ProviderCredentialType = "api_key" | "oauth";
 
@@ -46,6 +46,7 @@ export interface ModelData {
   thinkingLevel: string;
   thinkingLevels: string[];
   authPending: boolean;
+  projectTrust: WebProjectTrust;
   agent: AgentPreferences;
   models: ModelOption[];
   providers: ProviderOption[];

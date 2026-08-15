@@ -2,6 +2,7 @@ import { CheckCircledIcon, PlusIcon } from "@radix-ui/react-icons";
 import {
   Button,
   Callout,
+  Checkbox,
   Flex,
   Heading,
   Select,
@@ -10,6 +11,7 @@ import {
 } from "@radix-ui/themes";
 import { useCallback, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
+import type { WebProjectTrust } from "../../shared/contracts.js";
 import { ApiError, api, mutation } from "../api.js";
 import { DisconnectProviderDialog } from "../components/DisconnectProviderDialog.js";
 import { ModelAccessDialog } from "../components/ModelAccessDialog.js";
@@ -62,6 +64,8 @@ export function SettingsPage({
   const [pending, setPending] = useState<string>();
   const [accessOpen, setAccessOpen] = useState(false);
   const [modelOpen, setModelOpen] = useState(false);
+  const [projectTrust, setProjectTrust] = useState<WebProjectTrust>();
+  const [projectRiskAccepted, setProjectRiskAccepted] = useState(false);
   const [disconnectProvider, setDisconnectProvider] =
     useState<ProviderOption>();
 
@@ -82,6 +86,7 @@ export function SettingsPage({
       },
     };
     setData(normalized);
+    setProjectTrust(result.projectTrust ?? { required: false, trusted: true });
     return normalized;
   }, [session.tools]);
 
@@ -159,6 +164,19 @@ export function SettingsPage({
 
   const updateAgent = (key: string, value: Record<string, unknown>) =>
     run(key, () => api("/api/agent-settings", mutation("PUT", value)));
+
+  const updateProjectTrust = (trusted: boolean) =>
+    run(
+      "projectTrust",
+      () =>
+        api(
+          "/api/project-trust",
+          mutation("PUT", { trusted, acknowledgeRisk: true }),
+        ),
+      t(trusted ? "projectTrustEnabled" : "projectTrustDisabled"),
+    ).then((success) => {
+      if (success) setProjectRiskAccepted(false);
+    });
 
   return (
     <section className="pageColumn settingsPage">
@@ -333,6 +351,71 @@ export function SettingsPage({
                   {t("configureProviderFirst")}
                 </Text>
               </div>
+            )}
+          </section>
+
+          <section
+            className="settingsSection"
+            aria-labelledby="project-trust-heading"
+          >
+            <Heading id="project-trust-heading" size="4">
+              {t("projectTrust")}
+            </Heading>
+            <Text as="p" size="2" color="gray">
+              {t("projectTrustDescription")}
+            </Text>
+            {projectTrust && (
+              <>
+                <Callout.Root
+                  color={projectTrust.trusted ? "green" : "amber"}
+                  highContrast
+                >
+                  <Callout.Text>
+                    {t(
+                      projectTrust.required
+                        ? projectTrust.trusted
+                          ? "projectTrustStatusTrusted"
+                          : "projectTrustStatusUntrusted"
+                        : "projectTrustStatusNotRequired",
+                    )}
+                  </Callout.Text>
+                </Callout.Root>
+                {projectTrust.required &&
+                  (projectTrust.trusted ? (
+                    <Button
+                      color="red"
+                      variant="soft"
+                      disabled={pending === "projectTrust"}
+                      onClick={() => void updateProjectTrust(false)}
+                    >
+                      {t("disableProjectTrust")}
+                    </Button>
+                  ) : (
+                    <Flex direction="column" gap="3" align="start">
+                      <Text as="label" size="2">
+                        <Flex gap="2" align="center">
+                          <Checkbox
+                            checked={projectRiskAccepted}
+                            onCheckedChange={(value) =>
+                              setProjectRiskAccepted(value === true)
+                            }
+                          />
+                          {t("projectTrustAcknowledge")}
+                        </Flex>
+                      </Text>
+                      <Button
+                        color="orange"
+                        highContrast
+                        disabled={
+                          !projectRiskAccepted || pending === "projectTrust"
+                        }
+                        onClick={() => void updateProjectTrust(true)}
+                      >
+                        {t("enableProjectTrust")}
+                      </Button>
+                    </Flex>
+                  ))}
+              </>
             )}
           </section>
 

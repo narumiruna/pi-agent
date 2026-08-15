@@ -12,6 +12,42 @@ interface ModelData {
   models: ModelOption[];
 }
 
+test("enables and disables project resources only with acknowledged trust", async ({
+  page,
+}) => {
+  await page.goto("/");
+  await page.getByRole("button", { name: "Settings" }).click();
+
+  const commandNames = async () => {
+    const response = await page.request.get("/api/commands");
+    const commands = (await response.json()) as { name: string }[];
+    return commands.map((command) => command.name);
+  };
+  expect(await commandNames()).not.toContain("project-e2e");
+  expect(await commandNames()).not.toContain("skill:project-e2e");
+
+  const enable = page.getByRole("button", { name: "Trust project resources" });
+  await expect(enable).toBeDisabled();
+  await page
+    .getByRole("checkbox", {
+      name: /extensions and packages can execute arbitrary code/i,
+    })
+    .check();
+  await enable.click();
+  await expect(
+    page.getByText("Project resources are trusted and reloaded."),
+  ).toBeVisible();
+  expect(await commandNames()).toContain("project-e2e");
+  expect(await commandNames()).toContain("skill:project-e2e");
+
+  await page.getByRole("button", { name: "Disable project resources" }).click();
+  await expect(
+    page.getByText("Project resources are disabled and reloaded."),
+  ).toBeVisible();
+  expect(await commandNames()).not.toContain("project-e2e");
+  expect(await commandNames()).not.toContain("skill:project-e2e");
+});
+
 test("cancels and applies a full-row model selection", async ({
   page,
   request,
