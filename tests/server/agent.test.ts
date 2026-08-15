@@ -368,12 +368,22 @@ describe("Pi project trust", () => {
     const run = vi.fn(async (_kind: string, task: () => Promise<unknown>) =>
       task(),
     );
-    const initialize = vi.fn(() => ({ required: true, trusted: false }));
+    let trusted = true;
+    const setProjectTrusted = vi.fn((value: boolean) => {
+      trusted = value;
+    });
+    const initialize = vi.fn(() => {
+      setProjectTrusted(false);
+      return { required: true, trusted: false };
+    });
     const chatReload = vi.fn(async () => undefined);
     const heartbeatReload = vi.fn(async () => undefined);
     const service = Object.create(PiService.prototype) as PiService;
     Object.defineProperties(service, {
       coordinator: { value: { waitForIdle, run } },
+      settingsManager: {
+        value: { isProjectTrusted: () => trusted, setProjectTrusted },
+      },
       projectTrustPolicy: { value: { initialize } },
       runtime: { value: { session: { reload: chatReload } } },
       heartbeatSession: { value: { reload: heartbeatReload } },
@@ -389,6 +399,43 @@ describe("Pi project trust", () => {
     );
     expect(chatReload).toHaveBeenCalledOnce();
     expect(heartbeatReload).toHaveBeenCalledOnce();
+    expect(trusted).toBe(false);
+  });
+
+  test("restores runtime trust when a general reload fails", async () => {
+    let trusted = true;
+    const setProjectTrusted = vi.fn((value: boolean) => {
+      trusted = value;
+    });
+    const chatReload = vi.fn(async () => undefined);
+    const heartbeatReload = vi
+      .fn<() => Promise<void>>()
+      .mockRejectedValueOnce(new Error("heartbeat reload failed"))
+      .mockResolvedValue(undefined);
+    const service = Object.create(PiService.prototype) as PiService;
+    Object.defineProperties(service, {
+      coordinator: { value: new RunCoordinator() },
+      settingsManager: {
+        value: { isProjectTrusted: () => trusted, setProjectTrusted },
+      },
+      projectTrustPolicy: {
+        value: {
+          initialize: () => {
+            setProjectTrusted(false);
+          },
+        },
+      },
+      runtime: { value: { session: { reload: chatReload } } },
+      heartbeatSession: { value: { reload: heartbeatReload } },
+    });
+
+    await expect(service.reload()).rejects.toThrow("heartbeat reload failed");
+
+    expect(setProjectTrusted).toHaveBeenNthCalledWith(1, false);
+    expect(setProjectTrusted).toHaveBeenNthCalledWith(2, true);
+    expect(chatReload).toHaveBeenCalledTimes(2);
+    expect(heartbeatReload).toHaveBeenCalledTimes(2);
+    expect(trusted).toBe(true);
   });
 
   test("holds a maintenance lease after waiting for an active run", async () => {

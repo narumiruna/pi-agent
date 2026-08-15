@@ -82,7 +82,7 @@ Mitigate with mandatory acknowledgement, idle coordination, native reload, rollb
 
 ## Verification
 
-- `npm test -- tests/server/project-trust.test.ts tests/server/agent.test.ts tests/server/api.test.ts tests/server/http-auth.test.ts tests/server/workspace.test.ts tests/web/app.test.tsx`: 156 tests passed.
-- `npm run ci`: 23 files passed, 290 tests passed, 5 PostgreSQL-dependent tests skipped, and both builds passed.
+- `npm test -- tests/server/project-trust.test.ts tests/server/agent.test.ts tests/server/api.test.ts tests/server/http-auth.test.ts tests/server/workspace.test.ts tests/web/app.test.tsx`: 158 tests passed.
+- `npm run ci`: 23 files passed, 292 tests passed, 5 PostgreSQL-dependent tests skipped, and both builds passed.
 - `npx playwright test`: all 18 setup, desktop, accessibility, and mobile tests passed.
-- `docker build -t pi-agent:local .`: production image built successfully as `sha256:c904436330ffedc6b0189144e4ad1e06173bc13a0cda5c217ba7e03dd1984498`.
+- `docker build -t pi-agent:local .`: production image built successfully as `sha256:ea15170e1c6fe2f03fd003d3a4e63a488100c1d3bc58740b20959f4fa7d2855d`.

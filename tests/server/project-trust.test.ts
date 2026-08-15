@@ -7,7 +7,10 @@ import {
   SettingsManager,
 } from "@earendil-works/pi-coding-agent";
 import { afterEach, describe, expect, test, vi } from "vitest";
-import { ProjectTrustPolicy } from "../../src/server/agent/project-trust.js";
+import {
+  ProjectTrustPolicy,
+  withProjectTrustRollback,
+} from "../../src/server/agent/project-trust.js";
 
 const directories: string[] = [];
 
@@ -131,6 +134,28 @@ describe("ProjectTrustPolicy", () => {
     expect(policy.status()).toEqual({ required: true, trusted: true });
     expect(policy.initialize()).toEqual({ required: true, trusted: false });
     expect(policy.status()).toEqual({ required: true, trusted: false });
+  });
+
+  test("rolls runtime trust back when synchronized discovery fails", async () => {
+    const settings = SettingsManager.inMemory(undefined, {
+      projectTrusted: true,
+    });
+    const rollback = vi.fn(async () => undefined);
+
+    await expect(
+      withProjectTrustRollback(
+        settings,
+        () => settings.setProjectTrusted(false),
+        async (changed) => {
+          expect(changed).toBe(true);
+          throw new Error("discovery failed");
+        },
+        rollback,
+      ),
+    ).rejects.toThrow("discovery failed");
+
+    expect(settings.isProjectTrusted()).toBe(true);
+    expect(rollback).toHaveBeenCalledOnce();
   });
 
   test("fails closed when the native trust store cannot be read", () => {

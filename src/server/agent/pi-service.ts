@@ -47,7 +47,10 @@ import {
 import type { McpManager } from "../mcp/manager.js";
 import type { HeartbeatRunDetails } from "../storage/types.js";
 import type { EventHub } from "./events.js";
-import { ProjectTrustPolicy } from "./project-trust.js";
+import {
+  ProjectTrustPolicy,
+  withProjectTrustRollback,
+} from "./project-trust.js";
 import {
   heartbeatExecutionPrompt,
   heartbeatFileGuidance,
@@ -278,42 +281,39 @@ export class PiService {
       cwd,
       sessionManager,
       sessionStartEvent,
-    }) => {
-      const previousTrust = settingsManager.isProjectTrusted();
-      projectTrustPolicy.initialize();
-      if (
-        heartbeatSession &&
-        previousTrust !== settingsManager.isProjectTrusted()
-      ) {
-        try {
-          await heartbeatSession.reload();
-        } catch (error) {
-          settingsManager.setProjectTrusted(previousTrust);
-          await heartbeatSession.reload().catch(() => undefined);
-          throw error;
-        }
-      }
-      const services = await createAgentSessionServices({
-        cwd,
-        agentDir: config.agentDir,
+    }) =>
+      withProjectTrustRollback(
         settingsManager,
-        modelRuntime,
-        resourceLoaderOptions: {
-          appendSystemPrompt: [heartbeatGuidance],
-          ...(mcp ? { extensionFactories: [mcp.extension()] } : {}),
+        () => {
+          projectTrustPolicy.initialize();
         },
-      });
-      return {
-        ...(await createAgentSessionFromServices({
-          services,
-          sessionManager,
-          ...(sessionStartEvent ? { sessionStartEvent } : {}),
-          tools: config.agentTools,
-        })),
-        services,
-        diagnostics: services.diagnostics,
-      };
-    };
+        async (trustChanged) => {
+          if (trustChanged) await heartbeatSession?.reload();
+          const services = await createAgentSessionServices({
+            cwd,
+            agentDir: config.agentDir,
+            settingsManager,
+            modelRuntime,
+            resourceLoaderOptions: {
+              appendSystemPrompt: [heartbeatGuidance],
+              ...(mcp ? { extensionFactories: [mcp.extension()] } : {}),
+            },
+          });
+          return {
+            ...(await createAgentSessionFromServices({
+              services,
+              sessionManager,
+              ...(sessionStartEvent ? { sessionStartEvent } : {}),
+              tools: config.agentTools,
+            })),
+            services,
+            diagnostics: services.diagnostics,
+          };
+        },
+        async () => {
+          await heartbeatSession?.reload();
+        },
+      );
     const runtime = await createAgentSessionRuntime(createRuntime, {
       cwd: config.workspace,
       agentDir: config.agentDir,
@@ -1093,10 +1093,16 @@ export class PiService {
 
   async reload(): Promise<void> {
     await this.coordinator.waitForIdle();
-    await this.coordinator.run("maintenance", async () => {
-      this.projectTrustPolicy.initialize();
-      await this.reloadSessions();
-    });
+    await this.coordinator.run("maintenance", () =>
+      withProjectTrustRollback(
+        this.settingsManager,
+        () => {
+          this.projectTrustPolicy.initialize();
+        },
+        () => this.reloadSessions(),
+        () => this.reloadSessions(),
+      ),
+    );
   }
 
   projectTrust(): WebProjectTrust {

@@ -10,6 +10,31 @@ interface ProjectTrustStoreLike {
   set(cwd: string, decision: boolean | null): void;
 }
 
+interface RuntimeTrustSettings {
+  isProjectTrusted(): boolean;
+  setProjectTrusted(trusted: boolean): void;
+}
+
+export async function withProjectTrustRollback<T>(
+  settings: RuntimeTrustSettings,
+  apply: () => void,
+  operation: (changed: boolean) => Promise<T>,
+  rollback: () => Promise<void>,
+): Promise<T> {
+  const previous = settings.isProjectTrusted();
+  apply();
+  const changed = previous !== settings.isProjectTrusted();
+  try {
+    return await operation(changed);
+  } catch (error) {
+    if (changed) {
+      settings.setProjectTrusted(previous);
+      await rollback().catch(() => undefined);
+    }
+    throw error;
+  }
+}
+
 export class ProjectTrustPolicy {
   private readonly trustStore: ProjectTrustStoreLike;
 
