@@ -757,7 +757,8 @@ describe("web application", () => {
     vi.stubGlobal("EventSource", FakeEventSource);
     let stateRequests = 0;
     let transcriptRequests = 0;
-    vi.mocked(fetch).mockImplementation(async (input) => {
+    const reconnectOperations: string[] = [];
+    vi.mocked(fetch).mockImplementation(async (input, init) => {
       const url = String(input);
       const json = (value: unknown) =>
         new Response(JSON.stringify(value), {
@@ -771,6 +772,30 @@ describe("web application", () => {
           tools: ["read"],
         });
       if (url === "/api/provider-auth") return json(null);
+      if (url === "/api/conversations?sort=recent")
+        return json([
+          {
+            id: "server-session",
+            createdAt: new Date(0).toISOString(),
+            modifiedAt: new Date(1).toISOString(),
+            messageCount: 0,
+            active: true,
+          },
+          {
+            id: "session",
+            createdAt: new Date(0).toISOString(),
+            modifiedAt: new Date(0).toISOString(),
+            messageCount: 1,
+            active: false,
+          },
+        ]);
+      if (
+        url === "/api/conversations/session/activate" &&
+        init?.method === "POST"
+      ) {
+        reconnectOperations.push("activate");
+        return json({ ok: true });
+      }
       if (url === "/api/conversations")
         return json([
           {
@@ -787,6 +812,7 @@ describe("web application", () => {
       }
       if (url === "/api/conversations/session/state") {
         stateRequests++;
+        reconnectOperations.push("state");
         const reconnected = stateRequests > 1;
         return json({
           sessionId: "session",
@@ -844,6 +870,7 @@ describe("web application", () => {
     );
     const source = FakeEventSource.instances.at(-1);
     if (!source) throw new Error("EventSource was not created");
+    reconnectOperations.length = 0;
     source.onerror?.();
     source.onopen?.();
 
@@ -853,6 +880,7 @@ describe("web application", () => {
     );
     expect(stateRequests).toBeGreaterThanOrEqual(2);
     expect(transcriptRequests).toBeGreaterThanOrEqual(2);
+    expect(reconnectOperations).toEqual(["activate", "state"]);
   });
 
   test("keeps a forked draft out of the conversation being replaced", async () => {

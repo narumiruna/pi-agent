@@ -320,15 +320,45 @@ export function App() {
     let reconnecting = false;
     const source = new EventSource("/api/events");
     source.onopen = () => {
-      setEventsConnectedFor(activeId);
-      if (!reconnecting || !activeId) return;
+      if (!reconnecting || !activeId) {
+        setEventsConnectedFor(activeId);
+        return;
+      }
       reconnecting = false;
       setDelta("");
       setThinking("");
       setLiveTools([]);
-      setRefresh((value) => value + 1);
-      void loadAgentState(activeId).catch(() => undefined);
-      void loadConversations(activeId).catch(() => undefined);
+      void (async () => {
+        const native = await api<Conversation[]>(
+          "/api/conversations?sort=recent",
+        );
+        const serverActive = native.find((conversation) => conversation.active);
+        let recoveredId = serverActive?.id ?? activeId;
+        if (
+          serverActive?.id !== activeId &&
+          native.some((conversation) => conversation.id === activeId)
+        ) {
+          try {
+            await api(
+              `/api/conversations/${activeId}/activate`,
+              mutation("POST"),
+            );
+            recoveredId = activeId;
+          } catch {
+            // Another tab or a native lifecycle hook may keep the server session.
+          }
+        }
+        setActiveId(recoveredId);
+        setRefresh((value) => value + 1);
+        await Promise.all([
+          loadAgentState(recoveredId),
+          loadConversations(recoveredId),
+        ]);
+        setEventsConnectedFor(recoveredId);
+      })().catch(() => {
+        setEventsConnectedFor(undefined);
+        void loadConversations().catch(() => undefined);
+      });
     };
     source.addEventListener("message_delta", (raw) => {
       const event = JSON.parse((raw as MessageEvent).data) as {
