@@ -114,7 +114,7 @@ test("cancels and applies a full-row model selection", async ({
   ).toBeVisible();
 
   await request.delete(`${mockOrigin}/__control/requests`);
-  await page.getByRole("button", { name: "Chat" }).click();
+  await page.getByRole("button", { name: "Chats" }).click();
   const message = `selected model ${Date.now()}`;
   const composer = page.getByLabel("Ask Pi anything…");
   await composer.fill(message);

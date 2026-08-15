@@ -81,8 +81,15 @@ test("queues steering while a response is running", async ({
   ).toBeVisible();
 });
 
-test("keeps new and existing conversations isolated", async ({ page }) => {
+test("keeps the Chats list and new-conversation action intact", async ({
+  page,
+}) => {
   await page.goto("/");
+  await expect(page.getByRole("region", { name: "Chats" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Chats" })).toHaveAttribute(
+    "aria-current",
+    "page",
+  );
   const oldMessage = `old conversation ${Date.now()}`;
   await send(page, oldMessage);
   await expect(
