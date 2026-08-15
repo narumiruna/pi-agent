@@ -1,6 +1,6 @@
 # App Route Contract Plan
 
-Status: In progress.
+Status: Completed on 2026-08-15.
 
 ## Goal
 
@@ -37,6 +37,14 @@ Changing internal `chat` to `chats` can break conversation switching or navigati
 
 Mitigate with repository-wide literal scans, focused App tests, and desktop/mobile navigation E2E.
 
+## Outcome
+
+PR #14 merged as `76d3dfe` after its sole automatic `verify` check passed.
+
+GitHub reported no submitted reviews, inline comments, conversation comments, or review threads, so no feedback required changes or replies.
+
+The target Roadmap milestone is checked by the post-merge administrative change that archives this plan.
+
 ## Plan
 
 - [x] Inspect `App.tsx`, `Navigation.tsx`, i18n, and navigation tests to establish the existing page literals and migration boundary.
@@ -46,8 +54,8 @@ Mitigate with repository-wide literal scans, focused App tests, and desktop/mobi
 - [x] Run focused route/App tests, `npm run ci`, and navigation E2E; 43 focused tests passed, CI passed 247 tests with 5 intentional skips and both builds, and all 17 SQLite browser tests passed.
 - [x] Review the complete diff for blank-page states, accidental early navigation exposure, route drift, dependency additions, and unrelated changes; `Page` excludes planned routes, Navigation exposes no planned literal, contract tests lock exact order, no dependency file changed, and `git diff --check` passed.
 - [x] Commit only the plan, contract, integration, and tests with signed Conventional Commits; signed commit `570a962` is pushed in dedicated PR #14 with plan and milestone links.
-- [ ] Read all pull-request checks and feedback, address every actionable item with regression coverage, and merge the clean pull request.
-- [ ] After merge, check the matching Roadmap milestone and archive this completed plan through an administrative documentation pull request.
+- [x] Read all pull-request checks and feedback, address every actionable item with regression coverage, and merge the clean pull request; PR #14 `verify` passed, no feedback existed, and merge commit `76d3dfe` is on `main`.
+- [x] After merge, check the matching Roadmap milestone and archive this completed plan through an administrative documentation pull request.
 
 ## Completion Checklist
 
@@ -57,5 +65,5 @@ Mitigate with repository-wide literal scans, focused App tests, and desktop/mobi
 - [x] Legacy Library is explicitly separate from the target contract and remains functional.
 - [x] Planned resource routes are not exposed before their pages exist.
 - [x] Focused tests, `npm run ci`, and desktop/mobile navigation E2E pass.
-- [ ] The dedicated pull request is merged with all feedback resolved.
-- [ ] The Roadmap milestone is checked and this plan is archived only after merge.
+- [x] The dedicated pull request is merged with all feedback resolved.
+- [x] The Roadmap milestone is checked and this plan is archived only after merge.
