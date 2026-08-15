@@ -71,7 +71,7 @@ Mitigate with reserved-prefix and Accept-header tests, pure route parser tests, 
 - [x] Update README browser-route and fallback documentation.
 - [x] Run focused tests, `npm run ci`, full local E2E, and the production Docker build; record exact results.
 - [x] Review the complete diff for API fallback leaks, route-contract duplication, planned-route exposure, history loops, dirty-draft loss, query/hash surprises, inaccessible navigation changes, test-layout violations, and unrelated edits.
-- [ ] Commit, push, and open one dedicated signed pull request linking this plan and Roadmap milestone.
+- [x] Commit, push, and open dedicated pull request [#34](https://github.com/narumiruna/pi-agent/pull/34) with a signed implementation commit linking this plan and Roadmap milestone.
 - [ ] Resolve every pull-request check and feedback item with regression coverage, then merge the clean pull request.
 - [ ] After merge, check the matching Roadmap acceptance milestone and archive this plan through an administrative documentation pull request.
 
