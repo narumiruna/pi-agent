@@ -1,10 +1,14 @@
 import { createHash } from "node:crypto";
 import { basename } from "node:path";
-import type { ProgressEvent } from "@earendil-works/pi-coding-agent";
+import type {
+  ProgressEvent,
+  SourceInfo,
+} from "@earendil-works/pi-coding-agent";
 import type {
   WebMcpDiagnostic,
   WebPackageProgress,
   WebPackageSummary,
+  WebResourceProvenance,
 } from "../shared/contracts.js";
 import { sanitizeExtensionText } from "./interactions/web-state.js";
 import type { McpDiagnostic } from "./mcp/manager.js";
@@ -54,6 +58,15 @@ export function safePackageName(source: string): string {
   return sanitizeExtensionText(name || "local-package", MAX_PACKAGE_NAME);
 }
 
+export function projectResourceProvenance(
+  sourceInfo: Pick<SourceInfo, "origin" | "scope">,
+): WebResourceProvenance {
+  return {
+    scope: sourceInfo.scope,
+    origin: sourceInfo.origin,
+  };
+}
+
 export function projectPackageSummary(item: {
   source: string;
   scope: "project" | "user";
@@ -64,6 +77,10 @@ export function projectPackageSummary(item: {
     name: safePackageName(item.source),
     scope: item.scope,
     filtered: item.filtered,
+    provenance: projectResourceProvenance({
+      scope: item.scope,
+      origin: "package",
+    }),
   };
 }
 

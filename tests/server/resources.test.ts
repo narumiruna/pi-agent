@@ -48,7 +48,11 @@ describe("ResourceService", () => {
       "You are concise.\n",
     );
     expect(await service.listTemplates()).toEqual([
-      { name: "review", content: "Review this.\n" },
+      {
+        name: "review",
+        content: "Review this.\n",
+        provenance: { scope: "user", origin: "top-level" },
+      },
     ]);
   });
 
@@ -100,6 +104,7 @@ describe("ResourceService", () => {
       name: "package",
       scope: "project",
       filtered: false,
+      provenance: { scope: "project", origin: "package" },
     });
     expect(JSON.stringify(summary)).not.toContain("workspace");
     expect(JSON.stringify(summary)).not.toContain("/private");

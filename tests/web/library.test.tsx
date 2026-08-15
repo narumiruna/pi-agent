@@ -31,7 +31,14 @@ describe("Library package metadata", () => {
     vi.mocked(fetch).mockImplementation(async (input, init) => {
       const url = String(input);
       const method = init?.method ?? "GET";
-      if (url === "/api/templates") return json([]);
+      if (url === "/api/templates")
+        return json([
+          {
+            name: "review",
+            content: "Review changes",
+            provenance: { scope: "project", origin: "top-level" },
+          },
+        ]);
       if (url === "/api/mcp") return json({ mcpServers: {} });
       if (url === "/api/diagnostics") return json({ mcp: [] });
       if (url === "/api/packages" && method === "GET")
@@ -41,6 +48,7 @@ describe("Library package metadata", () => {
             name: "safe-package",
             scope: "user",
             filtered: false,
+            provenance: { scope: "user", origin: "package" },
           },
         ]);
       if (
@@ -64,8 +72,14 @@ describe("Library package metadata", () => {
       </Theme>,
     );
 
+    await user.click(
+      await screen.findByRole("tab", { name: /Prompt templates/ }),
+    );
+    expect(await screen.findByText("project")).toBeVisible();
+
     await user.click(await screen.findByRole("tab", { name: /Pi packages/ }));
     expect(await screen.findByText("safe-package")).toBeVisible();
+    expect(screen.getByText("user package")).toBeVisible();
     expect(screen.queryByText(/private|workspace/i)).not.toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "Update" }));

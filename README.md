@@ -237,6 +237,10 @@ Package list entries use opaque IDs and bounded display names, and update or rem
 
 Explicit owner-requested content such as transcripts, documents, redacted MCP configuration, workspace files, tool output, and session exports remains available through its dedicated endpoint.
 
+Resource metadata preserves Pi's native `scope` (`user`, `project`, or `temporary`) separately from `origin` (`top-level` or `package`).
+
+The Web renders those path-free fields directly and does not infer ownership from resource names or filesystem paths.
+
 ## Prompts, skills, and extensions
 
 The Library page edits `SYSTEM.md`, `APPEND_SYSTEM.md`, and files under `prompts/` with atomic writes.

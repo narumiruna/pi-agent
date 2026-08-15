@@ -25,6 +25,8 @@ import {
   MAX_CHAT_IMAGE_BYTES,
   MAX_CHAT_IMAGES,
   normalizeChatImageMimeType,
+  resourceProvenanceLabel,
+  type WebResourceCommand,
 } from "../../shared/contracts.js";
 import { api, mutation } from "../api.js";
 import { ConversationPanel } from "../components/ConversationPanel.js";
@@ -61,12 +63,6 @@ interface Props {
   onConversationChanged: (id: string) => Promise<void>;
   onStateChanged: () => void;
   onChooseModel: () => void;
-}
-
-interface CommandSuggestion {
-  name: string;
-  description?: string;
-  source: "extension" | "prompt" | "skill";
 }
 
 interface ComposerSuggestion {
@@ -229,7 +225,7 @@ export function ChatPage({
   const [images, setImages] = useState<TranscriptImage[]>([]);
   const [imageError, setImageError] = useState<string>();
   const [delivery, setDelivery] = useState<"follow-up" | "steer">("steer");
-  const [commands, setCommands] = useState<CommandSuggestion[]>([]);
+  const [commands, setCommands] = useState<WebResourceCommand[]>([]);
   const [fileSuggestions, setFileSuggestions] = useState<
     Array<{ path: string; directory: boolean }>
   >([]);
@@ -246,7 +242,7 @@ export function ChatPage({
   const end = useRef<HTMLDivElement>(null);
   const imageInput = useRef<HTMLInputElement>(null);
   useEffect(() => {
-    void api<CommandSuggestion[]>("/api/commands")
+    void api<WebResourceCommand[]>("/api/commands")
       .then(setCommands)
       .catch(() => setCommands([]));
   }, []);
@@ -355,7 +351,7 @@ export function ChatPage({
           id: `command:${command.name}`,
           kind: "command",
           label: `/${command.name}`,
-          description: command.description || command.source,
+          description: `${command.description || command.source} · ${resourceProvenanceLabel(command.provenance)}`,
           value: command.name,
         }));
     }

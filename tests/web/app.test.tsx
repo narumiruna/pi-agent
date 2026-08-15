@@ -561,6 +561,7 @@ describe("web application", () => {
               name: "review",
               description: "Review changes",
               source: "prompt",
+              provenance: { scope: "project", origin: "package" },
             },
           ]),
           { status: 200, headers: { "content-type": "application/json" } },
@@ -599,9 +600,11 @@ describe("web application", () => {
     );
     const input = await screen.findByLabelText(/Ask Pi anything/i);
     await user.type(input, "/rev");
-    expect(
-      await screen.findByRole("option", { name: /Review changes/ }),
-    ).toBeVisible();
+    const commandOption = await screen.findByRole("option", {
+      name: /Review changes/,
+    });
+    expect(commandOption).toBeVisible();
+    expect(commandOption).toHaveTextContent("project package");
     await user.keyboard("{Enter}");
     expect(input).toHaveValue("/review ");
 

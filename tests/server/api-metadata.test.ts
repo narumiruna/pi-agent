@@ -4,6 +4,7 @@ import {
   projectMcpDiagnostics,
   projectPackageProgress,
   projectPackageSummary,
+  projectResourceProvenance,
   safePackageName,
 } from "../../src/server/api-metadata.js";
 
@@ -29,6 +30,7 @@ describe("safe API metadata projections", () => {
       name: "example.com/org/repository",
       scope: "project",
       filtered: true,
+      provenance: { scope: "project", origin: "package" },
     });
     expect(JSON.stringify(remote)).not.toMatch(/secret|token|private/);
     expect(safePackageName("/private/host/packages/local-tool")).toBe(
@@ -48,6 +50,25 @@ describe("safe API metadata projections", () => {
     expect(response).not.toContain("source");
     expect(response).not.toContain("installedPath");
     expect(response).not.toContain("/private");
+  });
+
+  test("projects only native scope and origin provenance", () => {
+    const sourceInfo = {
+      path: "/private/project/.pi/prompts/review.md",
+      source: "npm:secret-package",
+      scope: "temporary",
+      origin: "top-level",
+      baseDir: "/private/project",
+    } as const;
+    const provenance = projectResourceProvenance(sourceInfo);
+
+    expect(provenance).toEqual({
+      scope: "temporary",
+      origin: "top-level",
+    });
+    expect(JSON.stringify(provenance)).not.toMatch(
+      /private|secret|path|source/,
+    );
   });
 
   test("drops package sources and sanitizes progress messages", () => {

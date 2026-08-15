@@ -194,6 +194,115 @@ describe("Pi event bridge", () => {
   });
 });
 
+describe("Pi resource provenance", () => {
+  test("preserves native scope and origin for every invokable resource", () => {
+    const sourceInfo = (
+      scope: "project" | "temporary" | "user",
+      origin: "package" | "top-level",
+    ) => ({
+      path: `/private/${scope}/${origin}`,
+      source: "npm:secret-resource",
+      scope,
+      origin,
+    });
+    const service = Object.create(PiService.prototype) as PiService;
+    Object.defineProperty(service, "runtime", {
+      value: {
+        session: {
+          promptTemplates: [
+            {
+              name: "project-prompt",
+              description: "Project prompt",
+              sourceInfo: sourceInfo("project", "top-level"),
+            },
+            {
+              name: "user-package-prompt",
+              description: "User package prompt",
+              sourceInfo: sourceInfo("user", "package"),
+            },
+          ],
+        },
+        services: {
+          resourceLoader: {
+            getExtensions: () => ({
+              extensions: [
+                {
+                  commands: new Map([
+                    [
+                      "user-command",
+                      {
+                        description: "User command",
+                        sourceInfo: sourceInfo("user", "top-level"),
+                      },
+                    ],
+                    [
+                      "temporary-command",
+                      {
+                        description: "Temporary command",
+                        sourceInfo: sourceInfo("temporary", "top-level"),
+                      },
+                    ],
+                  ]),
+                },
+              ],
+            }),
+            getSkills: () => ({
+              skills: [
+                {
+                  name: "project-package-skill",
+                  description: "Project package skill",
+                  sourceInfo: sourceInfo("project", "package"),
+                },
+                {
+                  name: "temporary-package-skill",
+                  description: "Temporary package skill",
+                  sourceInfo: sourceInfo("temporary", "package"),
+                },
+              ],
+            }),
+          },
+        },
+      },
+    });
+
+    const commands = service.commands();
+
+    expect(commands).toEqual([
+      expect.objectContaining({
+        name: "user-command",
+        source: "extension",
+        provenance: { scope: "user", origin: "top-level" },
+      }),
+      expect.objectContaining({
+        name: "temporary-command",
+        source: "extension",
+        provenance: { scope: "temporary", origin: "top-level" },
+      }),
+      expect.objectContaining({
+        name: "project-prompt",
+        source: "prompt",
+        provenance: { scope: "project", origin: "top-level" },
+      }),
+      expect.objectContaining({
+        name: "user-package-prompt",
+        source: "prompt",
+        provenance: { scope: "user", origin: "package" },
+      }),
+      expect.objectContaining({
+        name: "skill:project-package-skill",
+        source: "skill",
+        provenance: { scope: "project", origin: "package" },
+      }),
+      expect.objectContaining({
+        name: "skill:temporary-package-skill",
+        source: "skill",
+        provenance: { scope: "temporary", origin: "package" },
+      }),
+    ]);
+    expect(JSON.stringify(commands)).not.toMatch(/private|secret|sourceInfo/);
+  });
+});
+
 describe("conversation listing", () => {
   test("includes the active in-memory conversation before Pi persists it", async () => {
     const service = Object.create(PiService.prototype) as PiService;

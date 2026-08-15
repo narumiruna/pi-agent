@@ -10,16 +10,13 @@ import {
 } from "@radix-ui/themes";
 import { useCallback, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
-import type {
-  WebMcpDiagnostic,
-  WebPackageSummary,
+import {
+  resourceProvenanceLabel,
+  type WebMcpDiagnostic,
+  type WebPackageSummary,
+  type WebPromptTemplateDocument,
 } from "../../shared/contracts.js";
 import { api, mutation } from "../api.js";
-
-interface Template {
-  name: string;
-  content: string;
-}
 
 function DocumentEditor({
   kind,
@@ -61,7 +58,7 @@ function DocumentEditor({
 
 export function LibraryPage() {
   const { t } = useTranslation();
-  const [templates, setTemplates] = useState<Template[]>([]);
+  const [templates, setTemplates] = useState<WebPromptTemplateDocument[]>([]);
   const [packages, setPackages] = useState<WebPackageSummary[]>([]);
   const [templateName, setTemplateName] = useState("");
   const [templateContent, setTemplateContent] = useState("");
@@ -74,7 +71,7 @@ export function LibraryPage() {
   const load = useCallback(async () => {
     const [templateData, packageData, mcpData, diagnostics] = await Promise.all(
       [
-        api<Template[]>("/api/templates"),
+        api<WebPromptTemplateDocument[]>("/api/templates"),
         api<WebPackageSummary[]>("/api/packages"),
         api<unknown>("/api/mcp"),
         api<{ mcp: WebMcpDiagnostic[] }>("/api/diagnostics"),
@@ -155,6 +152,9 @@ export function LibraryPage() {
             <div className="listRow" key={template.name}>
               <div>
                 <Text weight="medium">/{template.name}</Text>
+                <Text as="p" size="1" color="gray">
+                  {resourceProvenanceLabel(template.provenance)}
+                </Text>
                 <Text as="p" size="2" color="gray">
                   {template.content.slice(0, 140)}
                 </Text>
@@ -214,7 +214,7 @@ export function LibraryPage() {
               <div>
                 <Text weight="medium">{item.name}</Text>
                 <Text as="p" size="1" color="gray">
-                  {item.scope}
+                  {resourceProvenanceLabel(item.provenance)}
                 </Text>
               </div>
               <Flex gap="2">
