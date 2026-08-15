@@ -1,6 +1,6 @@
 # Conversation Discovery Plan
 
-Status: In progress.
+Status: Completed on 2026-08-15.
 
 ## Goal
 
@@ -89,8 +89,8 @@ Desktop and drawer controls coexist in the DOM; avoid duplicate element IDs and 
 - [x] Run focused tests, `npm run ci`, full local E2E, PostgreSQL storage verification, and the production Docker build; record exact results.
 - [x] Review the complete diff for native semantic drift, regex bounds, private metadata leakage, JSONL mutation/duplication, tree cycles, stale races, active-ID corruption, accessibility/responsive regressions, test-layout violations, and unrelated edits.
 - [x] Commit, push, and open dedicated pull request [#41](https://github.com/narumiruna/pi-agent/pull/41) with a signed implementation commit linking this plan and Roadmap milestone.
-- [ ] Resolve every pull-request check and feedback item with regression coverage, then merge the clean pull request.
-- [ ] After merge, check the matching Roadmap milestone and archive this plan through an administrative documentation pull request.
+- [x] Resolve every pull-request check and feedback item with regression coverage, then merge the clean pull request.
+- [x] After merge, check the matching Roadmap milestone and archive this plan through administrative documentation PR [#42](https://github.com/narumiruna/pi-agent/pull/42).
 
 ## Completion Checklist
 
@@ -103,8 +103,8 @@ Desktop and drawer controls coexist in the DOM; avoid duplicate element IDs and 
 - [x] Controls are keyboard-operable, localized, accessible, and usable at 390px.
 - [x] JSONL remains the sole session state and list/search does not mutate it.
 - [x] Focused server/Web tests, CI, desktop/mobile E2E, PostgreSQL verification, and Docker build pass.
-- [ ] The dedicated pull request is merged with all feedback resolved.
-- [ ] The Roadmap milestone is checked and this plan is archived only after merge.
+- [x] Dedicated implementation PR [#41](https://github.com/narumiruna/pi-agent/pull/41) merged as `9d52a02` with all five review findings resolved and a clean final review.
+- [x] The Roadmap milestone is checked and this plan is archived after the implementation merge.
 
 ## Verification
 
