@@ -166,6 +166,14 @@ The mobile drawer traps focus while open and restores focus to its trigger after
 
 The interface honors `prefers-reduced-motion` by suppressing animation and transition timing without hiding state changes.
 
+Current destinations use canonical paths at `/chats`, `/files`, `/heartbeat`, `/library`, and `/settings`.
+
+Direct loads, reloads, Back, and Forward restore those pages, while root, unknown, malformed, and not-yet-enabled routes replace safely to `/chats`.
+
+A validated current path is carried through signed OIDC state so direct bookmarks survive sign-in without enabling open redirects.
+
+The production server serves the Web shell only for HTML navigation and never as a fallback for `/api`, `/auth`, `/health`, `/assets`, or non-HTML requests.
+
 ## Workspace and tools
 
 `/workspace` is the fixed working directory for Pi tools and the Files page.

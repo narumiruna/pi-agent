@@ -1,9 +1,13 @@
 import { describe, expect, test } from "vitest";
 import {
   APP_ROUTE_CONTRACT,
+  CURRENT_APP_ROUTES,
   CURRENT_PAGE_IDS,
   DEFAULT_APP_ROUTE,
+  isCurrentPagePathname,
   LEGACY_LIBRARY_ROUTE,
+  pageFromPathname,
+  pathnameForPage,
 } from "../../src/web/routes.js";
 
 describe("app route contract", () => {
@@ -29,6 +33,34 @@ describe("app route contract", () => {
       expect(route.id).toMatch(/^[a-z]+$/);
       expect(route.path).toBe(`/${route.id}`);
     }
+  });
+
+  test("parses and serializes every current canonical route", () => {
+    expect(CURRENT_APP_ROUTES).toEqual([
+      { id: "chats", path: "/chats" },
+      { id: "files", path: "/files" },
+      { id: "heartbeat", path: "/heartbeat" },
+      { id: "library", path: "/library" },
+      { id: "settings", path: "/settings" },
+    ]);
+    for (const route of CURRENT_APP_ROUTES) {
+      expect(isCurrentPagePathname(route.path)).toBe(true);
+      expect(pageFromPathname(route.path)).toBe(route.id);
+      expect(pathnameForPage(route.id)).toBe(route.path);
+    }
+  });
+
+  test.each([
+    "/",
+    "/unknown",
+    "/nested/unknown",
+    "/files/",
+    "/prompts",
+    "/skills",
+    "/extensions",
+  ])("safely maps invalid or unavailable path %s to Chats", (pathname) => {
+    expect(isCurrentPagePathname(pathname)).toBe(false);
+    expect(pageFromPathname(pathname)).toBe("chats");
   });
 
   test("defaults to Chats and keeps Library outside the target contract", () => {

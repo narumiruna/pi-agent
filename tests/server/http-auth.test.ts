@@ -96,6 +96,52 @@ describe("HTTP authentication boundary", () => {
     expect((await app.request("/api/session")).status).toBe(401);
   });
 
+  test("preserves only validated current routes through OIDC state", async () => {
+    const authService = {
+      beginLogin: vi.fn(async () => ({
+        authorizationUrl: "https://issuer.example/authorize",
+        state: "oidc-state",
+        nonce: "oidc-nonce",
+        codeVerifier: "oidc-verifier",
+      })),
+      completeLogin: vi.fn(async () => "session-token"),
+    };
+    const config: AppConfig = {
+      ...disabledConfig,
+      auth: {
+        mode: "oidc",
+        issuerUrl: "https://issuer.example",
+        clientId: "client",
+        clientSecret: "secret",
+      },
+    };
+
+    const complete = async (returnTo: string) => {
+      const app = createApp({
+        config,
+        store: new Store(),
+        authService: authService as never,
+      });
+      const login = await app.request(
+        `/auth/login?returnTo=${encodeURIComponent(returnTo)}`,
+      );
+      const cookie = login.headers.get("set-cookie")?.split(";", 1)[0];
+      if (!cookie) throw new Error("OIDC state cookie is required");
+      return app.request(
+        "/auth/callback?code=authorization-code&state=oidc-state",
+        { headers: { cookie } },
+      );
+    };
+
+    const valid = await complete("/files");
+    const invalid = await complete("https://evil.example/private");
+
+    expect(valid.status).toBe(302);
+    expect(valid.headers.get("location")).toBe("/files");
+    expect(invalid.status).toBe(302);
+    expect(invalid.headers.get("location")).toBe("/chats");
+  });
+
   test("shows a warning when authentication is explicitly disabled", async () => {
     const app = createApp({ config: disabledConfig, store: new Store() });
     const response = await app.request("/api/session");
