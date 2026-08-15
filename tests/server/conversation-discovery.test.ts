@@ -118,6 +118,22 @@ describe("native conversation discovery", () => {
     await expect(search).resolves.toEqual([]);
   });
 
+  test("rejects token searches whose aggregate transcript work exceeds its bound", async () => {
+    const query = Array.from({ length: 250 }, () => "a").join(" ");
+    expect(query).toHaveLength(499);
+
+    await expect(
+      discoverConversations(
+        [
+          record("token-target", "2026-08-15T00:00:00.000Z", {
+            allMessagesText: "a".repeat(100_000),
+          }),
+        ],
+        { query },
+      ),
+    ).resolves.toEqual([]);
+  });
+
   test("filters only trimmed names and orders recent and fuzzy results deterministically", async () => {
     const records = [
       record("older", "2026-08-12T00:00:00.000Z", {

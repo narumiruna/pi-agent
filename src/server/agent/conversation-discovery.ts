@@ -3,6 +3,7 @@ import { Worker } from "node:worker_threads";
 import type { AgentMessage } from "@earendil-works/pi-agent-core";
 
 const REGEX_SEARCH_TIMEOUT_MS = 100;
+const TOKEN_SEARCH_WORK_LIMIT = 5_000_000;
 const REGEX_WORKER_SOURCE = `
   const { parentPort, workerData } = require("node:worker_threads");
   try {
@@ -53,6 +54,24 @@ function normalizeWhitespaceLower(value: string): string {
 
 function searchText(record: ConversationDiscoveryRecord): string {
   return `${record.id} ${record.name ?? ""} ${record.allMessagesText} ${record.cwd}`;
+}
+
+function tokenSearchWithinBudget(
+  records: ConversationDiscoveryRecord[],
+  tokenCount: number,
+): boolean {
+  let remaining = TOKEN_SEARCH_WORK_LIMIT;
+  for (const record of records) {
+    const textLength =
+      record.id.length +
+      (record.name?.length ?? 0) +
+      record.allMessagesText.length +
+      record.cwd.length +
+      3;
+    remaining -= textLength * tokenCount;
+    if (remaining < 0) return false;
+  }
+  return true;
 }
 
 function messageText(content: unknown): string {
@@ -390,6 +409,11 @@ export async function discoverConversations(
       : nameFiltered;
   const parsed = parseConversationSearch(query);
   if (parsed.error) return [];
+  if (
+    !parsed.regex &&
+    !tokenSearchWithinBudget(nameFiltered, parsed.tokens.length)
+  )
+    return [];
   const scored = parsed.regex
     ? ((
         await regexSearchScores(

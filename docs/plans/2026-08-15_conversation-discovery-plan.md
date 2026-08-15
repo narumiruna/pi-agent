@@ -110,9 +110,9 @@ Desktop and drawer controls coexist in the DOM; avoid duplicate element IDs and 
 
 - Roadmap restructuring PR [#40](https://github.com/narumiruna/pi-agent/pull/40) merged as `497f973` after `verify` passed, two review findings were resolved, and final Codex review found no major issues.
 - Focused native discovery, projection, agent, API, App, and navigation suites: 139 tests passed.
-- `npm run ci`: 27 files passed, 345 tests passed, 6 PostgreSQL-dependent tests skipped locally, and both server/Web builds passed.
+- `npm run ci`: 27 files passed, 346 tests passed, 6 PostgreSQL-dependent tests skipped locally, and both server/Web builds passed.
 - `npx playwright test`: all 23 setup, desktop native-discovery, owner-flow, accessibility, route, and 390px mobile tests passed.
 - `TEST_POSTGRES_URL=postgresql://pi_agent:test_password@127.0.0.1:55433/pi_agent npm test -- tests/server/storage.test.ts`: all 14 SQLite/PostgreSQL storage tests passed against a temporary PostgreSQL 17 container.
 - `docker build -t pi-agent:local .`: reviewed production image built successfully as `sha256:98e13c576a4aded331288fda6f2fc2e3207527d0234fbf4a6749b05e6a8e0134`.
-- Initial Codex review identified unbounded regular-expression execution and questioned searched Threaded ordering; regex evaluation now runs off-event-loop with a 100 ms hard timeout, while an installed Pi 0.84.1 source check and regression test confirm that queried Threaded intentionally uses relevance and only empty-query Threaded builds the tree.
-- Source/API/browser audits confirmed native query/sort semantics, 500-character query bounds, time-bounded regex, cycle-safe threading, stale-response suppression, hidden-active preservation, byte-identical JSONL after search, and no private search/tree metadata projection.
+- Codex review identified unbounded regex and aggregate token-search work and questioned searched Threaded ordering; regex evaluation now runs off-event-loop with a 100 ms hard timeout, aggregate token/corpus scans have a five-million-character-pass ceiling, and an installed Pi 0.84.1 source check plus regression confirms that queried Threaded intentionally uses relevance while only empty-query Threaded builds the tree.
+- Source/API/browser audits confirmed native query/sort semantics for bounded work, 500-character query bounds, time-bounded regex/token work, cycle-safe threading, stale-response suppression, hidden-active preservation, byte-identical JSONL after search, and no private search/tree metadata projection.
