@@ -1,6 +1,6 @@
 # Project Resource Trust Plan
 
-Status: In progress.
+Status: Completed on 2026-08-15.
 
 ## Goal
 
@@ -46,6 +46,14 @@ Disabling trust during an active run can invalidate tools or extensions in use.
 
 Mitigate with mandatory acknowledgement, idle coordination, native reload, rollback tests, explicit warnings, saved/default decision matrices, and loaded-resource regressions.
 
+## Outcome
+
+PR [#24](https://github.com/narumiruna/pi-agent/pull/24) merged as `46afc1e` after its automatic `verify` check passed.
+
+Six actionable P1 review findings covering stale trust, runtime status, reload rollback, removed sources, and settings refresh were fixed with regression coverage, all threads were resolved, and the final Codex review found no major issues.
+
+The post-merge administrative change checks the matching Roadmap milestone and archives this plan.
+
 ## Plan
 
 - [x] Read Pi's complete settings and security documentation and inspect installed `SettingsManager`, `ProjectTrustStore`, project-trust resolution, resource-loader reload, and service declarations.
@@ -60,9 +68,9 @@ Mitigate with mandatory acknowledgement, idle coordination, native reload, rollb
 - [x] Run focused server/Web tests, `npm run ci`, local E2E, and the production Docker build; record exact results.
 - [x] Review the complete diff for fail-open behavior, pre-trust execution, active-run races, persistence ordering, rollback, path disclosure, bypass writes, native behavior, and unrelated changes.
 - [x] Commit, push, and open dedicated pull request [#24](https://github.com/narumiruna/pi-agent/pull/24) with a signed implementation commit linking this plan and Roadmap milestone.
-- [x] Resolve all pull-request checks and feedback; stale no-resource trust now fails closed across factory-driven session rebuilds with unit and E2E coverage.
-- [ ] Merge the clean pull request.
-- [ ] After merge, check the matching Roadmap milestone and archive this plan through an administrative documentation pull request.
+- [x] Resolve all pull-request checks and feedback; six P1 findings were fixed with regression coverage, all threads were resolved, and the final rereview found no major issues.
+- [x] Merge clean pull request [#24](https://github.com/narumiruna/pi-agent/pull/24) as `46afc1e` after required checks passed.
+- [x] After merge, check the matching Roadmap milestone and archive this plan through an administrative documentation pull request.
 
 ## Completion Checklist
 
@@ -77,8 +85,8 @@ Mitigate with mandatory acknowledgement, idle coordination, native reload, rollb
 - [x] The Web exposes no workspace path or trust-store internals.
 - [x] Documentation states that trust enables code/input loading but is not a sandbox.
 - [x] Focused tests, `npm run ci`, local E2E, and the Docker production build pass.
-- [ ] The dedicated pull request is merged with all feedback resolved.
-- [ ] The Roadmap milestone is checked and this plan is archived only after merge.
+- [x] The dedicated pull request is merged with all feedback resolved.
+- [x] The Roadmap milestone is checked and this plan is archived only after merge.
 
 ## Verification
 
