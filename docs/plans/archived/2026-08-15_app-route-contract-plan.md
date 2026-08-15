@@ -4,7 +4,7 @@ Status: Completed on 2026-08-15.
 
 ## Goal
 
-Implement the Phase 0 milestone “定義 `Chats`、`Files`、`Prompts`、`Skills`、`Extensions`、`Heartbeat` 與 `Settings` 的 route contract” from [`ROADMAP.md`](../../ROADMAP.md#phase-0共用基礎與安全邊界).
+Implement the Phase 0 milestone “定義 `Chats`、`Files`、`Prompts`、`Skills`、`Extensions`、`Heartbeat` 與 `Settings` 的 route contract” from [`ROADMAP.md`](../../../ROADMAP.md#phase-0共用基礎與安全邊界).
 
 Provide one typed, ordered Web route contract with canonical route IDs and paths while retaining the temporary legacy Library route until its later migration milestone.
 
