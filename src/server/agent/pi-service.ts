@@ -507,7 +507,7 @@ export class PiService {
         allMessagesText: conversationMessagesText(active.messages),
       });
     }
-    return discoverConversations(records, options).map((record) => ({
+    return (await discoverConversations(records, options)).map((record) => ({
       id: record.id,
       ...(record.name ? { name: record.name } : {}),
       createdAt: record.created.toISOString(),

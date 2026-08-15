@@ -1,5 +1,17 @@
 import { realpathSync } from "node:fs";
+import { Worker } from "node:worker_threads";
 import type { AgentMessage } from "@earendil-works/pi-agent-core";
+
+const REGEX_SEARCH_TIMEOUT_MS = 100;
+const REGEX_WORKER_SOURCE = `
+  const { parentPort, workerData } = require("node:worker_threads");
+  try {
+    const regex = new RegExp(workerData.pattern, "i");
+    parentPort.postMessage(workerData.texts.map((text) => text.search(regex)));
+  } catch {
+    parentPort.postMessage(null);
+  }
+`;
 
 export type ConversationNameFilter = "all" | "named";
 export type ConversationSort = "recent" | "relevance" | "threaded";
@@ -204,22 +216,15 @@ export function fuzzyConversationMatch(
     : primary;
 }
 
-export function matchConversation(
+function matchConversationTokens(
   record: ConversationDiscoveryRecord,
-  parsed: ParsedConversationSearch,
+  tokens: ParsedConversationSearch["tokens"],
 ): MatchResult {
   const text = searchText(record);
-  if (parsed.mode === "regex") {
-    if (!parsed.regex) return { matches: false, score: 0 };
-    const index = text.search(parsed.regex);
-    return index < 0
-      ? { matches: false, score: 0 }
-      : { matches: true, score: index * 0.1 };
-  }
-  if (parsed.tokens.length === 0) return { matches: true, score: 0 };
+  if (tokens.length === 0) return { matches: true, score: 0 };
   let score = 0;
   let normalizedText: string | undefined;
-  for (const token of parsed.tokens) {
+  for (const token of tokens) {
     if (token.kind === "phrase") {
       normalizedText ??= normalizeWhitespaceLower(text);
       const phrase = normalizeWhitespaceLower(token.value);
@@ -234,6 +239,43 @@ export function matchConversation(
     score += match.score;
   }
   return { matches: true, score };
+}
+
+function regexSearchScores(
+  pattern: string,
+  texts: string[],
+): Promise<number[] | undefined> {
+  return new Promise((resolve) => {
+    const worker = new Worker(REGEX_WORKER_SOURCE, {
+      eval: true,
+      workerData: { pattern, texts },
+    });
+    let settled = false;
+    const finish = (scores?: number[]) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timeout);
+      void worker.terminate().catch(() => undefined);
+      resolve(scores);
+    };
+    const timeout = setTimeout(() => finish(), REGEX_SEARCH_TIMEOUT_MS);
+    worker.once("message", (value: unknown) => {
+      if (
+        Array.isArray(value) &&
+        value.length === texts.length &&
+        value.every(
+          (score) =>
+            typeof score === "number" && Number.isInteger(score) && score >= -1,
+        )
+      ) {
+        finish(value);
+      } else {
+        finish();
+      }
+    });
+    worker.once("error", () => finish());
+    worker.once("exit", () => finish());
+  });
 }
 
 function modifiedDescending(
@@ -332,10 +374,10 @@ function threadedRecords(
   return result;
 }
 
-export function discoverConversations(
+export async function discoverConversations(
   records: ConversationDiscoveryRecord[],
   options: ConversationListOptions = {},
-): ConversationDiscoveryRecord[] {
+): Promise<ConversationDiscoveryRecord[]> {
   const recent = [...records].sort(modifiedDescending);
   const nameFiltered =
     (options.nameFilter ?? "all") === "named"
@@ -348,11 +390,23 @@ export function discoverConversations(
       : nameFiltered;
   const parsed = parseConversationSearch(query);
   if (parsed.error) return [];
-  const scored = nameFiltered.flatMap((record) => {
-    const match = matchConversation(record, parsed);
-    return match.matches ? [{ record, score: match.score }] : [];
-  });
+  const scored = parsed.regex
+    ? ((
+        await regexSearchScores(
+          parsed.regex.source,
+          nameFiltered.map(searchText),
+        )
+      )?.flatMap((score, index) => {
+        const record = nameFiltered[index];
+        return score < 0 || !record ? [] : [{ record, score: score * 0.1 }];
+      }) ?? [])
+    : nameFiltered.flatMap((record) => {
+        const match = matchConversationTokens(record, parsed.tokens);
+        return match.matches ? [{ record, score: match.score }] : [];
+      });
   if (options.sort === "recent") return scored.map(({ record }) => record);
+  // Pi 0.84.1 builds threads only for an empty query. Searched Threaded and
+  // Fuzzy modes both use relevance, while Recent retains timestamp order.
   scored.sort((left, right) => {
     if (left.score !== right.score) return left.score - right.score;
     return modifiedDescending(left.record, right.record);
