@@ -1,6 +1,6 @@
 # Conversation Discovery Plan
 
-Status: In progress.
+Status: Completed on 2026-08-15.
 
 ## Goal
 
@@ -89,8 +89,8 @@ Desktop and drawer controls coexist in the DOM; avoid duplicate element IDs and 
 - [x] Run focused tests, `npm run ci`, full local E2E, PostgreSQL storage verification, and the production Docker build; record exact results.
 - [x] Review the complete diff for native semantic drift, regex bounds, private metadata leakage, JSONL mutation/duplication, tree cycles, stale races, active-ID corruption, accessibility/responsive regressions, test-layout violations, and unrelated edits.
 - [x] Commit, push, and open dedicated pull request [#41](https://github.com/narumiruna/pi-agent/pull/41) with a signed implementation commit linking this plan and Roadmap milestone.
-- [ ] Resolve every pull-request check and feedback item with regression coverage, then merge the clean pull request.
-- [ ] After merge, check the matching Roadmap milestone and archive this plan through an administrative documentation pull request.
+- [x] Resolve every pull-request check and feedback item with regression coverage, then merge the clean pull request.
+- [x] After merge, check the matching Roadmap milestone and archive this plan through administrative documentation PR [#42](https://github.com/narumiruna/pi-agent/pull/42).
 
 ## Completion Checklist
 
