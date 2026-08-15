@@ -189,6 +189,24 @@ describe("editor configuration", () => {
     ).not.toThrow();
   });
 
+  test("survives denied access to browser storage", () => {
+    const descriptor = Object.getOwnPropertyDescriptor(window, "localStorage");
+    if (!descriptor) throw new Error("localStorage descriptor is required");
+    Object.defineProperty(window, "localStorage", {
+      configurable: true,
+      get: () => {
+        throw new DOMException("Access denied", "SecurityError");
+      },
+    });
+
+    try {
+      expect(loadEditorSettings()).toEqual(DEFAULT_EDITOR_SETTINGS);
+      expect(() => saveEditorSettings(DEFAULT_EDITOR_SETTINGS)).not.toThrow();
+    } finally {
+      Object.defineProperty(window, "localStorage", descriptor);
+    }
+  });
+
   test("creates safe synthetic model URIs and routes worker labels", () => {
     expect(workspaceModelUri("src/空 白.ts")).toBe(
       "pi-workspace://workspace/src/%E7%A9%BA%20%E7%99%BD.ts?view=editor",

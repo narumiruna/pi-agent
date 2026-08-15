@@ -78,10 +78,11 @@ export function parseEditorSettings(raw: string | null): EditorSettings {
 }
 
 export function loadEditorSettings(
-  storage: Pick<Storage, "getItem"> = window.localStorage,
+  storage?: Pick<Storage, "getItem">,
 ): EditorSettings {
   try {
-    return parseEditorSettings(storage.getItem(EDITOR_SETTINGS_KEY));
+    const target = storage ?? window.localStorage;
+    return parseEditorSettings(target.getItem(EDITOR_SETTINGS_KEY));
   } catch {
     return { ...DEFAULT_EDITOR_SETTINGS };
   }
@@ -89,10 +90,11 @@ export function loadEditorSettings(
 
 export function saveEditorSettings(
   settings: EditorSettings,
-  storage: Pick<Storage, "setItem"> = window.localStorage,
+  storage?: Pick<Storage, "setItem">,
 ): void {
   try {
-    storage.setItem(EDITOR_SETTINGS_KEY, JSON.stringify(settings));
+    const target = storage ?? window.localStorage;
+    target.setItem(EDITOR_SETTINGS_KEY, JSON.stringify(settings));
   } catch {
     // A blocked or full local store must not make workspace files unusable.
   }
