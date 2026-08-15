@@ -144,7 +144,11 @@ Pi Agent never switches the current model automatically after authentication.
 
 Set a `postgresql://` `DATABASE_URL` to use PostgreSQL for that Web state.
 
-Pi conversations remain native JSONL files under `/app/.pi/agent` in both database modes.
+Pi conversations remain native JSONL files under `/app/.pi/agent` and are the sole conversation source of truth in both database modes.
+
+Persisted list entries, inactive reads, and switches resolve opaque native IDs against current `SessionManager` records, while absolute JSONL paths stay on the server.
+
+Neither SQLite nor PostgreSQL mirrors normal conversation entries, transcripts, or JSONL content.
 
 The conversation details panel shows native session statistics and tree entries, and it uses Pi APIs for navigation, fork, clone, manual compaction, HTML or JSONL export, and JSONL import.
 
