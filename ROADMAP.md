@@ -64,7 +64,7 @@ Pi package 仍是 prompt、skill 與 extension 的共同安裝來源，不建立
 
 ## Phase 1：Chats
 
-- [ ] 將目前「對話」重新命名為 `Chats`，並保留現有 conversation list 與 new-chat 操作。
+- [x] 將目前「對話」重新命名為 `Chats`，並保留現有 conversation list 與 new-chat 操作。
 - [ ] 沿用 `SessionManager` 與目前的 opaque conversation ID，不複製 JSONL session state。
 - [ ] 加入 conversation 搜尋、named-only filter 與排序。
 - [ ] 提供 rename、delete、fork、clone、tree、compact、import 與 export 的一致入口。

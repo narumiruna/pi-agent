@@ -1,6 +1,6 @@
 # Rename Chats Plan
 
-Status: In progress.
+Status: Completed on 2026-08-15.
 
 ## Goal
 
@@ -49,6 +49,14 @@ Localization could regress if the Chinese label is replaced with an untranslated
 
 Mitigate with one translation-value change, targeted semantic assertion updates, a source audit, and full desktop/mobile E2E.
 
+## Outcome
+
+PR [#36](https://github.com/narumiruna/pi-agent/pull/36) merged as `5e351ca` after its automatic `verify` check passed.
+
+No submitted review, inline comment, or unresolved thread required changes, and requested Codex review found no major issues.
+
+The post-merge administrative change checks the matching Roadmap milestone and archives this plan.
+
 ## Plan
 
 - [x] Inventory the route ID, navigation label, page region, conversation list, New conversation action, translations, and matching tests.
@@ -61,8 +69,8 @@ Mitigate with one translation-value change, targeted semantic assertion updates,
 - [x] Run focused tests, `npm run ci`, full local E2E, and the production Docker build; record exact results.
 - [x] Review the complete diff for internal/API renames, route changes, duplicated labels, lost conversation controls, localization regressions, test-layout violations, and unrelated edits.
 - [x] Commit, push, and open dedicated pull request [#36](https://github.com/narumiruna/pi-agent/pull/36) with a signed implementation commit linking this plan and Roadmap milestone.
-- [ ] Resolve every pull-request check and feedback item with regression coverage, then merge the clean pull request.
-- [ ] After merge, check the matching Roadmap milestone and archive this plan through an administrative documentation pull request.
+- [x] Resolve every pull-request check and feedback item and merge clean pull request [#36](https://github.com/narumiruna/pi-agent/pull/36) as `5e351ca`; `verify` passed and requested Codex review found no major issues.
+- [x] After merge, check the matching Roadmap milestone and archive this plan through an administrative documentation pull request.
 
 ## Completion Checklist
 
@@ -73,8 +81,8 @@ Mitigate with one translation-value change, targeted semantic assertion updates,
 - [x] Existing conversation list, selection, and New conversation controls still work.
 - [x] Route ID `chats`, path `/chats`, Pi session state, and APIs are unchanged.
 - [x] Web, desktop/mobile E2E, CI, and Docker verification pass.
-- [ ] The dedicated pull request is merged with all feedback resolved.
-- [ ] The Roadmap milestone is checked and this plan is archived only after merge.
+- [x] The dedicated pull request is merged with all feedback resolved.
+- [x] The Roadmap milestone is checked and this plan is archived only after merge.
 
 ## Verification
 
