@@ -147,6 +147,36 @@ storageContract("SQLite store", async () => {
   return store;
 });
 
+test("does not create a mirror for native conversation JSONL", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "pi-agent-store-schema-"));
+  const path = join(directory, "app.db");
+  const store = new SqliteStore(path);
+  cleanups.push(async () => {
+    await store.close();
+    await rm(directory, { force: true, recursive: true });
+  });
+  await store.migrate();
+
+  const database = new DatabaseSync(path, { readOnly: true });
+  const tables = database
+    .prepare(
+      "SELECT name FROM sqlite_schema WHERE type = 'table' AND name NOT LIKE 'sqlite_%' ORDER BY name",
+    )
+    .all()
+    .map((row) => String(row.name));
+  database.close();
+
+  expect(tables).toEqual([
+    "app_owner",
+    "heartbeat_runs",
+    "schema_migrations",
+    "web_sessions",
+  ]);
+  expect(tables.join(" ")).not.toMatch(
+    /conversation|transcript|jsonl|chat_messages|session_entries/,
+  );
+});
+
 test("migrates an existing SQLite heartbeat table for run details", async () => {
   const directory = await mkdtemp(join(tmpdir(), "pi-agent-store-migration-"));
   const path = join(directory, "app.db");
