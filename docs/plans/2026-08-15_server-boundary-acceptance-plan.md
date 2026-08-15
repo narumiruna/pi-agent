@@ -64,7 +64,7 @@ Mitigate with valid operation-shaped inputs, exact public error contracts, multi
 - [x] Document the acceptance test matrix in README.
 - [x] Run focused server tests, `npm run ci`, full local E2E, and the production Docker build; record exact results.
 - [x] Review the complete diff for missing named boundaries, false-positive tests, wrong public error contracts, side effects before rejection, production behavior changes, test-layout violations, and unrelated edits.
-- [ ] Commit, push, and open one dedicated signed pull request linking this plan and Roadmap milestone.
+- [x] Commit, push, and open dedicated pull request [#32](https://github.com/narumiruna/pi-agent/pull/32) with a signed test commit linking this plan and Roadmap milestone.
 - [ ] Resolve every pull-request check and feedback item with regression coverage, then merge the clean pull request.
 - [ ] After merge, check the matching Roadmap acceptance milestone and archive this plan through an administrative documentation pull request.
 
