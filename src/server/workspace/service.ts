@@ -22,6 +22,7 @@ import {
   createOperationGuard,
   createWorkspaceBoundary,
   isHiddenWorkspaceEntry,
+  type OperationGuard,
   parseWorkspaceBasename,
   resolveWorkspaceParent,
   resolveWorkspaceTarget,
@@ -63,19 +64,26 @@ function entryFromTarget(target: WorkspaceTarget): WorkspaceEntry {
   };
 }
 
-async function directoryWritable(path: string): Promise<boolean> {
+async function directoryWritable(
+  path: string,
+  guard: OperationGuard,
+): Promise<boolean> {
   try {
-    await access(path, constants.W_OK);
+    await guard.run(() => access(path, constants.W_OK));
     return true;
-  } catch {
-    return false;
+  } catch (error) {
+    const code = (error as NodeJS.ErrnoException | undefined)?.code;
+    if (code === "EACCES" || code === "EPERM" || code === "EROFS") {
+      return false;
+    }
+    return mapWorkspaceFsError(error);
   }
 }
 
 async function readBounded(
   handle: Awaited<ReturnType<typeof open>>,
   limit: number,
-  guard: () => void,
+  guard: OperationGuard,
 ): Promise<Buffer> {
   const chunks: Buffer[] = [];
   let total = 0;
@@ -84,7 +92,9 @@ async function readBounded(
     const chunk = Buffer.allocUnsafe(
       Math.min(READ_CHUNK_BYTES, limit + 1 - total),
     );
-    const { bytesRead } = await handle.read(chunk, 0, chunk.length, null);
+    const { bytesRead } = await guard.run(() =>
+      handle.read(chunk, 0, chunk.length, null),
+    );
     if (bytesRead === 0) break;
     chunks.push(chunk.subarray(0, bytesRead));
     total += bytesRead;
@@ -104,37 +114,54 @@ function decodeText(content: Buffer): string | undefined {
   }
 }
 
-async function openNoFollow(path: string) {
+async function openNoFollow(path: string, guard: OperationGuard) {
   try {
-    return await open(path, constants.O_RDONLY | constants.O_NOFOLLOW);
+    return await guard.run(() =>
+      open(path, constants.O_RDONLY | constants.O_NOFOLLOW),
+    );
   } catch (error) {
     return mapWorkspaceFsError(error);
   }
+}
+
+async function bestEffort(
+  guard: OperationGuard,
+  operation: () => Promise<unknown>,
+): Promise<void> {
+  const pending = Promise.resolve().then(operation);
+  await guard.wait(pending).catch(() => undefined);
 }
 
 async function temporaryFile(
   directory: string,
   content: string,
   mode: number,
+  guard: OperationGuard,
   preserveMode = false,
 ): Promise<string> {
   const path = join(directory, `.pi-agent-${randomUUID()}.tmp`);
   let handle: Awaited<ReturnType<typeof open>> | undefined;
   try {
-    handle = await open(
-      path,
-      constants.O_CREAT | constants.O_EXCL | constants.O_WRONLY,
-      mode,
+    handle = await guard.run(() =>
+      open(
+        path,
+        constants.O_CREAT | constants.O_EXCL | constants.O_WRONLY,
+        mode,
+      ),
     );
-    if (preserveMode) await handle.chmod(mode);
-    await handle.writeFile(content, "utf8");
-    await handle.sync();
-    await handle.close();
+    const opened = handle;
+    if (preserveMode) await guard.run(() => opened.chmod(mode));
+    await guard.run(() => opened.writeFile(content, "utf8"));
+    await guard.run(() => opened.sync());
     handle = undefined;
+    await guard.run(() => opened.close());
     return path;
   } catch (error) {
-    await handle?.close().catch(() => undefined);
-    await rm(path, { force: true }).catch(() => undefined);
+    if (handle) {
+      const opened = handle;
+      await bestEffort(guard, () => opened.close());
+    }
+    await bestEffort(guard, () => rm(path, { force: true }));
     return mapWorkspaceFsError(error);
   }
 }
@@ -153,8 +180,8 @@ export class WorkspaceService {
     private readonly excludePaths: readonly string[] = [],
   ) {}
 
-  private boundary(): Promise<WorkspaceBoundary> {
-    return createWorkspaceBoundary(this.workspace, this.excludePaths);
+  private boundary(guard: OperationGuard): Promise<WorkspaceBoundary> {
+    return createWorkspaceBoundary(this.workspace, this.excludePaths, guard);
   }
 
   private mutate<T>(operation: () => Promise<T>): Promise<T> {
@@ -171,20 +198,26 @@ export class WorkspaceService {
     signal?: AbortSignal,
   ): Promise<WorkspaceDirectory> {
     const guard = createOperationGuard(signal);
-    const boundary = await this.boundary();
-    const directory = await resolveWorkspaceTarget(boundary, path, "directory");
+    const boundary = await this.boundary(guard);
+    const directory = await resolveWorkspaceTarget(
+      boundary,
+      path,
+      "directory",
+      guard,
+    );
     const entries: WorkspaceEntry[] = [];
     let truncated = false;
     let handle: Awaited<ReturnType<typeof opendir>>;
     try {
-      handle = await opendir(directory.absolute);
+      handle = await guard.run(() => opendir(directory.absolute));
     } catch (error) {
       return mapWorkspaceFsError(error);
     }
 
     try {
-      for await (const rawEntry of handle) {
-        guard();
+      while (true) {
+        const rawEntry = await guard.run(() => handle.read());
+        if (!rawEntry) break;
         if (
           rawEntry.isSymbolicLink() ||
           isHiddenWorkspaceEntry(rawEntry.name, rawEntry.isDirectory())
@@ -199,6 +232,7 @@ export class WorkspaceService {
             boundary,
             childPath,
             "either",
+            guard,
           );
           if (!child.stat.isDirectory() && !child.stat.isFile()) continue;
           if (entries.length === MAX_WORKSPACE_DIRECTORY_ENTRIES) {
@@ -214,6 +248,8 @@ export class WorkspaceService {
     } catch (error) {
       if (error instanceof WorkspaceError) throw error;
       return mapWorkspaceFsError(error);
+    } finally {
+      await bestEffort(guard, () => handle.close());
     }
 
     entries.sort(
@@ -226,7 +262,7 @@ export class WorkspaceService {
       path: directory.path,
       entries,
       truncated,
-      writable: await directoryWritable(directory.absolute),
+      writable: await directoryWritable(directory.absolute, guard),
     };
   }
 
@@ -235,20 +271,20 @@ export class WorkspaceService {
     signal?: AbortSignal,
   ): Promise<WorkspaceFile> {
     const guard = createOperationGuard(signal);
-    const boundary = await this.boundary();
-    const target = await resolveWorkspaceTarget(boundary, path, "file");
+    const boundary = await this.boundary(guard);
+    const target = await resolveWorkspaceTarget(boundary, path, "file", guard);
     return this.inspectTarget(target, guard);
   }
 
   private async inspectTarget(
     target: WorkspaceTarget,
-    guard: () => void,
+    guard: OperationGuard,
   ): Promise<WorkspaceFile> {
     guard();
-    const writable = await directoryWritable(dirname(target.absolute));
-    const handle = await openNoFollow(target.absolute);
+    const writable = await directoryWritable(dirname(target.absolute), guard);
+    const handle = await openNoFollow(target.absolute, guard);
     try {
-      const before = await handle.stat({ bigint: true });
+      const before = await guard.run(() => handle.stat({ bigint: true }));
       if (!before.isFile()) throw new WorkspaceError(415, "unsupported");
       if (revisionFromStat(before) !== revisionFromStat(target.stat)) {
         throw new WorkspaceError(404, "not_found");
@@ -269,7 +305,7 @@ export class WorkspaceService {
         };
       }
       const raw = await readBounded(handle, MAX_WORKSPACE_TEXT_BYTES, guard);
-      const after = await handle.stat({ bigint: true });
+      const after = await guard.run(() => handle.stat({ bigint: true }));
       assertRevision(after, base.revision);
       const content = decodeText(raw);
       if (content === undefined) {
@@ -286,7 +322,7 @@ export class WorkspaceService {
         ...(writable ? {} : { reason: "read_only" as const }),
       };
     } finally {
-      await handle.close();
+      await bestEffort(guard, () => handle.close());
     }
   }
 
@@ -302,13 +338,15 @@ export class WorkspaceService {
     }
     return this.mutate(async () => {
       const guard = createOperationGuard();
-      const boundary = await this.boundary();
-      const parent = await resolveWorkspaceParent(boundary, input.path);
+      const boundary = await this.boundary(guard);
+      const parent = await resolveWorkspaceParent(boundary, input.path, guard);
       guard();
 
       if (input.revision === undefined) {
         try {
-          const existing = await lstat(parent.absolute, { bigint: true });
+          const existing = await guard.run(() =>
+            lstat(parent.absolute, { bigint: true }),
+          );
           if (existing.isSymbolicLink()) {
             throw new WorkspaceError(404, "not_found");
           }
@@ -323,17 +361,18 @@ export class WorkspaceService {
           parent.parent.absolute,
           input.content,
           0o644,
+          guard,
         );
         try {
-          await link(temporary, parent.absolute);
+          await guard.run(() => link(temporary, parent.absolute));
         } catch (error) {
-          await rm(temporary, { force: true }).catch(() => undefined);
+          await bestEffort(guard, () => rm(temporary, { force: true }));
           return mapWorkspaceFsError(error);
         }
         try {
-          await rm(temporary, { force: true });
+          await guard.run(() => rm(temporary, { force: true }));
         } catch (error) {
-          await unlink(parent.absolute).catch(() => undefined);
+          await bestEffort(guard, () => unlink(parent.absolute));
           return mapWorkspaceFsError(error);
         }
       } else {
@@ -341,6 +380,7 @@ export class WorkspaceService {
           boundary,
           input.path,
           "file",
+          guard,
         );
         assertRevision(current.stat, input.revision);
         const mode = Number(current.stat.mode & 0o777n);
@@ -348,6 +388,7 @@ export class WorkspaceService {
           parent.parent.absolute,
           input.content,
           mode,
+          guard,
           true,
         );
         try {
@@ -355,11 +396,12 @@ export class WorkspaceService {
             boundary,
             input.path,
             "file",
+            guard,
           );
           assertRevision(latest.stat, input.revision);
-          await rename(temporary, latest.absolute);
+          await guard.run(() => rename(temporary, latest.absolute));
         } catch (error) {
-          await rm(temporary, { force: true }).catch(() => undefined);
+          await bestEffort(guard, () => rm(temporary, { force: true }));
           if (error instanceof WorkspaceError) throw error;
           return mapWorkspaceFsError(error);
         }
@@ -369,6 +411,7 @@ export class WorkspaceService {
         boundary,
         input.path,
         "file",
+        guard,
       );
       return this.inspectTarget(written, guard);
     });
@@ -381,8 +424,13 @@ export class WorkspaceService {
   }): Promise<WorkspaceFile> {
     return this.mutate(async () => {
       const guard = createOperationGuard();
-      const boundary = await this.boundary();
-      const source = await resolveWorkspaceTarget(boundary, input.path, "file");
+      const boundary = await this.boundary(guard);
+      const source = await resolveWorkspaceTarget(
+        boundary,
+        input.path,
+        "file",
+        guard,
+      );
       assertRevision(source.stat, input.revision);
       const name = parseWorkspaceBasename(input.name);
       const parentPath = source.path.includes("/")
@@ -395,9 +443,10 @@ export class WorkspaceService {
       const destination = await resolveWorkspaceParent(
         boundary,
         destinationPath,
+        guard,
       );
       try {
-        await lstat(destination.absolute);
+        await guard.run(() => lstat(destination.absolute));
         throw new WorkspaceError(409, "exists");
       } catch (error) {
         if (error instanceof WorkspaceError) throw error;
@@ -406,15 +455,20 @@ export class WorkspaceService {
         }
       }
 
-      const latest = await resolveWorkspaceTarget(boundary, input.path, "file");
+      const latest = await resolveWorkspaceTarget(
+        boundary,
+        input.path,
+        "file",
+        guard,
+      );
       assertRevision(latest.stat, input.revision);
       guard();
       try {
-        await link(latest.absolute, destination.absolute);
+        await guard.run(() => link(latest.absolute, destination.absolute));
         try {
-          await unlink(latest.absolute);
+          await guard.run(() => unlink(latest.absolute));
         } catch (error) {
-          await unlink(destination.absolute).catch(() => undefined);
+          await bestEffort(guard, () => unlink(destination.absolute));
           throw error;
         }
       } catch (error) {
@@ -424,6 +478,7 @@ export class WorkspaceService {
         boundary,
         destinationPath,
         "file",
+        guard,
       );
       return this.inspectTarget(renamed, guard);
     });
@@ -432,18 +487,24 @@ export class WorkspaceService {
   async deleteFile(input: { path: string; revision: string }): Promise<void> {
     return this.mutate(async () => {
       const guard = createOperationGuard();
-      const boundary = await this.boundary();
+      const boundary = await this.boundary(guard);
       const current = await resolveWorkspaceTarget(
         boundary,
         input.path,
         "file",
+        guard,
       );
       assertRevision(current.stat, input.revision);
-      const latest = await resolveWorkspaceTarget(boundary, input.path, "file");
+      const latest = await resolveWorkspaceTarget(
+        boundary,
+        input.path,
+        "file",
+        guard,
+      );
       assertRevision(latest.stat, input.revision);
       guard();
       try {
-        await unlink(latest.absolute);
+        await guard.run(() => unlink(latest.absolute));
       } catch (error) {
         return mapWorkspaceFsError(error);
       }
@@ -454,14 +515,12 @@ export class WorkspaceService {
     path: string,
     signal?: AbortSignal,
   ): Promise<WorkspaceDownload> {
-    if (signal?.aborted) {
-      throw signal.reason ?? new DOMException("Cancelled", "AbortError");
-    }
-    const boundary = await this.boundary();
-    const target = await resolveWorkspaceTarget(boundary, path, "file");
-    const handle = await openNoFollow(target.absolute);
+    const guard = createOperationGuard(signal);
+    const boundary = await this.boundary(guard);
+    const target = await resolveWorkspaceTarget(boundary, path, "file", guard);
+    const handle = await openNoFollow(target.absolute, guard);
     try {
-      const stat = await handle.stat({ bigint: true });
+      const stat = await guard.run(() => handle.stat({ bigint: true }));
       if (!stat.isFile()) throw new WorkspaceError(415, "unsupported");
       if (revisionFromStat(stat) !== revisionFromStat(target.stat)) {
         throw new WorkspaceError(404, "not_found");
@@ -470,7 +529,7 @@ export class WorkspaceService {
         throw new WorkspaceError(413, "too_large");
       }
       if (stat.size === 0n) {
-        await handle.close();
+        await guard.run(() => handle.close());
         return {
           name: basename(target.path),
           size: 0,
@@ -500,7 +559,7 @@ export class WorkspaceService {
         stream: Readable.toWeb(nodeStream) as ReadableStream<Uint8Array>,
       };
     } catch (error) {
-      await handle.close().catch(() => undefined);
+      await bestEffort(guard, () => handle.close());
       throw error;
     }
   }

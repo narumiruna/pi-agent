@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import { Theme } from "@radix-ui/themes";
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import i18n, { setLanguage } from "../../src/web/i18n.js";
@@ -137,6 +137,68 @@ describe("Files page", () => {
 
     expect(await screen.findByText("File saved.")).toBeVisible();
     expect(editor).toHaveValue("new content");
+  });
+
+  test("prevents draft changes while a save is pending", async () => {
+    let resolveSave: ((response: Response) => void) | undefined;
+    const saveResponse = new Promise<Response>((resolve) => {
+      resolveSave = resolve;
+    });
+    vi.mocked(fetch).mockImplementation(async (input, init) => {
+      const url = String(input);
+      if (url === "/api/workspace/entries?path=") {
+        return json(
+          listing("", [
+            {
+              path: "notes.txt",
+              name: "notes.txt",
+              kind: "file",
+              modifiedAt: 1,
+              size: 3,
+            },
+          ]),
+        );
+      }
+      if (url === "/api/workspace/file?path=notes.txt") {
+        return json(file("notes.txt", { content: "old" }));
+      }
+      if (url === "/api/workspace/file" && init?.method === "PUT") {
+        return saveResponse;
+      }
+      throw new Error(`Unexpected request: ${url}`);
+    });
+    const user = userEvent.setup();
+
+    render(
+      <Theme>
+        <FilesPage />
+      </Theme>,
+    );
+
+    await user.click(
+      await screen.findByRole("button", { name: /notes\.txt/i }),
+    );
+    const editor = await screen.findByLabelText("Contents of notes.txt");
+    await user.clear(editor);
+    await user.type(editor, "saved draft");
+    await user.click(screen.getByRole("button", { name: "Save changes" }));
+
+    expect(editor).toHaveAttribute("readonly");
+    await user.type(editor, " must not be lost");
+    expect(editor).toHaveValue("saved draft");
+
+    await act(async () => {
+      resolveSave?.(
+        json(
+          file("notes.txt", {
+            content: "saved draft",
+            revision: "revision-saved",
+          }),
+        ),
+      );
+    });
+    expect(await screen.findByText("File saved.")).toBeVisible();
+    expect(editor).toHaveValue("saved draft");
   });
 
   test("creates, renames, and confirms deletion without duplicate submissions", async () => {

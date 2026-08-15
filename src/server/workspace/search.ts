@@ -48,11 +48,12 @@ export async function searchWorkspace(
 ): Promise<WorkspaceMatch[]> {
   const query = rawQuery.trim().replaceAll("\\", "/");
   if (query.length < 1 || query.length > 200 || query.includes("\0")) return [];
+  const guard = createOperationGuard(options.signal);
   const boundary = await createWorkspaceBoundary(
     workspace,
     options.excludePaths ?? [],
+    guard,
   );
-  const guard = createOperationGuard(options.signal);
   const requestedLimit = options.limit ?? 20;
   const limit = Math.max(1, Math.min(MAX_RESULTS, requestedLimit));
   const matches: Array<WorkspaceMatch & { score: number }> = [];
@@ -64,7 +65,12 @@ export async function searchWorkspace(
     const path = directories.shift() as string;
     let directory: WorkspaceTarget;
     try {
-      directory = await resolveWorkspaceTarget(boundary, path, "directory");
+      directory = await resolveWorkspaceTarget(
+        boundary,
+        path,
+        "directory",
+        guard,
+      );
     } catch (error) {
       if (path && error instanceof WorkspaceError && error.status === 404) {
         continue;
@@ -73,35 +79,48 @@ export async function searchWorkspace(
     }
     let handle: Awaited<ReturnType<typeof opendir>>;
     try {
-      handle = await opendir(directory.absolute);
-    } catch {
+      handle = await guard.run(() => opendir(directory.absolute));
+    } catch (error) {
+      if (error instanceof WorkspaceError || options.signal?.aborted)
+        throw error;
       continue;
     }
-    for await (const entry of handle) {
-      guard();
-      scanned += 1;
-      if (scanned > MAX_SCANNED_ENTRIES) break;
-      if (
-        entry.isSymbolicLink() ||
-        isHiddenWorkspaceEntry(entry.name, entry.isDirectory())
-      ) {
-        continue;
+    try {
+      while (true) {
+        const entry = await guard.run(() => handle.read());
+        if (!entry) break;
+        scanned += 1;
+        if (scanned > MAX_SCANNED_ENTRIES) break;
+        if (
+          entry.isSymbolicLink() ||
+          isHiddenWorkspaceEntry(entry.name, entry.isDirectory())
+        ) {
+          continue;
+        }
+        const childPath = path ? `${path}/${entry.name}` : entry.name;
+        let child: WorkspaceTarget;
+        try {
+          child = await resolveWorkspaceTarget(
+            boundary,
+            childPath,
+            "either",
+            guard,
+          );
+        } catch (error) {
+          if (error instanceof WorkspaceError && error.status === 404) continue;
+          throw error;
+        }
+        const directory = child.stat.isDirectory();
+        if (directory) directories.push(childPath);
+        else if (!child.stat.isFile()) continue;
+        const score = fuzzyScore(childPath, query);
+        if (score !== undefined) {
+          matches.push({ path: childPath, directory, score });
+        }
       }
-      const childPath = path ? `${path}/${entry.name}` : entry.name;
-      let child: WorkspaceTarget;
-      try {
-        child = await resolveWorkspaceTarget(boundary, childPath, "either");
-      } catch (error) {
-        if (error instanceof WorkspaceError && error.status === 404) continue;
-        throw error;
-      }
-      const directory = child.stat.isDirectory();
-      if (directory) directories.push(childPath);
-      else if (!child.stat.isFile()) continue;
-      const score = fuzzyScore(childPath, query);
-      if (score !== undefined) {
-        matches.push({ path: childPath, directory, score });
-      }
+    } finally {
+      const closing = Promise.resolve().then(() => handle.close());
+      await guard.wait(closing).catch(() => undefined);
     }
   }
 

@@ -12,9 +12,10 @@ import {
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, describe, expect, test } from "vitest";
+import { afterEach, describe, expect, test, vi } from "vitest";
 import { WorkspaceError } from "../../src/server/workspace/errors.js";
 import {
+  createOperationGuard,
   parseWorkspaceBasename,
   parseWorkspacePath,
 } from "../../src/server/workspace/policy.js";
@@ -43,6 +44,34 @@ afterEach(async () => {
 });
 
 describe("workspace path policy", () => {
+  test("bounds unresolved awaited operations and reacts to aborts", async () => {
+    vi.useFakeTimers();
+    try {
+      const timeoutGuard = createOperationGuard(undefined, 25);
+      const timedOut = timeoutGuard.run(
+        () => new Promise<never>(() => undefined),
+      );
+      const timeoutAssertion = expect(timedOut).rejects.toMatchObject({
+        status: 400,
+        reason: "cancelled",
+      });
+
+      await vi.advanceTimersByTimeAsync(25);
+      await timeoutAssertion;
+
+      const controller = new AbortController();
+      const abortGuard = createOperationGuard(controller.signal, 1_000);
+      const aborted = abortGuard.run(() => new Promise<never>(() => undefined));
+      const abortAssertion = expect(aborted).rejects.toMatchObject({
+        name: "AbortError",
+      });
+      controller.abort();
+      await abortAssertion;
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   test("accepts canonical Unicode paths and rejects aliases and private names", () => {
     expect(parseWorkspacePath("src/繁體中文.ts")).toBe("src/繁體中文.ts");
     expect(parseWorkspacePath("")).toBe("");

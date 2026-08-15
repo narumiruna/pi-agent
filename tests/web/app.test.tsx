@@ -2,6 +2,7 @@
 
 import { Theme } from "@radix-ui/themes";
 import {
+  act,
   cleanup,
   fireEvent,
   render,
@@ -102,16 +103,21 @@ describe("web application", () => {
     expect(window.localStorage.getItem("pi-agent-language")).toBe("zh-TW");
   });
 
-  test("opens Files and confirms before leaving a dirty editor", async () => {
+  test("guards dirty Files from navigation and provider completion", async () => {
     HTMLElement.prototype.scrollIntoView = vi.fn();
+    let providerAuthListener: ((event: MessageEvent) => void) | undefined;
     class FakeEventSource {
       onerror: (() => void) | null = null;
       onopen: (() => void) | null = null;
-      addEventListener(): void {}
+      addEventListener(type: string, listener: EventListener): void {
+        if (type === "provider_auth") {
+          providerAuthListener = listener as (event: MessageEvent) => void;
+        }
+      }
       close(): void {}
     }
     vi.stubGlobal("EventSource", FakeEventSource);
-    vi.mocked(fetch).mockImplementation(async (input) => {
+    vi.mocked(fetch).mockImplementation(async (input, init) => {
       const url = String(input);
       const json = (value: unknown) =>
         new Response(JSON.stringify(value), {
@@ -120,6 +126,9 @@ describe("web application", () => {
         });
       if (url === "/api/session")
         return json({ authenticated: true, authDisabled: false, tools: [] });
+      if (url === "/api/provider-auth" && init?.method === "DELETE") {
+        return new Response(null, { status: 204 });
+      }
       if (url === "/api/provider-auth") return json(null);
       if (url === "/api/conversations" || url === "/api/commands")
         return json([]);
@@ -162,10 +171,28 @@ describe("web application", () => {
     await user.click(
       await screen.findByRole("button", { name: /notes\.txt/i }),
     );
-    await user.type(
-      await screen.findByLabelText("Contents of notes.txt"),
-      " changed",
+    const editor = await screen.findByLabelText("Contents of notes.txt");
+    await user.type(editor, " changed");
+
+    act(() =>
+      providerAuthListener?.(
+        new MessageEvent("provider_auth", {
+          data: JSON.stringify({
+            providerId: "openai-codex",
+            providerName: "OpenAI Codex",
+            phase: "succeeded",
+          }),
+        }),
+      ),
     );
+    await user.click(
+      await screen.findByRole("button", { name: "Choose a model" }),
+    );
+    expect(screen.getByText("Discard unsaved changes?")).toBeVisible();
+    expect(editor).toHaveValue("notes changed");
+    await user.click(screen.getByRole("button", { name: "Cancel" }));
+    expect(screen.getByRole("heading", { name: "Files" })).toBeVisible();
+
     await user.click(screen.getByRole("button", { name: "Chat" }));
     expect(screen.getByText("Discard unsaved changes?")).toBeVisible();
     await user.click(screen.getByRole("button", { name: "Cancel" }));

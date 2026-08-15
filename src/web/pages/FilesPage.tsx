@@ -590,7 +590,7 @@ export function FilesPage({ onDirtyChange }: Props) {
                 <TextArea
                   className="filesTextEditor"
                   aria-label={t("filesFileContent", { name: selected.name })}
-                  readOnly={!selected.editable}
+                  readOnly={!selected.editable || pending}
                   rows={24}
                   value={draft}
                   onChange={(event) => setDraft(event.target.value)}

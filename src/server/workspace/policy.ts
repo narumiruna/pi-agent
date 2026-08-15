@@ -136,32 +136,92 @@ export function parseWorkspaceBasename(rawName: string): string {
   return rawName;
 }
 
-export function createOperationGuard(signal?: AbortSignal): () => void {
-  const deadline = performance.now() + WORKSPACE_OPERATION_TIMEOUT_MS;
-  return () => {
-    if (signal?.aborted) {
-      throw signal.reason ?? new DOMException("Cancelled", "AbortError");
-    }
-    if (performance.now() > deadline) {
+export interface OperationGuard {
+  (): void;
+  run<T>(operation: () => Promise<T>): Promise<T>;
+  wait<T>(operation: Promise<T>): Promise<T>;
+}
+
+function cancellationReason(signal?: AbortSignal): unknown {
+  return signal?.reason ?? new DOMException("Cancelled", "AbortError");
+}
+
+export function createOperationGuard(
+  signal?: AbortSignal,
+  timeoutMs = WORKSPACE_OPERATION_TIMEOUT_MS,
+): OperationGuard {
+  const deadline = performance.now() + Math.max(0, timeoutMs);
+  const guard = (() => {
+    if (signal?.aborted) throw cancellationReason(signal);
+    if (performance.now() >= deadline) {
       throw new WorkspaceError(400, "cancelled");
     }
+  }) as OperationGuard;
+
+  guard.wait = <T>(operation: Promise<T>) =>
+    new Promise<T>((resolvePromise, rejectPromise) => {
+      let settled = false;
+      let abortListener: (() => void) | undefined;
+      const timeout = setTimeout(
+        () => rejectOnce(new WorkspaceError(400, "cancelled")),
+        Math.max(0, deadline - performance.now()),
+      );
+      timeout.unref();
+
+      const cleanup = () => {
+        clearTimeout(timeout);
+        if (signal && abortListener) {
+          signal.removeEventListener("abort", abortListener);
+        }
+      };
+      const resolveOnce = (value: T) => {
+        if (settled) return;
+        settled = true;
+        cleanup();
+        resolvePromise(value);
+      };
+      function rejectOnce(error: unknown) {
+        if (settled) return;
+        settled = true;
+        cleanup();
+        rejectPromise(error);
+      }
+
+      if (signal) {
+        abortListener = () => rejectOnce(cancellationReason(signal));
+        signal.addEventListener("abort", abortListener, { once: true });
+        if (signal.aborted) abortListener();
+      }
+      operation.then(resolveOnce, rejectOnce);
+    });
+  guard.run = <T>(operation: () => Promise<T>) => {
+    guard();
+    return guard.wait(
+      Promise.resolve().then(() => {
+        guard();
+        return operation();
+      }),
+    );
   };
+
+  return guard;
 }
 
 export async function createWorkspaceBoundary(
   workspace: string,
   excludePaths: readonly string[] = [],
+  guard = createOperationGuard(),
 ): Promise<WorkspaceBoundary> {
   let root: string;
   try {
-    root = await realpath(resolve(workspace));
+    root = await guard.run(() => realpath(resolve(workspace)));
   } catch (error) {
     return mapWorkspaceFsError(error);
   }
   const excludedPaths = await Promise.all(
-    excludePaths.map(async (path) => {
+    excludePaths.map((path) => {
       const resolved = resolve(path);
-      return realpath(resolved).catch(() => resolved);
+      return guard.run(() => realpath(resolved).catch(() => resolved));
     }),
   );
   return { root, excludedPaths };
@@ -179,9 +239,12 @@ function assertAllowedAbsolute(
   }
 }
 
-async function readStat(path: string): Promise<BigIntStats> {
+async function readStat(
+  path: string,
+  guard: OperationGuard,
+): Promise<BigIntStats> {
   try {
-    return await lstat(path, { bigint: true });
+    return await guard.run(() => lstat(path, { bigint: true }));
   } catch (error) {
     return mapWorkspaceFsError(error);
   }
@@ -191,11 +254,12 @@ export async function resolveWorkspaceTarget(
   boundary: WorkspaceBoundary,
   rawPath: string,
   expected: "directory" | "file" | "either" = "either",
+  guard = createOperationGuard(),
 ): Promise<WorkspaceTarget> {
   const path = parseWorkspacePath(rawPath);
   if (path === "") {
     if (expected === "file") throw new WorkspaceError(404, "not_found");
-    const stat = await readStat(boundary.root);
+    const stat = await readStat(boundary.root, guard);
     if (!stat.isDirectory()) throw new WorkspaceError(404, "not_found");
     return { absolute: boundary.root, path, stat };
   }
@@ -206,7 +270,7 @@ export async function resolveWorkspaceTarget(
   for (const [index, segment] of segments.entries()) {
     absolute = join(absolute, segment);
     assertAllowedAbsolute(boundary, absolute);
-    stat = await readStat(absolute);
+    stat = await readStat(absolute, guard);
     if (stat.isSymbolicLink()) throw new WorkspaceError(404, "not_found");
     const final = index === segments.length - 1;
     if (isHiddenWorkspaceEntry(segment, stat.isDirectory())) {
@@ -219,7 +283,7 @@ export async function resolveWorkspaceTarget(
 
   let canonical: string;
   try {
-    canonical = await realpath(absolute);
+    canonical = await guard.run(() => realpath(absolute));
   } catch (error) {
     return mapWorkspaceFsError(error);
   }
@@ -237,6 +301,7 @@ export async function resolveWorkspaceTarget(
 export async function resolveWorkspaceParent(
   boundary: WorkspaceBoundary,
   rawPath: string,
+  guard = createOperationGuard(),
 ): Promise<WorkspaceParent> {
   const path = parseWorkspacePath(rawPath);
   if (!path) throw new WorkspaceError(400, "invalid_path");
@@ -247,6 +312,7 @@ export async function resolveWorkspaceParent(
     boundary,
     parentPath,
     "directory",
+    guard,
   );
   const absolute = join(parent.absolute, name);
   assertAllowedAbsolute(boundary, absolute);
