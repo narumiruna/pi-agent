@@ -178,6 +178,10 @@ Binary and larger files expose metadata and a download action, while downloads a
 
 All Files APIs accept and return slash-separated workspace-relative paths and never return host absolute paths.
 
+The server resolves the workspace to a canonical real path, walks each existing target segment without following symlinks, resolves the final target, and checks containment before use.
+
+Create and rename destinations require a canonical contained parent and a validated basename.
+
 Files skips symlinks, `.git`, `.hg`, `.svn`, `.local`, `.pi`, `.ssh`, `dist`, `node_modules`, credential-like files, and configured agent or application data directories.
 
 Writes use temporary files and atomic replacement, and updates, renames, and deletes require an opaque revision so an external change produces a conflict instead of a silent overwrite.
