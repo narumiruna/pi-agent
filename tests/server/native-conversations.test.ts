@@ -103,7 +103,8 @@ test("resolves an opaque ID to its current native path before switching", async 
 
   await service.activateConversation(opaqueId);
 
-  expect(switchSession).toHaveBeenCalledWith(nativePath, {
+  expect(switchSession).toHaveBeenCalledOnce();
+  expect(switchSession).toHaveBeenNthCalledWith(1, nativePath, {
     cwdOverride: "/workspace",
   });
 });
