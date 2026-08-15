@@ -103,6 +103,21 @@ const resources = {
       conversationSwitchFailed: "Could not switch conversations.",
       conversationListRefreshFailed:
         "The conversation changed, but its list could not be refreshed.",
+      manageConversation: "Manage conversation",
+      manageConversationNamed: "Manage conversation {{name}}",
+      manageConversationDescription:
+        "Rename this native Pi session or delete it when it is not active.",
+      conversationName: "Conversation name",
+      conversationRenamed: "Conversation renamed.",
+      conversationDeleted: "Conversation deleted.",
+      conversationManagementFailed: "Could not update the conversation.",
+      deleteConversation: "Delete conversation",
+      deleteConversationHint:
+        "Permanently remove this conversation's native JSONL session.",
+      activeConversationDeleteHint:
+        "Switch to another conversation before deleting this one.",
+      deleteConversationDescription:
+        "{{name}} will be permanently deleted. This cannot be undone.",
       conversationDiscovery: "Find conversations",
       conversationSearch: "Search conversations",
       conversationSearchPlaceholder: "Search conversations",
@@ -454,6 +469,18 @@ const resources = {
       conversationCreateFailed: "無法建立新對話，原本的對話仍可使用。",
       conversationSwitchFailed: "無法切換對話。",
       conversationListRefreshFailed: "對話已變更，但無法重新整理對話列表。",
+      manageConversation: "管理對話",
+      manageConversationNamed: "管理對話 {{name}}",
+      manageConversationDescription:
+        "重新命名這個原生 Pi session，或在它不是目前對話時刪除。",
+      conversationName: "對話名稱",
+      conversationRenamed: "已重新命名對話。",
+      conversationDeleted: "已刪除對話。",
+      conversationManagementFailed: "無法更新對話。",
+      deleteConversation: "刪除對話",
+      deleteConversationHint: "永久刪除這個對話的原生 JSONL session。",
+      activeConversationDeleteHint: "請先切換到其他對話，再刪除這個對話。",
+      deleteConversationDescription: "將永久刪除 {{name}}，且無法復原。",
       conversationDiscovery: "尋找對話",
       conversationSearch: "搜尋對話",
       conversationSearchPlaceholder: "搜尋對話",

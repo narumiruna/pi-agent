@@ -2,6 +2,7 @@ import * as Dialog from "@radix-ui/react-dialog";
 import {
   ChatBubbleIcon,
   Cross1Icon,
+  DotsHorizontalIcon,
   FileIcon,
   GearIcon,
   HamburgerMenuIcon,
@@ -16,6 +17,7 @@ import {
   Text,
   Tooltip,
 } from "@radix-ui/themes";
+import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
   type NavigationIconKey,
@@ -24,6 +26,7 @@ import {
 } from "../navigation.js";
 import type { Page } from "../routes.js";
 import type { Conversation, ConversationFilters } from "../types.js";
+import { ConversationManagementDialog } from "./ConversationManagementDialog.js";
 import { DialogPortal } from "./DialogPortal.js";
 
 interface Props {
@@ -36,7 +39,9 @@ interface Props {
   newPending: boolean;
   onMobileOpen: (open: boolean) => void;
   onConversationFilters: (filters: ConversationFilters) => void;
+  onDeleteConversation: (id: string) => Promise<void>;
   onPage: (page: Page) => void;
+  onRenameConversation: (id: string, name: string) => Promise<void>;
   onConversation: (id: string) => void;
   onNew: () => void;
 }
@@ -51,6 +56,7 @@ const NAVIGATION_ICONS: Record<NavigationIconKey, typeof ChatBubbleIcon> = {
 
 interface NavContentProps extends Props {
   items: readonly PrimaryNavigationItem[];
+  onManageConversation: (conversation: Conversation) => void;
 }
 
 function NavContent(props: NavContentProps) {
@@ -98,7 +104,10 @@ function NavContent(props: NavContentProps) {
             variant="ghost"
             aria-label={t("newConversation")}
             disabled={props.newPending}
-            onClick={props.onNew}
+            onClick={() => {
+              props.onNew();
+              props.onMobileOpen(false);
+            }}
           >
             <PlusIcon />
           </IconButton>
@@ -177,26 +186,45 @@ function NavContent(props: NavContentProps) {
               {t("conversationNoResults")}
             </Text>
           ) : (
-            props.conversations.map((conversation) => (
-              <button
-                type="button"
-                aria-label={conversation.name ?? conversation.id}
-                title={conversation.name ?? conversation.id}
-                key={conversation.id}
-                disabled={props.newPending}
-                className={
-                  props.activeId === conversation.id
-                    ? "conversationItem active"
-                    : "conversationItem"
-                }
-                onClick={() => {
-                  props.onConversation(conversation.id);
-                  props.onMobileOpen(false);
-                }}
-              >
-                {conversation.name || conversation.id.slice(-8)}
-              </button>
-            ))
+            props.conversations.map((conversation) => {
+              const label = conversation.name || conversation.id.slice(-8);
+              const managementLabel = conversation.name ?? conversation.id;
+              return (
+                <div className="conversationRow" key={conversation.id}>
+                  <button
+                    type="button"
+                    aria-label={conversation.name ?? conversation.id}
+                    title={conversation.name ?? conversation.id}
+                    disabled={props.newPending}
+                    className={
+                      props.activeId === conversation.id
+                        ? "conversationItem active"
+                        : "conversationItem"
+                    }
+                    onClick={() => {
+                      props.onConversation(conversation.id);
+                      props.onMobileOpen(false);
+                    }}
+                  >
+                    {label}
+                  </button>
+                  <Tooltip content={t("manageConversation")}>
+                    <IconButton
+                      aria-label={t("manageConversationNamed", {
+                        name: managementLabel,
+                      })}
+                      className="conversationManage"
+                      disabled={props.newPending}
+                      size="1"
+                      variant="ghost"
+                      onClick={() => props.onManageConversation(conversation)}
+                    >
+                      <DotsHorizontalIcon />
+                    </IconButton>
+                  </Tooltip>
+                </div>
+              );
+            })
           )}
         </div>
       </ScrollArea>
@@ -206,11 +234,31 @@ function NavContent(props: NavContentProps) {
 
 export function Navigation(props: Props) {
   const { t } = useTranslation();
+  const [managedConversation, setManagedConversation] =
+    useState<Conversation>();
+  const [queuedManagement, setQueuedManagement] = useState<Conversation>();
   const items = primaryNavigationFor({ authenticated: props.authenticated });
+  useEffect(() => {
+    if (props.mobileOpen || !queuedManagement) return;
+    setManagedConversation(queuedManagement);
+    setQueuedManagement(undefined);
+  }, [props.mobileOpen, queuedManagement]);
+  const manageConversation = (conversation: Conversation) => {
+    if (props.mobileOpen) {
+      setQueuedManagement(conversation);
+      props.onMobileOpen(false);
+    } else {
+      setManagedConversation(conversation);
+    }
+  };
   return (
     <>
       <aside className="sidebar">
-        <NavContent {...props} items={items} />
+        <NavContent
+          {...props}
+          items={items}
+          onManageConversation={manageConversation}
+        />
       </aside>
       <Dialog.Root open={props.mobileOpen} onOpenChange={props.onMobileOpen}>
         <Dialog.Trigger asChild>
@@ -235,10 +283,24 @@ export function Navigation(props: Props) {
                 <Cross1Icon />
               </Button>
             </Dialog.Close>
-            <NavContent {...props} items={items} />
+            <NavContent
+              {...props}
+              items={items}
+              onManageConversation={manageConversation}
+            />
           </Dialog.Content>
         </DialogPortal>
       </Dialog.Root>
+      <ConversationManagementDialog
+        conversation={managedConversation}
+        disabled={props.newPending}
+        open={Boolean(managedConversation)}
+        onDelete={props.onDeleteConversation}
+        onOpenChange={(open) => {
+          if (!open) setManagedConversation(undefined);
+        }}
+        onRename={props.onRenameConversation}
+      />
     </>
   );
 }

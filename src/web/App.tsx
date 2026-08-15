@@ -317,8 +317,19 @@ export function App() {
   useEffect(() => {
     if (!session) return;
     setEventsConnectedFor(undefined);
+    let reconnecting = false;
     const source = new EventSource("/api/events");
-    source.onopen = () => setEventsConnectedFor(activeId);
+    source.onopen = () => {
+      setEventsConnectedFor(activeId);
+      if (!reconnecting || !activeId) return;
+      reconnecting = false;
+      setDelta("");
+      setThinking("");
+      setLiveTools([]);
+      setRefresh((value) => value + 1);
+      void loadAgentState(activeId).catch(() => undefined);
+      void loadConversations(activeId).catch(() => undefined);
+    };
     source.addEventListener("message_delta", (raw) => {
       const event = JSON.parse((raw as MessageEvent).data) as {
         sessionId: string;
@@ -458,6 +469,7 @@ export function App() {
       if (activeId) void loadAgentState(activeId).catch(() => undefined);
     });
     source.onerror = () => {
+      reconnecting = true;
       setEventsConnectedFor(undefined);
       setNotification({ message: "Connection interrupted; retrying…" });
       void api<SessionInfo>("/api/session").catch((reason) => {
@@ -515,6 +527,64 @@ export function App() {
       );
     } catch {
       setNotification({ message: t("conversationCreateFailed") });
+    } finally {
+      setConversationPending(false);
+    }
+  };
+
+  const renameConversation = async (id: string, name: string) => {
+    if (conversationPending || running) throw new Error("conversation_busy");
+    setConversationPending(true);
+    try {
+      await api(`/api/conversations/${id}`, mutation("PATCH", { name }));
+      await loadConversations(activeId)
+        .then(() =>
+          setNotification({
+            message: t("conversationRenamed"),
+            type: "info",
+          }),
+        )
+        .catch(() =>
+          setNotification({
+            message: t("conversationListRefreshFailed"),
+            type: "warning",
+          }),
+        );
+    } catch (error) {
+      setNotification({
+        message: t("conversationManagementFailed"),
+        type: "error",
+      });
+      throw error;
+    } finally {
+      setConversationPending(false);
+    }
+  };
+
+  const deleteConversation = async (id: string) => {
+    if (conversationPending || running) throw new Error("conversation_busy");
+    setConversationPending(true);
+    try {
+      await api(`/api/conversations/${id}`, mutation("DELETE"));
+      await loadConversations(activeId)
+        .then(() =>
+          setNotification({
+            message: t("conversationDeleted"),
+            type: "info",
+          }),
+        )
+        .catch(() =>
+          setNotification({
+            message: t("conversationListRefreshFailed"),
+            type: "warning",
+          }),
+        );
+    } catch (error) {
+      setNotification({
+        message: t("conversationManagementFailed"),
+        type: "error",
+      });
+      throw error;
     } finally {
       setConversationPending(false);
     }
@@ -588,7 +658,9 @@ export function App() {
             newPending={conversationPending || running}
             onMobileOpen={setMobileOpen}
             onConversationFilters={changeConversationFilters}
+            onDeleteConversation={deleteConversation}
             onPage={(nextPage) => afterFilesDiscard(() => navigate(nextPage))}
+            onRenameConversation={renameConversation}
             onConversation={(id) =>
               afterFilesDiscard(() => {
                 navigate("chats");

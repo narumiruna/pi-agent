@@ -73,25 +73,29 @@ test("uses native search, named-only, and sort controls without changing a hidde
     name: "Search conversations",
   });
   await search.fill(`DISCOVERY_ALPHA_${marker}`);
-  await expect(page.getByRole("button", { name: alphaName })).toBeVisible();
-  await expect(page.getByRole("button", { name: unpersistedId })).toHaveCount(
-    0,
-  );
+  await expect(
+    page.getByRole("button", { name: alphaName, exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: unpersistedId, exact: true }),
+  ).toHaveCount(0);
   await expect(page.getByText("Start with a clear request.")).toBeVisible();
   await expect(
     page.getByRole("button", { name: "New conversation" }),
   ).toBeEnabled();
 
   await search.fill("");
-  await expect(page.getByRole("button", { name: unpersistedId })).toHaveClass(
-    /active/,
-  );
+  await expect(
+    page.getByRole("button", { name: unpersistedId, exact: true }),
+  ).toHaveClass(/active/);
   const nameFilter = discovery.getByRole("combobox", { name: "Name" });
   await nameFilter.selectOption("named");
-  await expect(page.getByRole("button", { name: alphaName })).toBeVisible();
-  await expect(page.getByRole("button", { name: unpersistedId })).toHaveCount(
-    0,
-  );
+  await expect(
+    page.getByRole("button", { name: alphaName, exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: unpersistedId, exact: true }),
+  ).toHaveCount(0);
 
   const sort = discovery.getByRole("combobox", { name: "Sort" });
   await sort.selectOption("recent");
@@ -104,8 +108,8 @@ test("uses native search, named-only, and sort controls without changing a hidde
   await discovery.getByRole("button", { name: "Reset" }).click();
   await expect(nameFilter).toHaveValue("all");
   await expect(sort).toHaveValue("threaded");
-  await page.getByRole("button", { name: alphaName }).click();
+  await page.getByRole("button", { name: alphaName, exact: true }).click();
   await expect(page.getByText(alpha, { exact: true })).toBeVisible();
-  await page.getByRole("button", { name: betaId }).click();
+  await page.getByRole("button", { name: betaId, exact: true }).click();
   await expect(page.getByText(beta, { exact: true })).toBeVisible();
 });

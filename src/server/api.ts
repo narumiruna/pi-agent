@@ -278,9 +278,13 @@ export function registerApi<E extends ApiEnv>(
       );
     },
   );
-  app.post("/api/conversations", async (context) =>
-    context.json({ id: await services.pi.createConversation() }, 201),
-  );
+  app.post("/api/conversations", async (context) => {
+    try {
+      return context.json({ id: await services.pi.createConversation() }, 201);
+    } catch (error) {
+      return errorResponse(context, error);
+    }
+  });
   app.post(
     "/api/conversations/import",
     tbValidator("json", ImportBody),

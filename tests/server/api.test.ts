@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { Hono } from "hono";
 import { describe, expect, test, vi } from "vitest";
 import { EventHub } from "../../src/server/agent/events.js";
+import { AgentBusyError } from "../../src/server/agent/run-coordinator.js";
 import {
   type ApiEnv,
   type ApiServices,
@@ -84,6 +85,20 @@ describe("API contracts", () => {
     expect(extra.status).toBe(400);
     expect(longSearch.status).toBe(400);
     expect(listConversations).not.toHaveBeenCalled();
+  });
+
+  test("maps a busy new-conversation request to a conflict", async () => {
+    const createConversation = vi.fn(async () => {
+      throw new AgentBusyError();
+    });
+    const app = appWith({ pi: { createConversation } as never });
+
+    const response = await app.request("/api/conversations", {
+      method: "POST",
+    });
+
+    expect(response.status).toBe(409);
+    expect(await response.json()).toEqual({ error: { code: "agent_busy" } });
   });
 
   test("accepts an image-only conversation message", async () => {
@@ -245,6 +260,31 @@ describe("API contracts", () => {
     expect(setPreferences).toHaveBeenCalledWith({
       steeringMode: "one-at-a-time",
     });
+  });
+
+  test("renames and deletes only through opaque conversation IDs", async () => {
+    const renameConversation = vi.fn(async () => undefined);
+    const deleteConversation = vi.fn(async () => undefined);
+    const app = appWith({
+      pi: { renameConversation, deleteConversation } as never,
+    });
+
+    const rename = await app.request("/api/conversations/opaque-id", {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ name: "Named session" }),
+    });
+    const deletion = await app.request("/api/conversations/opaque-id", {
+      method: "DELETE",
+    });
+
+    expect(rename.status).toBe(200);
+    expect(deletion.status).toBe(204);
+    expect(renameConversation).toHaveBeenCalledWith(
+      "opaque-id",
+      "Named session",
+    );
+    expect(deleteConversation).toHaveBeenCalledWith("opaque-id");
   });
 
   test("exports with a safe attachment name and no server path", async () => {

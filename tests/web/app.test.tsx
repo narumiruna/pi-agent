@@ -745,12 +745,18 @@ describe("web application", () => {
   test("restores active run and queue state after reconnect", async () => {
     HTMLElement.prototype.scrollIntoView = vi.fn();
     class FakeEventSource {
+      static instances: FakeEventSource[] = [];
       onerror: (() => void) | null = null;
       onopen: (() => void) | null = null;
+      constructor() {
+        FakeEventSource.instances.push(this);
+      }
       addEventListener(): void {}
       close(): void {}
     }
     vi.stubGlobal("EventSource", FakeEventSource);
+    let stateRequests = 0;
+    let transcriptRequests = 0;
     vi.mocked(fetch).mockImplementation(async (input) => {
       const url = String(input);
       const json = (value: unknown) =>
@@ -775,15 +781,20 @@ describe("web application", () => {
             active: true,
           },
         ]);
-      if (url === "/api/conversations/session") return json({ messages: [] });
-      if (url === "/api/conversations/session/state")
+      if (url === "/api/conversations/session") {
+        transcriptRequests++;
+        return json({ messages: [] });
+      }
+      if (url === "/api/conversations/session/state") {
+        stateRequests++;
+        const reconnected = stateRequests > 1;
         return json({
           sessionId: "session",
-          running: true,
+          running: !reconnected,
           queue: {
             sessionId: "session",
-            steering: ["restored steering"],
-            followUp: [],
+            steering: reconnected ? [] : ["restored steering"],
+            followUp: reconnected ? ["reconnected follow-up"] : [],
           },
           preferences: {
             steeringMode: "all",
@@ -820,6 +831,7 @@ describe("web application", () => {
             toolsExpanded: false,
           },
         });
+      }
       throw new Error(`Unexpected request: ${url}`);
     });
 
@@ -830,6 +842,17 @@ describe("web application", () => {
     expect(screen.getByLabelText(/Ask Pi anything/i)).toHaveValue(
       "restored draft",
     );
+    const source = FakeEventSource.instances.at(-1);
+    if (!source) throw new Error("EventSource was not created");
+    source.onerror?.();
+    source.onopen?.();
+
+    expect(await screen.findByText("reconnected follow-up")).toBeVisible();
+    await waitFor(() =>
+      expect(screen.queryByRole("button", { name: "Stop" })).toBeNull(),
+    );
+    expect(stateRequests).toBeGreaterThanOrEqual(2);
+    expect(transcriptRequests).toBeGreaterThanOrEqual(2);
   });
 
   test("keeps a forked draft out of the conversation being replaced", async () => {

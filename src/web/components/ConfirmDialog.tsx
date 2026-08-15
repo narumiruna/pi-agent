@@ -8,6 +8,7 @@ interface Props {
   description: string;
   destructive?: boolean;
   open: boolean;
+  pending?: boolean;
   title: string;
   onConfirm: () => void;
   onOpenChange: (open: boolean) => void;
@@ -18,6 +19,7 @@ export function ConfirmDialog({
   description,
   destructive = false,
   open,
+  pending = false,
   title,
   onConfirm,
   onOpenChange,
@@ -36,13 +38,14 @@ export function ConfirmDialog({
           </Dialog.Description>
           <Flex className="dialogActions" gap="2" justify="end">
             <Dialog.Close asChild>
-              <Button highContrast variant="soft">
+              <Button disabled={pending} highContrast variant="soft">
                 {t("cancel")}
               </Button>
             </Dialog.Close>
             <Button
               highContrast
               color={destructive ? "red" : undefined}
+              disabled={pending}
               onClick={onConfirm}
             >
               {confirmLabel}
