@@ -57,6 +57,21 @@ describe("ResourceService", () => {
     expect(reload).toHaveBeenCalledTimes(2);
   });
 
+  test("rejects an oversized multibyte document before persistence or reload", async () => {
+    const { agentDir, reload, service } = await setup();
+    const content = "界".repeat(333_334);
+    expect(Buffer.byteLength(content)).toBeGreaterThan(1_000_000);
+
+    await expect(
+      service.writeDocument("system", undefined, content),
+    ).rejects.toThrow(/too large/i);
+
+    await expect(
+      readFile(join(agentDir, "SYSTEM.md"), "utf8"),
+    ).rejects.toMatchObject({ code: "ENOENT" });
+    expect(reload).not.toHaveBeenCalled();
+  });
+
   test("reloads after an idempotent delete reconciles an externally removed document", async () => {
     const { agentDir, reload, service } = await setup();
     const path = join(agentDir, "prompts", "temporary.md");

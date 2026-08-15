@@ -284,6 +284,52 @@ describe("workspace service", () => {
     });
   });
 
+  test("rejects unauthorized traversal across every public path operation", async () => {
+    const root = await temporaryWorkspace();
+    const outsideName = `outside-${root.slice(-6)}.txt`;
+    const outsidePath = join(root, "..", outsideName);
+    const unauthorizedPath = `../${outsideName}`;
+    await writeFile(outsidePath, "outside");
+    cleanups.push(outsidePath);
+    const service = new WorkspaceService(root);
+
+    const rejectedOperations: Array<() => Promise<unknown>> = [
+      () => service.listDirectory(unauthorizedPath),
+      () => service.inspectFile(unauthorizedPath),
+      () =>
+        service.writeFile({
+          path: unauthorizedPath,
+          content: "created",
+        }),
+      () =>
+        service.writeFile({
+          path: unauthorizedPath,
+          content: "updated",
+          revision: "untrusted-revision",
+        }),
+      () =>
+        service.renameFile({
+          path: unauthorizedPath,
+          name: "renamed.txt",
+          revision: "untrusted-revision",
+        }),
+      () =>
+        service.deleteFile({
+          path: unauthorizedPath,
+          revision: "untrusted-revision",
+        }),
+      () => service.downloadFile(unauthorizedPath),
+    ];
+    for (const operation of rejectedOperations) {
+      await expect(operation()).rejects.toMatchObject({
+        status: 400,
+        reason: "invalid_path",
+      });
+    }
+
+    expect(await readFile(outsidePath, "utf8")).toBe("outside");
+  });
+
   test("rejects symlink escapes across every public path operation", async () => {
     const root = await temporaryWorkspace();
     const outside = await temporaryWorkspace();

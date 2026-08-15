@@ -369,6 +369,13 @@ The test suite runs PostgreSQL storage contracts when `TEST_POSTGRES_URL` is set
 TEST_POSTGRES_URL=postgresql://pi-agent:password@localhost:5432/pi-agent npm test
 ```
 
+The Phase 0 server-boundary acceptance matrix is pinned to matching server suites.
+
+- `tests/server/http-auth.test.ts` covers unauthenticated API paths, cross-origin mutations, the global request limit, and the workspace payload limit.
+- `tests/server/workspace.test.ts` covers traversal rejection, symlink escape, stale update and delete revisions, and concurrent same-revision writes.
+- `tests/server/resources.test.ts` covers prompt traversal, symlink replacement, and the resource document byte limit.
+- `tests/server/agent.test.ts` covers active-run conflicts for every operation guarded by `PiService.requireIdle()`.
+
 Install Chromium once, then run the production-build E2E suite with isolated SQLite data.
 
 ```sh
