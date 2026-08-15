@@ -17,10 +17,9 @@ import {
   Tooltip,
 } from "@radix-ui/themes";
 import { useTranslation } from "react-i18next";
+import type { Page } from "../routes.js";
 import type { Conversation } from "../types.js";
 import { DialogPortal } from "./DialogPortal.js";
-
-export type Page = "chat" | "files" | "heartbeat" | "library" | "settings";
 
 interface Props {
   page: Page;
@@ -41,7 +40,7 @@ function NavContent(props: Props) {
     label: string;
     icon: typeof ChatBubbleIcon;
   }> = [
-    { page: "chat", label: t("chat"), icon: ChatBubbleIcon },
+    { page: "chats", label: t("chat"), icon: ChatBubbleIcon },
     { page: "files", label: t("files"), icon: FileIcon },
     { page: "heartbeat", label: t("heartbeat"), icon: HeartIcon },
     { page: "library", label: t("library"), icon: ReaderIcon },
