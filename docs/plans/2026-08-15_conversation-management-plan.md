@@ -87,11 +87,11 @@ Keep advanced tree, fork/clone, compact, import, and export actions in the exist
 
 ## Verification
 
-- Focused agent, API, App, and navigation suites: all 134 tests passed.
-- `npm run ci`: 27 files passed, 355 tests passed, 6 PostgreSQL-dependent tests skipped locally, and server/Web builds passed.
+- Focused agent, API, App, and navigation suites: all 135 tests passed.
+- `npm run ci`: 27 files passed, 356 tests passed, 6 PostgreSQL-dependent tests skipped locally, and server/Web builds passed.
 - `npx playwright test`: all 26 setup, desktop, mobile, management, recovery, and accessibility tests passed.
 - The management browser flow renamed active sessions, rejected active deletion, confirmed inactive deletion, switched to native fork and clone IDs, parsed exported JSONL, rejected four mutation classes during a held run, and restored the native queue after reload.
 - `TEST_POSTGRES_URL=postgresql://pi_agent:test_password@127.0.0.1:55433/pi_agent npm test -- tests/server/storage.test.ts`: all 14 SQLite/PostgreSQL storage tests passed against a temporary PostgreSQL 17 container.
 - `docker build -t pi-agent:local .`: final production image built successfully as `sha256:a58fc0d2f16f609db5e2cecb3b91bcf0dd918c30549c6d5ab6fc9a750d24426b`.
-- Initial Codex review found a server-restart reconnect mismatch; reconnect now reads the server’s unfiltered active projection, reactivates the preserved persisted ID before hydration when possible, and otherwise adopts the authoritative server ID, with ordering regression coverage.
+- Codex review found a server-restart reconnect mismatch and a delete/activate time-of-check race; reconnect now reactivates a preserved persisted ID or adopts the authoritative server ID, while rename/delete hold the coordinator across lookup and recheck active identity before writing, with ordering and race regressions.
 - Native-source and diff audits confirmed inactive rename follows Pi’s selector, runtime replacements honor cancellation, coordinator admission prevents write races, active delete is rejected, JSONL paths stay private, native files remain parseable, reconnect hydrates a valid active ID, and desktop/mobile dialogs avoid nested interactive controls.

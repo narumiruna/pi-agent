@@ -579,32 +579,32 @@ export class PiService {
     if (normalized.length < 1 || normalized.length > 120)
       throw new Error("Conversation name is invalid");
     this.requireIdle();
-    if (id === this.activeSessionId) {
-      await this.coordinator.run("maintenance", async () => {
-        this.activeSession.setSessionName(normalized);
-      });
-      return;
-    }
-    const target = (await this.nativeSessions()).find(
-      (session) => session.id === id,
-    );
-    if (!target) throw new Error("Conversation not found");
-    this.requireIdle();
     await this.coordinator.run("maintenance", async () => {
+      if (id === this.activeSessionId) {
+        this.activeSession.setSessionName(normalized);
+        return;
+      }
+      const target = (await this.nativeSessions()).find(
+        (session) => session.id === id,
+      );
+      if (!target) throw new Error("Conversation not found");
       SessionManager.open(target.path).appendSessionInfo(normalized);
     });
   }
 
   async deleteConversation(id: string): Promise<void> {
     this.requireIdle();
-    if (id === this.activeSessionId)
-      throw new Error("The active conversation cannot be deleted");
-    const target = (await this.nativeSessions()).find(
-      (session) => session.id === id,
-    );
-    if (!target) throw new Error("Conversation not found");
-    this.requireIdle();
-    await this.coordinator.run("maintenance", () => unlink(target.path));
+    await this.coordinator.run("maintenance", async () => {
+      if (id === this.activeSessionId)
+        throw new Error("The active conversation cannot be deleted");
+      const target = (await this.nativeSessions()).find(
+        (session) => session.id === id,
+      );
+      if (!target) throw new Error("Conversation not found");
+      if (id === this.activeSessionId)
+        throw new Error("The active conversation cannot be deleted");
+      await unlink(target.path);
+    });
   }
 
   async transcript(id: string) {

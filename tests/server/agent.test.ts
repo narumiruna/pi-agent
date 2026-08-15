@@ -1,5 +1,5 @@
 import { writeFileSync } from "node:fs";
-import { access, mkdtemp, readFile, rm } from "node:fs/promises";
+import { access, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { AuthInteraction } from "@earendil-works/pi-ai";
@@ -644,6 +644,51 @@ describe("native session operations", () => {
 
     expect(service.activeSessionId).toBe("active-session");
     await expect(access(path)).rejects.toThrow();
+  });
+
+  test("holds the coordinator and rechecks active identity before deletion", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "pi-agent-delete-race-"));
+    temporaryDirectories.push(directory);
+    const path = join(directory, "target.jsonl");
+    await writeFile(path, "session\n");
+    let releaseList: (() => void) | undefined;
+    let markListStarted: (() => void) | undefined;
+    const listStarted = new Promise<void>((resolve) => {
+      markListStarted = resolve;
+    });
+    const listGate = new Promise<void>((resolve) => {
+      releaseList = resolve;
+    });
+    let activeId = "current";
+    const service = Object.create(PiService.prototype) as PiService;
+    Object.defineProperties(service, {
+      coordinator: { value: new RunCoordinator() },
+      nativeSessions: {
+        value: vi.fn(async () => {
+          markListStarted?.();
+          await listGate;
+          return [{ id: "target", path }];
+        }),
+      },
+      runtime: {
+        value: {
+          get session() {
+            return { sessionId: activeId, isIdle: true };
+          },
+        },
+      },
+    });
+
+    const deletion = service.deleteConversation("target");
+    await listStarted;
+    await expect(service.activateConversation("target")).rejects.toMatchObject({
+      code: "agent_busy",
+    });
+    activeId = "target";
+    releaseList?.();
+
+    await expect(deletion).rejects.toThrow(/active conversation/i);
+    await expect(access(path)).resolves.toBeUndefined();
   });
 
   test("renames the active session through AgentSession and rejects deleting it", async () => {
