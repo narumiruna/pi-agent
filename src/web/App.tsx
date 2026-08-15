@@ -9,7 +9,7 @@ import {
 } from "./components/AuthNotification.js";
 import { ConfirmDialog } from "./components/ConfirmDialog.js";
 import { InteractionDialog } from "./components/InteractionDialog.js";
-import { Navigation, type Page } from "./components/Navigation.js";
+import { Navigation } from "./components/Navigation.js";
 import { ProviderAuthDialog } from "./components/ProviderAuthDialog.js";
 import type { ProviderAuthTask } from "./model-access.js";
 import { ChatPage } from "./pages/ChatPage.js";
@@ -17,6 +17,7 @@ import { FilesPage } from "./pages/FilesPage.js";
 import { HeartbeatPage } from "./pages/HeartbeatPage.js";
 import { LibraryPage } from "./pages/LibraryPage.js";
 import { SettingsPage } from "./pages/SettingsPage.js";
+import { DEFAULT_APP_ROUTE, type Page } from "./routes.js";
 import type {
   AgentActivity,
   AgentQueueState,
@@ -46,7 +47,7 @@ export function App() {
   const [session, setSession] = useState<SessionInfo>();
   const [signedOut, setSignedOut] = useState(false);
   const [error, setError] = useState<string>();
-  const [page, setPage] = useState<Page>("chat");
+  const [page, setPage] = useState<Page>(DEFAULT_APP_ROUTE);
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [activeId, setActiveId] = useState<string>();
   const [conversationPending, setConversationPending] = useState(false);
@@ -315,14 +316,14 @@ export function App() {
   const selectConversation = async (id: string) => {
     if (conversationPending || running) return;
     if (id === activeId) {
-      setPage("chat");
+      setPage("chats");
       return;
     }
     setConversationPending(true);
     try {
       await api(`/api/conversations/${id}/activate`, mutation("POST"));
       setActiveId(id);
-      setPage("chat");
+      setPage("chats");
       await loadConversations(id).catch(() =>
         setNotification({
           message: t("conversationListRefreshFailed"),
@@ -348,7 +349,7 @@ export function App() {
         mutation("POST"),
       );
       setActiveId(result.id);
-      setPage("chat");
+      setPage("chats");
       await loadConversations(result.id).catch(() =>
         setNotification({
           message: t("conversationListRefreshFailed"),
@@ -426,13 +427,13 @@ export function App() {
             onPage={(nextPage) => afterFilesDiscard(() => setPage(nextPage))}
             onConversation={(id) =>
               afterFilesDiscard(() => {
-                setPage("chat");
+                setPage("chats");
                 void selectConversation(id);
               })
             }
             onNew={() =>
               afterFilesDiscard(() => {
-                setPage("chat");
+                setPage("chats");
                 void createConversation();
               })
             }
@@ -450,7 +451,7 @@ export function App() {
               notification={notification}
               onClose={() => setNotification(undefined)}
             />
-            {page === "chat" && (
+            {page === "chats" && (
               <ChatPage
                 key={activeId}
                 conversationId={activeId}
