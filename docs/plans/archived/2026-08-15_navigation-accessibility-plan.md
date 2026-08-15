@@ -1,6 +1,6 @@
 # Navigation Accessibility Acceptance Plan
 
-Status: In progress.
+Status: Completed on 2026-08-15.
 
 ## Goal
 
@@ -52,6 +52,16 @@ Focus can be lost when selecting a route closes a controlled dialog and rerender
 
 Mitigate with the shared navigation contract, role/name assertions, universal important reduced-motion overrides, browser focus checks, and full axe coverage.
 
+## Outcome
+
+PR [#30](https://github.com/narumiruna/pi-agent/pull/30) merged as `fd6c04d` after its automatic `verify` check passed.
+
+Codex identified one actionable repository-layout issue for the new browser test.
+
+The spec moved under `tests/web/e2e/`, Playwright and TypeScript discovery were updated without changing the 19-test set, the thread was resolved, and final Codex rereview found no major issues.
+
+The post-merge administrative change checks the matching Roadmap acceptance milestone and archives this plan.
+
 ## Plan
 
 - [x] Inventory all currently exposed primary destinations and their desktop/mobile rendering path.
@@ -66,8 +76,8 @@ Mitigate with the shared navigation contract, role/name assertions, universal im
 - [x] Run focused tests, `npm run ci`, full local E2E, and the production Docker build; record exact results.
 - [x] Review the complete diff for inaccessible duplicate navigation, missing destinations, pointer-only handlers, hidden focus, focus loss, motion leaks, localization gaps, route duplication, and unrelated edits.
 - [x] Commit, push, and open dedicated pull request [#30](https://github.com/narumiruna/pi-agent/pull/30) with a signed implementation commit linking this plan and Roadmap milestone.
-- [ ] Resolve every pull-request check and feedback item with regression coverage, then merge the clean pull request.
-- [ ] After merge, check the matching Roadmap acceptance milestone and archive this plan through an administrative documentation pull request.
+- [x] Resolve the Web browser-test placement finding and merge clean pull request [#30](https://github.com/narumiruna/pi-agent/pull/30) as `fd6c04d`; `verify` passed and the final Codex rereview found no major issues.
+- [x] After merge, check the matching Roadmap acceptance milestone and archive this plan through an administrative documentation pull request.
 
 ## Completion Checklist
 
@@ -80,8 +90,8 @@ Mitigate with the shared navigation contract, role/name assertions, universal im
 - [x] Automated serious accessibility checks pass for the drawer and destinations.
 - [x] No planned route is exposed early and no parallel navigation state exists.
 - [x] Web, E2E, CI, and Docker verification pass.
-- [ ] The dedicated pull request is merged with all feedback resolved.
-- [ ] The Roadmap milestone is checked and this plan is archived only after merge.
+- [x] The dedicated pull request is merged with all feedback resolved.
+- [x] The Roadmap milestone is checked and this plan is archived only after merge.
 
 ## Verification
 
