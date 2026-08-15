@@ -3,7 +3,10 @@ import { Worker } from "node:worker_threads";
 import type { AgentMessage } from "@earendil-works/pi-agent-core";
 
 const REGEX_SEARCH_TIMEOUT_MS = 100;
+const REGEX_WORKER_LIMIT = 2;
+const SEARCH_CORPUS_LIMIT = 5_000_000;
 const TOKEN_SEARCH_WORK_LIMIT = 5_000_000;
+let activeRegexWorkers = 0;
 const REGEX_WORKER_SOURCE = `
   const { parentPort, workerData } = require("node:worker_threads");
   try {
@@ -56,19 +59,24 @@ function searchText(record: ConversationDiscoveryRecord): string {
   return `${record.id} ${record.name ?? ""} ${record.allMessagesText} ${record.cwd}`;
 }
 
-function tokenSearchWithinBudget(
+function searchableTextLength(record: ConversationDiscoveryRecord): number {
+  return (
+    record.id.length +
+    (record.name?.length ?? 0) +
+    record.allMessagesText.length +
+    record.cwd.length +
+    3
+  );
+}
+
+function aggregateSearchWithinBudget(
   records: ConversationDiscoveryRecord[],
-  tokenCount: number,
+  multiplier: number,
+  limit: number,
 ): boolean {
-  let remaining = TOKEN_SEARCH_WORK_LIMIT;
+  let remaining = limit;
   for (const record of records) {
-    const textLength =
-      record.id.length +
-      (record.name?.length ?? 0) +
-      record.allMessagesText.length +
-      record.cwd.length +
-      3;
-    remaining -= textLength * tokenCount;
+    remaining -= searchableTextLength(record) * multiplier;
     if (remaining < 0) return false;
   }
   return true;
@@ -262,38 +270,54 @@ function matchConversationTokens(
 
 function regexSearchScores(
   pattern: string,
-  texts: string[],
+  records: ConversationDiscoveryRecord[],
 ): Promise<number[] | undefined> {
+  if (
+    !aggregateSearchWithinBudget(records, 1, SEARCH_CORPUS_LIMIT) ||
+    activeRegexWorkers >= REGEX_WORKER_LIMIT
+  )
+    return Promise.resolve(undefined);
+  activeRegexWorkers++;
   return new Promise((resolve) => {
-    const worker = new Worker(REGEX_WORKER_SOURCE, {
-      eval: true,
-      workerData: { pattern, texts },
-    });
+    let worker: Worker | undefined;
+    let timeout: ReturnType<typeof setTimeout> | undefined;
     let settled = false;
     const finish = (scores?: number[]) => {
       if (settled) return;
       settled = true;
-      clearTimeout(timeout);
-      void worker.terminate().catch(() => undefined);
+      if (timeout) clearTimeout(timeout);
+      if (worker) void worker.terminate().catch(() => undefined);
+      activeRegexWorkers--;
       resolve(scores);
     };
-    const timeout = setTimeout(() => finish(), REGEX_SEARCH_TIMEOUT_MS);
-    worker.once("message", (value: unknown) => {
-      if (
-        Array.isArray(value) &&
-        value.length === texts.length &&
-        value.every(
-          (score) =>
-            typeof score === "number" && Number.isInteger(score) && score >= -1,
-        )
-      ) {
-        finish(value);
-      } else {
-        finish();
-      }
-    });
-    worker.once("error", () => finish());
-    worker.once("exit", () => finish());
+    try {
+      const texts = records.map(searchText);
+      worker = new Worker(REGEX_WORKER_SOURCE, {
+        eval: true,
+        workerData: { pattern, texts },
+      });
+      timeout = setTimeout(() => finish(), REGEX_SEARCH_TIMEOUT_MS);
+      worker.once("message", (value: unknown) => {
+        if (
+          Array.isArray(value) &&
+          value.length === texts.length &&
+          value.every(
+            (score) =>
+              typeof score === "number" &&
+              Number.isInteger(score) &&
+              score >= -1,
+          )
+        ) {
+          finish(value);
+        } else {
+          finish();
+        }
+      });
+      worker.once("error", () => finish());
+      worker.once("exit", () => finish());
+    } catch {
+      finish();
+    }
   });
 }
 
@@ -411,19 +435,20 @@ export async function discoverConversations(
   if (parsed.error) return [];
   if (
     !parsed.regex &&
-    !tokenSearchWithinBudget(nameFiltered, parsed.tokens.length)
+    !aggregateSearchWithinBudget(
+      nameFiltered,
+      parsed.tokens.length,
+      TOKEN_SEARCH_WORK_LIMIT,
+    )
   )
     return [];
   const scored = parsed.regex
-    ? ((
-        await regexSearchScores(
-          parsed.regex.source,
-          nameFiltered.map(searchText),
-        )
-      )?.flatMap((score, index) => {
-        const record = nameFiltered[index];
-        return score < 0 || !record ? [] : [{ record, score: score * 0.1 }];
-      }) ?? [])
+    ? ((await regexSearchScores(parsed.regex.source, nameFiltered))?.flatMap(
+        (score, index) => {
+          const record = nameFiltered[index];
+          return score < 0 || !record ? [] : [{ record, score: score * 0.1 }];
+        },
+      ) ?? [])
     : nameFiltered.flatMap((record) => {
         const match = matchConversationTokens(record, parsed.tokens);
         return match.matches ? [{ record, score: match.score }] : [];

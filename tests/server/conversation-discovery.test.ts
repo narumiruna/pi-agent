@@ -118,6 +118,37 @@ describe("native conversation discovery", () => {
     await expect(search).resolves.toEqual([]);
   });
 
+  test("rejects an oversized regex corpus before worker cloning", async () => {
+    await expect(
+      discoverConversations(
+        [
+          record("oversized-regex", "2026-08-15T00:00:00.000Z", {
+            allMessagesText: `needle${"x".repeat(5_000_000)}`,
+          }),
+        ],
+        { query: "re:needle" },
+      ),
+    ).resolves.toEqual([]);
+  });
+
+  test("rejects excess regex workers before cloning and releases capacity", async () => {
+    const records = [
+      record("regex-capacity", "2026-08-15T00:00:00.000Z", {
+        allMessagesText: `needle ${"a".repeat(100_000)}!`,
+      }),
+    ];
+    const first = discoverConversations(records, { query: "re:(a+)+$" });
+    const second = discoverConversations(records, { query: "re:(a+)+$" });
+
+    await expect(
+      discoverConversations(records, { query: "re:needle" }),
+    ).resolves.toEqual([]);
+    await expect(Promise.all([first, second])).resolves.toEqual([[], []]);
+    await expect(
+      discoverConversations(records, { query: "re:needle" }),
+    ).resolves.toEqual([records[0]]);
+  });
+
   test("rejects token searches whose aggregate transcript work exceeds its bound", async () => {
     const query = Array.from({ length: 250 }, () => "a").join(" ");
     expect(query).toHaveLength(499);
