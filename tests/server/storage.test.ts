@@ -166,14 +166,24 @@ test("does not create a mirror for native conversation JSONL", async () => {
     .map((row) => String(row.name));
   database.close();
 
-  expect(tables).toEqual([
-    "app_owner",
-    "heartbeat_runs",
-    "schema_migrations",
-    "web_sessions",
+  expect(tables).toEqual(
+    expect.arrayContaining([
+      "app_owner",
+      "heartbeat_runs",
+      "schema_migrations",
+      "web_sessions",
+    ]),
+  );
+  const forbiddenMirrorTables = new Set([
+    "conversations",
+    "conversation_messages",
+    "chat_messages",
+    "session_entries",
+    "session_jsonl",
+    "transcripts",
   ]);
-  expect(tables.join(" ")).not.toMatch(
-    /conversation|transcript|jsonl|chat_messages|session_entries/,
+  expect(tables.filter((table) => forbiddenMirrorTables.has(table))).toEqual(
+    [],
   );
 });
 

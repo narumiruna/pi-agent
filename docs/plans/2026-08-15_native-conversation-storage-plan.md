@@ -85,3 +85,4 @@ Static documentation alone can drift; pair it with native projection, activation
 - `npx playwright test`: all 22 setup, desktop, Chats, accessibility, route, and 390px mobile tests passed.
 - `docker build -t pi-agent:local .`: production image built successfully as `sha256:d70d8912d6e44ab9467160af844fb4111dd568a3bbee5f7d29a1ea6bc3562416`.
 - Source and schema audits found no conversation/transcript/JSONL mirror in either app store, no parsing of conversation IDs, and no Web projection of native paths.
+- Codex review identified a weak exact-ID fixture and an over-broad SQLite table assertion; a prefixed decoy now proves target selection, while targeted forbidden-table checks permit unrelated future metadata tables.

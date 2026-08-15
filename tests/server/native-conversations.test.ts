@@ -67,7 +67,13 @@ test("projects native SessionManager records with opaque IDs and no paths", asyn
 });
 
 test("resolves an opaque ID to its current native path before switching", async () => {
-  vi.spyOn(SessionManager, "listAll").mockResolvedValue([nativeSession()]);
+  vi.spyOn(SessionManager, "listAll").mockResolvedValue([
+    nativeSession({
+      id: `${opaqueId}-decoy`,
+      path: "/agent/sessions/--workspace--/decoy.jsonl",
+    }),
+    nativeSession(),
+  ]);
   const switchSession = vi.fn(async () => undefined);
   const service = Object.create(PiService.prototype) as PiService;
   Object.defineProperties(service, {
