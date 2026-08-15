@@ -27,6 +27,12 @@ function nativeSession(
 
 test("projects native SessionManager records with opaque IDs and no paths", async () => {
   const listAll = vi.spyOn(SessionManager, "listAll").mockResolvedValue([
+    nativeSession({
+      id: "opaque.previous_session-v2",
+      path: "/agent/sessions/--workspace--/previous.jsonl",
+      name: "Previous session",
+      messageCount: 3,
+    }),
     nativeSession({ name: "Native session" }),
     nativeSession({
       id: "heartbeat-run",
@@ -55,6 +61,14 @@ test("projects native SessionManager records with opaque IDs and no paths", asyn
   expect(listAll).toHaveBeenCalledOnce();
   expect(conversations).toEqual([
     {
+      id: "opaque.previous_session-v2",
+      name: "Previous session",
+      createdAt: "2026-08-15T00:00:00.000Z",
+      modifiedAt: "2026-08-15T01:00:00.000Z",
+      messageCount: 3,
+      active: false,
+    },
+    {
       id: opaqueId,
       name: "Native session",
       createdAt: "2026-08-15T00:00:00.000Z",
@@ -63,7 +77,7 @@ test("projects native SessionManager records with opaque IDs and no paths", asyn
       active: true,
     },
   ]);
-  expect(JSON.stringify(conversations)).not.toContain(nativePath);
+  expect(JSON.stringify(conversations)).not.toContain("/agent/sessions/");
 });
 
 test("resolves an opaque ID to its current native path before switching", async () => {
