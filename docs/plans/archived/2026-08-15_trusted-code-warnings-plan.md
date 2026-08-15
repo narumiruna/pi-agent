@@ -1,6 +1,6 @@
 # Trusted-Code Warnings Plan
 
-Status: In progress.
+Status: Completed on 2026-08-15.
 
 ## Goal
 
@@ -45,6 +45,14 @@ A warning can create false confidence if it sounds like runtime isolation.
 
 Mitigate with one shared component, persistent placement, explicit full-permission wording, accessibility checks, and Web/E2E regressions across every current surface.
 
+## Outcome
+
+PR [#26](https://github.com/narumiruna/pi-agent/pull/26) merged as `bfb1e5a` after its automatic `verify` check passed.
+
+No submitted review, inline comment, or unresolved thread required changes, and the requested Codex review found no major issues.
+
+The post-merge administrative change checks the matching Roadmap milestone and archives this plan.
+
 ## Plan
 
 - [x] Read the relevant Pi package, skill, extension, security, and MCP integration behavior and inventory current warning surfaces.
@@ -58,8 +66,8 @@ Mitigate with one shared component, persistent placement, explicit full-permissi
 - [x] Run focused tests, `npm run ci`, full local E2E, and the production Docker build; record exact results.
 - [x] Review the complete diff for missing surfaces, transient warning states, misleading sandbox claims, path or secret disclosure, native behavior changes, and unrelated edits.
 - [x] Commit, push, and open dedicated pull request [#26](https://github.com/narumiruna/pi-agent/pull/26) with a signed implementation commit linking this plan and Roadmap milestone.
-- [ ] Resolve every pull-request check and feedback item with regression coverage, then merge the clean pull request.
-- [ ] After merge, check the matching Roadmap milestone and archive this plan through an administrative documentation pull request.
+- [x] Resolve every pull-request check and feedback item and merge clean pull request [#26](https://github.com/narumiruna/pi-agent/pull/26) as `bfb1e5a`; `verify` passed and the final Codex review found no major issues.
+- [x] After merge, check the matching Roadmap milestone and archive this plan through an administrative documentation pull request.
 
 ## Completion Checklist
 
@@ -70,8 +78,8 @@ Mitigate with one shared component, persistent placement, explicit full-permissi
 - [x] No new resource CRUD or parallel security state exists.
 - [x] No path, package source, MCP secret, or runtime internals are exposed.
 - [x] Web, E2E, accessibility, CI, and Docker verification pass.
-- [ ] The dedicated pull request is merged with all feedback resolved.
-- [ ] The Roadmap milestone is checked and this plan is archived only after merge.
+- [x] The dedicated pull request is merged with all feedback resolved.
+- [x] The Roadmap milestone is checked and this plan is archived only after merge.
 
 ## Verification
 
