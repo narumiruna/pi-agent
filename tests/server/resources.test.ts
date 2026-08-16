@@ -63,6 +63,7 @@ async function setup() {
       return result;
     },
     projectTrust: vi.fn(() => ({ required: false, trusted: false })),
+    promptDiagnostics: vi.fn(() => []),
     promptTemplates: vi.fn(() => []),
   };
   return {
@@ -340,6 +341,7 @@ describe("ResourceService", () => {
       reload: async () => loader.reload(),
       mutateResources: async <T>(operation: () => Promise<T>) => operation(),
       projectTrust: () => ({ required: false, trusted: false }),
+      promptDiagnostics: () => loader.getPrompts().diagnostics,
       promptTemplates: () => loader.getPrompts().prompts,
     };
     const service = new ResourceService(
@@ -383,6 +385,7 @@ describe("ResourceService", () => {
       reload: async () => loader.reload(),
       mutateResources: async <T>(operation: () => Promise<T>) => operation(),
       projectTrust: () => ({ required: false, trusted: false }),
+      promptDiagnostics: () => loader.getPrompts().diagnostics,
       promptTemplates: () => loader.getPrompts().prompts,
     };
     const service = new ResourceService(

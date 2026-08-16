@@ -33,6 +33,7 @@ import {
   ResourceConflictError,
   ResourcePermissionError,
   type ResourceService,
+  ResourceValidationError,
 } from "./resources/service.js";
 import type { AppStore, WebSessionRecord } from "./storage/types.js";
 import { WorkspaceError } from "./workspace/errors.js";
@@ -234,6 +235,11 @@ function errorResponse<E extends Env, P extends string, I extends Input>(
     return context.json(apiError("forbidden"), 403);
   if (error instanceof ResourceConflictError)
     return context.json(apiError("conflict"), 409);
+  if (error instanceof ResourceValidationError)
+    return context.json(
+      apiError("bad_request", { diagnostic: error.diagnostic }),
+      400,
+    );
   if (error instanceof DOMException && error.name === "AbortError")
     return context.json(apiError("cancelled"), 400);
   const message = error instanceof Error ? error.message : "";
@@ -758,10 +764,17 @@ export function registerApi<E extends ApiEnv>(
   );
   app.get("/api/prompt-inventory", async (context) =>
     context.json(
-      await services.pi.readResourceSnapshot(async () => ({
-        prompts: await services.resources.listPromptResources(),
-        projectTrust: services.pi.projectTrust(),
-      })),
+      await services.pi.readResourceSnapshot(async () => {
+        const [prompts, diagnostics] = await Promise.all([
+          services.resources.listPromptResources(),
+          services.resources.listPromptDiagnostics(),
+        ]);
+        return {
+          prompts,
+          diagnostics,
+          projectTrust: services.pi.projectTrust(),
+        };
+      }),
     ),
   );
   app.get("/api/commands", async (context) =>

@@ -51,29 +51,36 @@ Collision diagnostics are warnings because Pi has a deterministic winner; invali
 
 - [x] Inspect the merged prompt inventory, mutation APIs, current server/Web tests, Pi 0.84.1 prompt-template docs, `ResourceLoader` diagnostics, frontmatter implementation, and installed `yaml` 2.9 exports/types/browser support.
 - [x] Create fresh branch `narumiruna/feat/prompt-diagnostics` from merged `main` and add this dedicated plan before implementation.
-- [ ] Add shared prompt diagnostic contracts, UTF-8 limits, and pure name/frontmatter/content validation.
-- [ ] Expose Pi-native prompt diagnostics through the existing runtime adapter without leaking loader internals to the Web.
-- [ ] Project active and omitted-canonical-file validation plus native collision results into bounded logical diagnostics.
-- [ ] Reject invalid create/update content before persistence while preserving existing conflict, trust, and reload behavior.
-- [ ] Return diagnostics from `/api/prompt-inventory` and keep command inventory based only on Pi’s active prompts.
-- [ ] Render localized inventory diagnostics and live create/edit validation; block only error diagnostics.
-- [ ] Add focused shared/server/Web unit coverage for invalid names, malformed or mistyped frontmatter, multibyte size limits, omitted files, path redaction, collision warnings, and write rejection.
-- [ ] Run the directly related unit suites and formatting checks; record exact results.
-- [ ] Audit scope against this plan and the Roadmap milestone, then update this plan’s evidence and checklist.
+- [x] Add shared prompt diagnostic contracts, UTF-8 limits, and pure name/frontmatter/content validation.
+- [x] Expose Pi-native prompt diagnostics through the existing runtime adapter without leaking loader internals to the Web.
+- [x] Project active and omitted-canonical-file validation plus native collision results into bounded logical diagnostics.
+- [x] Reject invalid create/update content before persistence while preserving existing conflict, trust, and reload behavior.
+- [x] Return diagnostics from `/api/prompt-inventory` and keep command inventory based only on Pi’s active prompts.
+- [x] Render localized inventory diagnostics and live create/edit validation; block only error diagnostics.
+- [x] Add focused shared/server/Web unit coverage for invalid names, malformed or mistyped frontmatter, multibyte size limits, omitted files, path redaction, collision warnings, and write rejection.
+- [x] Run the directly related unit suites and formatting checks; record exact results.
+- [x] Audit scope against this plan and the Roadmap milestone, then update this plan’s evidence and checklist.
 - [ ] Commit, push, open one dedicated signed implementation pull request linking this plan and Roadmap milestone, address blocking feedback, and merge.
 - [ ] After merge, check the matching Roadmap milestone and archive this plan through an administrative documentation pull request.
 
 ## Completion Checklist
 
-- [ ] Invalid prompt names, YAML frontmatter, UTF-8 content size, and native name collisions appear as structured, localized diagnostics.
-- [ ] Malformed canonical user and trusted-project prompt files remain outside Pi’s active command inventory but have path-safe diagnostics.
-- [ ] Invalid writes are rejected before persistence and do not trigger a broken post-save disappearance.
-- [ ] Collision warnings identify Pi’s winner and hidden loser without exposing absolute host paths or changing precedence.
-- [ ] Prompt inventory refresh replaces stale diagnostics after mutations and trust/reload changes.
-- [ ] Directly related shared, server, API, and Web unit tests pass.
+- [x] Invalid prompt names, YAML frontmatter, UTF-8 content size, and native name collisions appear as structured, localized diagnostics.
+- [x] Malformed canonical user and trusted-project prompt files remain outside Pi’s active command inventory but have path-safe diagnostics.
+- [x] Invalid writes are rejected before persistence and do not trigger a broken post-save disappearance.
+- [x] Collision warnings identify Pi’s winner and hidden loser without exposing absolute host paths or changing precedence.
+- [x] Prompt inventory refresh replaces stale diagnostics after mutations and trust/reload changes.
+- [x] Directly related shared, server, API, and Web unit tests pass.
 - [ ] Dedicated implementation PR is merged with blocking feedback resolved.
 - [ ] The Roadmap milestone is checked and this plan is archived only after merge.
 
 ## Verification
 
-- Pending implementation.
+- `npm test -- tests/server/prompt-validation.test.ts tests/server/prompt-diagnostics.test.ts tests/server/resources.test.ts tests/server/project-trust.test.ts tests/server/api.test.ts tests/server/agent.test.ts tests/web/prompts.test.tsx` passed all 197 focused tests.
+- `npm run check` passed Biome formatting and lint checks across 145 files.
+- `npm run build:server && npm run build:web` passed TypeScript server compilation and the production Web build; Vite reported only the existing chunk-size advisory.
+- Shared tests pin valid native names, UTF-8 filename/content boundaries, documented frontmatter, malformed YAML, non-map YAML, and non-string Pi fields.
+- Resource tests use Pi’s real `DefaultResourceLoader` to prove malformed canonical prompts stay out of active commands while validation and first-winner collision diagnostics remain logical-path-only.
+- API tests pin structured validation error codes and snapshot-coherent inventory diagnostics without adding diagnostics to command expansion.
+- Web tests cover localized inventory/live diagnostics, warning-only collisions, error-only write blocking, and replacement of stale diagnostics after native refresh.
+- Diff audit confirmed no prompt discovery, precedence, provenance, trust, package management, command expansion, or reload lifecycle replacement; the canonical scan produces diagnostics only.

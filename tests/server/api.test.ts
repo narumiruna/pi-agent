@@ -14,6 +14,7 @@ import {
 import {
   ResourceConflictError,
   ResourcePermissionError,
+  ResourceValidationError,
 } from "../../src/server/resources/service.js";
 import { WorkspaceError } from "../../src/server/workspace/errors.js";
 
@@ -806,7 +807,15 @@ describe("API contracts", () => {
 
   test("returns prompt inventory and trust from one resource snapshot", async () => {
     const prompts = [{ id: "prompt_inventory" }];
+    const diagnostics = [
+      {
+        code: "invalid_frontmatter" as const,
+        severity: "error" as const,
+        path: "~/.pi/agent/prompts/broken.md",
+      },
+    ];
     const listPromptResources = vi.fn(async () => prompts);
+    const listPromptDiagnostics = vi.fn(async () => diagnostics);
     const readResourceSnapshot = vi.fn(
       async <T>(operation: () => Promise<T> | T): Promise<T> =>
         await operation(),
@@ -816,7 +825,7 @@ describe("API contracts", () => {
         projectTrust: () => ({ required: true, trusted: false }),
         readResourceSnapshot,
       } as never,
-      resources: { listPromptResources } as never,
+      resources: { listPromptDiagnostics, listPromptResources } as never,
     });
 
     const response = await app.request("/api/prompt-inventory");
@@ -824,9 +833,11 @@ describe("API contracts", () => {
     expect(response.status).toBe(200);
     expect(await response.json()).toEqual({
       prompts,
+      diagnostics,
       projectTrust: { required: true, trusted: false },
     });
     expect(readResourceSnapshot).toHaveBeenCalledOnce();
+    expect(listPromptDiagnostics).toHaveBeenCalledOnce();
     expect(listPromptResources).toHaveBeenCalledOnce();
   });
 
@@ -1257,7 +1268,11 @@ describe("API contracts", () => {
         new ResourcePermissionError("Project prompts are not trusted"),
       )
       .mockRejectedValueOnce(new ResourceConflictError("Prompt exists"));
-    const updatePromptResource = vi.fn(async () => undefined);
+    const updatePromptResource = vi
+      .fn<() => Promise<void>>()
+      .mockRejectedValueOnce(
+        new ResourceValidationError("invalid_frontmatter"),
+      );
     const app = appWith({
       resources: { createPromptResource, updatePromptResource } as never,
     });
@@ -1334,6 +1349,14 @@ describe("API contracts", () => {
         scope: "temporary",
       }),
     });
+    const invalidFrontmatter = await app.request(
+      `/api/prompts/prompt_${"a".repeat(43)}`,
+      {
+        method: "PUT",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ content: "---\ndescription: [\n---\nBody" }),
+      },
+    );
     const extraUpdate = await app.request(
       `/api/prompts/prompt_${"a".repeat(43)}`,
       {
@@ -1366,9 +1389,16 @@ describe("API contracts", () => {
     expect(longName.status).toBe(400);
     expect(oversizedUtf8Name.status).toBe(400);
     expect(invalidScope.status).toBe(400);
+    expect(invalidFrontmatter.status).toBe(400);
+    expect(await invalidFrontmatter.json()).toEqual({
+      error: {
+        code: "bad_request",
+        params: { diagnostic: "invalid_frontmatter" },
+      },
+    });
     expect(extraUpdate.status).toBe(400);
     expect(extra.status).toBe(400);
-    expect(updatePromptResource).not.toHaveBeenCalled();
+    expect(updatePromptResource).toHaveBeenCalledOnce();
   });
 
   test("returns conflict when a legacy template would lose native precedence", async () => {

@@ -313,6 +313,10 @@ Package-origin, temporary, settings-added files outside those canonical director
 
 New templates are created only in Pi’s canonical global or trusted-project prompt directories, reject existing or higher-precedence native winners, and never overwrite an existing file.
 
+The inventory shows path-safe diagnostics for invalid command names, YAML frontmatter, the one-megabyte UTF-8 content limit, and Pi-native name collisions.
+
+Invalid prompt writes are rejected before persistence, while collision warnings preserve Pi’s native first-winner precedence.
+
 Prompt mutations refresh trust and discovery under Pi’s maintenance lease, use atomic persistence, and reload both native sessions afterward, so `/command` discovery refreshes without a parallel prompt store or command cache.
 
 Chat autocomplete uses Pi’s resolved extension invocation names plus native prompt argument hints and safe source/provenance labels.
