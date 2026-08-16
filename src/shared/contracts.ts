@@ -88,16 +88,56 @@ export function resourceProvenanceLabel(
 }
 
 export interface WebResourceCommand {
+  id: string;
   name: string;
   description?: string;
+  argumentHint?: string;
   source: "extension" | "prompt" | "skill";
+  sourceLabel: string;
   provenance: WebResourceProvenance;
+}
+
+export interface WebPromptInventory {
+  prompts: WebPromptResource[];
+  projectTrust: WebProjectTrust;
 }
 
 export interface WebPromptTemplateDocument {
   name: string;
   content: string;
   provenance: WebResourceProvenance;
+}
+
+export const PROMPT_NAME_PATTERN =
+  "^(?!\\.)[^\\s/\\\\\\u0000-\\u001F\\u007F]+$";
+export const MAX_PROMPT_NAME_LENGTH = 200;
+export const MAX_PROMPT_FILENAME_BYTES = 255;
+const PROMPT_NAME = new RegExp(PROMPT_NAME_PATTERN);
+const UTF8_ENCODER = new TextEncoder();
+
+export function isValidPromptName(name: string): boolean {
+  return (
+    name.length >= 1 &&
+    name.length <= MAX_PROMPT_NAME_LENGTH &&
+    UTF8_ENCODER.encode(`${name}.md`).byteLength <= MAX_PROMPT_FILENAME_BYTES &&
+    PROMPT_NAME.test(name)
+  );
+}
+
+export type WebPromptWriteScope = "project" | "user";
+
+export interface WebPromptResource {
+  id: string;
+  name: string;
+  description: string;
+  argumentHint?: string;
+  content: string;
+  contentTruncated: boolean;
+  provenance: WebResourceProvenance;
+  source: string;
+  path: string;
+  editable: boolean;
+  deletable: boolean;
 }
 
 export interface WebPackageSummary {
@@ -247,6 +287,8 @@ export interface WebEventDataMap {
   };
   package_progress: WebPackageProgress;
   provider_auth: unknown;
+  resource_snapshot_changed: Record<string, never>;
+  resources_reloaded: Record<string, never>;
   run_status: {
     status: string;
     runId?: string;

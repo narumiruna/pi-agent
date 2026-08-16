@@ -1,16 +1,29 @@
 import { writeFileSync } from "node:fs";
-import { access, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import {
+  access,
+  mkdir,
+  mkdtemp,
+  readFile,
+  rm,
+  writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { AuthInteraction } from "@earendil-works/pi-ai";
-import { SessionManager } from "@earendil-works/pi-coding-agent";
+import {
+  SessionManager,
+  SettingsManager,
+} from "@earendil-works/pi-coding-agent";
 import { afterEach, describe, expect, test, vi } from "vitest";
 import { EventHub } from "../../src/server/agent/events.js";
 import { PiService } from "../../src/server/agent/pi-service.js";
+import { ProjectTrustPolicy } from "../../src/server/agent/project-trust.js";
 import { RunCoordinator } from "../../src/server/agent/run-coordinator.js";
 import { projectTranscript } from "../../src/server/agent/transcript.js";
+import { opaquePromptId } from "../../src/server/api-metadata.js";
 import { InteractionBroker } from "../../src/server/interactions/broker.js";
 import { WebExtensionState } from "../../src/server/interactions/web-state.js";
+import { ResourceService } from "../../src/server/resources/service.js";
 
 const temporaryDirectories: string[] = [];
 
@@ -39,6 +52,54 @@ describe("RunCoordinator", () => {
     await expect(
       coordinator.run("chat", async () => undefined),
     ).resolves.toBeUndefined();
+  });
+
+  test("serves snapshots during active agent runs", async () => {
+    const coordinator = new RunCoordinator();
+    let releaseRun: (() => void) | undefined;
+    const run = coordinator.run(
+      "chat",
+      () =>
+        new Promise<void>((resolve) => {
+          releaseRun = resolve;
+        }),
+    );
+    await vi.waitFor(() => expect(releaseRun).toBeDefined());
+
+    await expect(coordinator.readSnapshot(() => "live snapshot")).resolves.toBe(
+      "live snapshot",
+    );
+
+    releaseRun?.();
+    await run;
+  });
+
+  test("gives maintenance exclusive access to snapshots", async () => {
+    const coordinator = new RunCoordinator();
+    let releaseSnapshot: (() => void) | undefined;
+    const snapshot = coordinator.readSnapshot(
+      () =>
+        new Promise<void>((resolve) => {
+          releaseSnapshot = resolve;
+        }),
+    );
+    await vi.waitFor(() => expect(releaseSnapshot).toBeDefined());
+    const maintenanceTask = vi.fn(async () => undefined);
+    const laterSnapshotTask = vi.fn(() => "later snapshot");
+
+    const maintenance = coordinator.run("maintenance", maintenanceTask);
+    const laterSnapshot = coordinator.readSnapshot(laterSnapshotTask);
+    await Promise.resolve();
+    expect(coordinator.isIdle).toBe(false);
+    expect(maintenanceTask).not.toHaveBeenCalled();
+    expect(laterSnapshotTask).not.toHaveBeenCalled();
+
+    releaseSnapshot?.();
+    await snapshot;
+    await maintenance;
+    await expect(laterSnapshot).resolves.toBe("later snapshot");
+    expect(maintenanceTask).toHaveBeenCalledOnce();
+    expect(laterSnapshotTask).toHaveBeenCalledOnce();
   });
 
   test("aborts the current run through its registered abort function", async () => {
@@ -200,25 +261,95 @@ describe("Pi resource provenance", () => {
       scope: "project" | "temporary" | "user",
       origin: "package" | "top-level",
     ) => ({
-      path: `/private/${scope}/${origin}`,
-      source: "npm:secret-resource",
+      path:
+        scope === "project"
+          ? `/private/project/.pi/prompts/${origin}.md`
+          : scope === "user"
+            ? `/private/agent/prompts/${origin}.md`
+            : `/private/temporary/${origin}.md`,
+      source:
+        origin === "package"
+          ? "https://secret@example.com/org/resource.git?token=private"
+          : "local",
       scope,
       origin,
     });
     const service = Object.create(PiService.prototype) as PiService;
+    Object.defineProperty(service, "config", {
+      value: {
+        agentDir: "/private/agent",
+        workspace: "/private/project",
+      },
+    });
     Object.defineProperty(service, "runtime", {
       value: {
         session: {
+          extensionRunner: {
+            getRegisteredCommands: () => [
+              {
+                invocationName: "shared:1",
+                name: "shared",
+                description: "First shared command",
+                sourceInfo: {
+                  ...sourceInfo("user", "top-level"),
+                  path: "/private/agent/extensions/first.js",
+                },
+              },
+              {
+                invocationName: "shared:2",
+                name: "shared",
+                description: "Second shared command",
+                sourceInfo: sourceInfo("temporary", "top-level"),
+              },
+              {
+                invocationName: "configured",
+                name: "configured",
+                description: "Configured extension command",
+                sourceInfo: {
+                  ...sourceInfo("user", "top-level"),
+                  path: "/private/configured/extension.js",
+                },
+              },
+              {
+                invocationName: "shadowed",
+                name: "shadowed",
+                description: "Extension winner",
+                sourceInfo: {
+                  ...sourceInfo("user", "top-level"),
+                  path: "/private/agent/extensions/shadowed.js",
+                },
+              },
+            ],
+          },
           promptTemplates: [
             {
               name: "project-prompt",
               description: "Project prompt",
+              argumentHint: "<PR>",
               sourceInfo: sourceInfo("project", "top-level"),
             },
             {
               name: "user-package-prompt",
               description: "User package prompt",
               sourceInfo: sourceInfo("user", "package"),
+            },
+            {
+              name: "shadowed",
+              description: "Shadowed prompt",
+              sourceInfo: sourceInfo("user", "top-level"),
+            },
+            {
+              name: "skill:configured-skill",
+              description: "Shadowed skill prompt",
+              sourceInfo: sourceInfo("user", "top-level"),
+            },
+            {
+              name: "extension-prompt",
+              description: "Extension prompt",
+              sourceInfo: {
+                ...sourceInfo("temporary", "top-level"),
+                source: "extension:review-tools",
+              },
             },
           ],
         },
@@ -246,6 +377,16 @@ describe("Pi resource provenance", () => {
                 },
               ],
             }),
+            getPrompts: () => ({
+              prompts: [
+                {
+                  name: "native-prompt",
+                  description: "Native prompt",
+                  sourceInfo: sourceInfo("user", "top-level"),
+                },
+              ],
+              diagnostics: [],
+            }),
             getSkills: () => ({
               skills: [
                 {
@@ -258,6 +399,14 @@ describe("Pi resource provenance", () => {
                   description: "Temporary package skill",
                   sourceInfo: sourceInfo("temporary", "package"),
                 },
+                {
+                  name: "configured-skill",
+                  description: "Configured skill",
+                  sourceInfo: {
+                    ...sourceInfo("user", "top-level"),
+                    path: "/private/configured/skills/configured/SKILL.md",
+                  },
+                },
               ],
             }),
           },
@@ -265,40 +414,76 @@ describe("Pi resource provenance", () => {
       },
     });
 
-    const commands = service.commands();
+    const projectPrompt = sourceInfo("project", "top-level");
+    const userPackagePrompt = sourceInfo("user", "package");
+    const userPrompt = sourceInfo("user", "top-level");
+    const extensionPrompt = {
+      ...sourceInfo("temporary", "top-level"),
+      source: "extension:review-tools",
+    };
+    const commands = service.commands([
+      {
+        id: opaquePromptId(projectPrompt),
+        description: "Project prompt",
+        argumentHint: "<PR>",
+      },
+      {
+        id: opaquePromptId(userPackagePrompt),
+        description: "User package prompt",
+      },
+      { id: opaquePromptId(userPrompt), description: "Shadowed prompt" },
+      {
+        id: opaquePromptId(extensionPrompt),
+        description: "Extension prompt",
+      },
+    ] as never);
 
-    expect(commands).toEqual([
+    expect(service.promptTemplates()).toEqual([
+      expect.objectContaining({ name: "native-prompt" }),
+    ]);
+    expect(commands.map(({ name, source }) => ({ name, source }))).toEqual([
+      { name: "shared:1", source: "extension" },
+      { name: "shared:2", source: "extension" },
+      { name: "configured", source: "extension" },
+      { name: "shadowed", source: "extension" },
+      { name: "project-prompt", source: "prompt" },
+      { name: "user-package-prompt", source: "prompt" },
+      { name: "shadowed", source: "prompt" },
+      { name: "skill:configured-skill", source: "prompt" },
+      { name: "extension-prompt", source: "prompt" },
+      { name: "skill:project-package-skill", source: "skill" },
+      { name: "skill:temporary-package-skill", source: "skill" },
+      { name: "skill:configured-skill", source: "skill" },
+    ]);
+    expect(commands[4]).toEqual(
       expect.objectContaining({
-        name: "user-command",
-        source: "extension",
-        provenance: { scope: "user", origin: "top-level" },
-      }),
-      expect.objectContaining({
-        name: "temporary-command",
-        source: "extension",
-        provenance: { scope: "temporary", origin: "top-level" },
-      }),
-      expect.objectContaining({
-        name: "project-prompt",
-        source: "prompt",
+        id: expect.stringMatching(/^command_/),
+        argumentHint: "<PR>",
+        sourceLabel: "local",
         provenance: { scope: "project", origin: "top-level" },
       }),
+    );
+    expect(commands[5]).toEqual(
+      expect.objectContaining({ sourceLabel: "example.com/org/resource" }),
+    );
+    expect(commands[8]).toEqual(
+      expect.objectContaining({ sourceLabel: "extension:review-tools" }),
+    );
+    expect(commands[1]).toEqual(
       expect.objectContaining({
-        name: "user-package-prompt",
-        source: "prompt",
-        provenance: { scope: "user", origin: "package" },
+        sourceLabel: "CLI",
+        provenance: { scope: "temporary", origin: "top-level" },
       }),
-      expect.objectContaining({
-        name: "skill:project-package-skill",
-        source: "skill",
-        provenance: { scope: "project", origin: "package" },
-      }),
-      expect.objectContaining({
-        name: "skill:temporary-package-skill",
-        source: "skill",
-        provenance: { scope: "temporary", origin: "package" },
-      }),
-    ]);
+    );
+    expect(commands[2]).toEqual(
+      expect.objectContaining({ sourceLabel: "settings" }),
+    );
+    expect(commands[11]).toEqual(
+      expect.objectContaining({ sourceLabel: "settings" }),
+    );
+    expect(new Set(commands.map((command) => command.id)).size).toBe(
+      commands.length,
+    );
     expect(JSON.stringify(commands)).not.toMatch(/private|secret|sourceInfo/);
   });
 });
@@ -309,6 +494,7 @@ describe("Pi project trust", () => {
       coordinator?: RunCoordinator;
       persistError?: Error;
       reloadError?: Error;
+      required?: boolean;
     } = {},
   ) {
     let trusted = false;
@@ -326,15 +512,25 @@ describe("Pi project trust", () => {
     const setProjectTrusted = vi.fn((value: boolean) => {
       trusted = value;
     });
+    const assertCanEnable = vi.fn(async () => undefined);
+    const commitRememberedDecision = vi.fn();
+    const discardRememberedDecision = vi.fn();
+    const setResolutionOverride = vi.fn();
+    const clearResolutionOverride = vi.fn();
     const persist = options.persistError
       ? vi.fn(() => {
           throw options.persistError;
         })
       : vi.fn();
+    const publish = vi.fn();
     const service = Object.create(PiService.prototype) as PiService;
     Object.defineProperties(service, {
       coordinator: {
         value: options.coordinator ?? { waitForIdle, run },
+      },
+      events: { value: { publish } },
+      discoverProjectTrustExtensions: {
+        value: async () => ({ extensions: [], errors: [] }),
       },
       settingsManager: {
         value: {
@@ -342,12 +538,29 @@ describe("Pi project trust", () => {
           setProjectTrusted,
         },
       },
-      runtime: { value: { session: { reload: chatReload } } },
+      runtime: {
+        value: {
+          session: { reload: chatReload },
+          services: {
+            resourceLoader: {
+              getExtensions: () => ({ extensions: [], errors: [] }),
+            },
+          },
+        },
+      },
       heartbeatSession: { value: { reload: heartbeatReload } },
       projectTrustPolicy: {
         value: {
-          status: () => ({ required: true, trusted }),
+          status: () => ({
+            required: options.required ?? true,
+            trusted,
+          }),
           persist,
+          assertCanEnable,
+          commitRememberedDecision,
+          discardRememberedDecision,
+          setResolutionOverride,
+          clearResolutionOverride,
         },
       },
     });
@@ -359,9 +572,203 @@ describe("Pi project trust", () => {
       heartbeatReload,
       setProjectTrusted,
       persist,
+      assertCanEnable,
+      commitRememberedDecision,
+      discardRememberedDecision,
+      setResolutionOverride,
+      clearResolutionOverride,
+      publish,
       trusted: () => trusted,
     };
   }
+
+  test("discovers a trust policy extension added after startup", async () => {
+    const root = await mkdtemp(join(tmpdir(), "pi-agent-late-trust-"));
+    temporaryDirectories.push(root);
+    const workspace = join(root, "workspace");
+    const agentDir = join(root, "agent");
+    await Promise.all([
+      mkdir(join(workspace, ".pi", "prompts"), { recursive: true }),
+      mkdir(join(agentDir, "extensions"), { recursive: true }),
+    ]);
+    await writeFile(
+      join(workspace, ".pi", "prompts", "project.md"),
+      "Project prompt\n",
+    );
+    const settingsManager = SettingsManager.create(workspace, agentDir, {
+      projectTrusted: true,
+    });
+    const service = Object.create(PiService.prototype) as PiService;
+    Object.defineProperties(service, {
+      config: { value: { workspace, agentDir } },
+      settingsManager: { value: settingsManager },
+    });
+    const discover = () =>
+      (
+        service as unknown as {
+          discoverProjectTrustExtensions(): Promise<{
+            extensions: Array<{ path: string }>;
+            errors: unknown[];
+          }>;
+        }
+      ).discoverProjectTrustExtensions();
+    expect((await discover()).extensions).toEqual([]);
+
+    const extensionPath = join(agentDir, "extensions", "deny.js");
+    await writeFile(
+      extensionPath,
+      'export default function (pi) { pi.on("project_trust", () => ({ trusted: "no" })); }\n',
+    );
+    const setProjectTrusted = vi.spyOn(settingsManager, "setProjectTrusted");
+    const extensions = await discover();
+    expect(setProjectTrusted).not.toHaveBeenCalled();
+    expect(settingsManager.isProjectTrusted()).toBe(true);
+    expect(extensions.extensions).toEqual([
+      expect.objectContaining({ path: extensionPath }),
+    ]);
+    const policy = new ProjectTrustPolicy(
+      workspace,
+      agentDir,
+      settingsManager,
+      { get: () => true, set: vi.fn() },
+    );
+
+    await expect(policy.refresh(extensions as never)).resolves.toEqual({
+      required: true,
+      trusted: false,
+    });
+  });
+
+  test("keeps the trust resolver active before the first project resource", async () => {
+    const root = await mkdtemp(join(tmpdir(), "pi-agent-first-trust-"));
+    temporaryDirectories.push(root);
+    const workspace = join(root, "workspace");
+    const agentDir = join(root, "agent");
+    const dataDir = join(root, "data");
+    await Promise.all([
+      mkdir(workspace, { recursive: true }),
+      mkdir(join(agentDir, "extensions"), { recursive: true }),
+      mkdir(dataDir, { recursive: true }),
+    ]);
+    await writeFile(
+      join(agentDir, "settings.json"),
+      '{"defaultProjectTrust":"always"}\n',
+    );
+    const trustEventsPath = join(root, "trust-events.log");
+    await writeFile(
+      join(agentDir, "extensions", "deny-first-project.js"),
+      `import { appendFileSync } from "node:fs";
+export default function (pi) {
+  pi.on("project_trust", () => {
+    appendFileSync(${JSON.stringify(trustEventsPath)}, "resolved\\n");
+    return { trusted: "no" };
+  });
+}
+`,
+    );
+    const previousAgentDir = process.env.PI_CODING_AGENT_DIR;
+    const events = new EventHub();
+    let service: PiService | undefined;
+    try {
+      service = await PiService.create(
+        {
+          host: "127.0.0.1",
+          port: 30_000,
+          appOrigin: "http://localhost:30000",
+          agentDir,
+          dataDir,
+          workspace,
+          sqlitePath: join(dataDir, "app.db"),
+          agentTools: ["read"],
+          auth: { mode: "disabled" },
+        },
+        events,
+        new InteractionBroker(events),
+      );
+      expect(service.projectTrust()).toEqual({
+        required: false,
+        trusted: true,
+      });
+      const resources = new ResourceService(
+        agentDir,
+        workspace,
+        service.packageManager,
+        service,
+      );
+
+      await resources.createPromptResource(
+        "project",
+        "first-project",
+        "First project prompt\n",
+      );
+
+      await expect(
+        readFile(join(workspace, ".pi", "prompts", "first-project.md"), "utf8"),
+      ).resolves.toBe("First project prompt\n");
+      expect(service.projectTrust()).toEqual({
+        required: true,
+        trusted: false,
+      });
+      expect(
+        service
+          .promptTemplates()
+          .some((prompt) => prompt.name === "first-project"),
+      ).toBe(false);
+      await expect(readFile(trustEventsPath, "utf8")).resolves.toBe(
+        "resolved\n",
+      );
+    } finally {
+      await service?.dispose();
+      if (previousAgentDir === undefined)
+        delete process.env.PI_CODING_AGENT_DIR;
+      else process.env.PI_CODING_AGENT_DIR = previousAgentDir;
+    }
+  });
+
+  test("discovers trust policies from global extension settings", async () => {
+    const root = await mkdtemp(join(tmpdir(), "pi-agent-global-trust-"));
+    temporaryDirectories.push(root);
+    const workspace = join(root, "workspace");
+    const agentDir = join(root, "agent");
+    const extensionPath = join(root, "configured", "trust.js");
+    await Promise.all([
+      mkdir(workspace, { recursive: true }),
+      mkdir(agentDir, { recursive: true }),
+      mkdir(join(root, "configured"), { recursive: true }),
+    ]);
+    await writeFile(join(agentDir, "settings.json"), "{}\n");
+    const settingsManager = SettingsManager.create(workspace, agentDir, {
+      projectTrusted: true,
+    });
+    const service = Object.create(PiService.prototype) as PiService;
+    Object.defineProperties(service, {
+      config: { value: { workspace, agentDir } },
+      settingsManager: { value: settingsManager },
+    });
+
+    await writeFile(
+      extensionPath,
+      'export default function (pi) { pi.on("project_trust", () => ({ trusted: "no" })); }\n',
+    );
+    await writeFile(
+      join(agentDir, "settings.json"),
+      `${JSON.stringify({ extensions: [extensionPath] })}\n`,
+    );
+
+    const result = await (
+      service as unknown as {
+        discoverProjectTrustExtensions(): Promise<{
+          extensions: Array<{ path: string }>;
+          errors: unknown[];
+        }>;
+      }
+    ).discoverProjectTrustExtensions();
+
+    expect(result.extensions).toEqual([
+      expect.objectContaining({ path: extensionPath }),
+    ]);
+    expect(settingsManager.isProjectTrusted()).toBe(true);
+  });
 
   test("re-resolves native trust before every general resource reload", async () => {
     const waitForIdle = vi.fn(async () => undefined);
@@ -378,14 +785,37 @@ describe("Pi project trust", () => {
     });
     const chatReload = vi.fn(async () => undefined);
     const heartbeatReload = vi.fn(async () => undefined);
+    const setResolutionOverride = vi.fn();
+    const clearResolutionOverride = vi.fn();
     const service = Object.create(PiService.prototype) as PiService;
     Object.defineProperties(service, {
       coordinator: { value: { waitForIdle, run } },
+      events: { value: { publish: vi.fn() } },
+      discoverProjectTrustExtensions: {
+        value: async () => ({ extensions: [], errors: [] }),
+      },
       settingsManager: {
         value: { isProjectTrusted: () => trusted, setProjectTrusted },
       },
-      projectTrustPolicy: { value: { refresh } },
-      runtime: { value: { session: { reload: chatReload } } },
+      projectTrustPolicy: {
+        value: {
+          refresh,
+          commitRememberedDecision: vi.fn(),
+          discardRememberedDecision: vi.fn(),
+          setResolutionOverride,
+          clearResolutionOverride,
+        },
+      },
+      runtime: {
+        value: {
+          session: { reload: chatReload },
+          services: {
+            resourceLoader: {
+              getExtensions: () => ({ extensions: [], errors: [] }),
+            },
+          },
+        },
+      },
       heartbeatSession: { value: { reload: heartbeatReload } },
     });
 
@@ -395,11 +825,190 @@ describe("Pi project trust", () => {
     expect(run).toHaveBeenCalledWith("maintenance", expect.any(Function));
     expect(refresh).toHaveBeenCalledOnce();
     expect(refresh.mock.invocationCallOrder[0]).toBeLessThan(
+      setResolutionOverride.mock.invocationCallOrder[0] ?? 0,
+    );
+    expect(setResolutionOverride).toHaveBeenCalledWith(false);
+    expect(setResolutionOverride.mock.invocationCallOrder[0]).toBeLessThan(
       chatReload.mock.invocationCallOrder[0] ?? 0,
     );
+    expect(clearResolutionOverride).toHaveBeenCalledOnce();
     expect(chatReload).toHaveBeenCalledOnce();
     expect(heartbeatReload).toHaveBeenCalledOnce();
     expect(trusted).toBe(false);
+  });
+
+  test("holds prompt mutations under maintenance and reloads after persistence", async () => {
+    const waitForIdle = vi.fn(async () => undefined);
+    const run = vi.fn(async (_kind: string, task: () => Promise<unknown>) =>
+      task(),
+    );
+    const refresh = vi.fn(async () => ({ required: true, trusted: true }));
+    const operation = vi.fn(async () => "written");
+    const chatReload = vi.fn(async () => undefined);
+    const heartbeatReload = vi.fn(async () => undefined);
+    const setResolutionOverride = vi.fn();
+    const clearResolutionOverride = vi.fn();
+    const service = Object.create(PiService.prototype) as PiService;
+    Object.defineProperties(service, {
+      coordinator: { value: { waitForIdle, run } },
+      events: { value: { publish: vi.fn() } },
+      discoverProjectTrustExtensions: {
+        value: async () => ({ extensions: [], errors: [] }),
+      },
+      settingsManager: {
+        value: {
+          isProjectTrusted: () => true,
+          setProjectTrusted: vi.fn(),
+        },
+      },
+      projectTrustPolicy: {
+        value: {
+          refresh,
+          commitRememberedDecision: vi.fn(),
+          discardRememberedDecision: vi.fn(),
+          setResolutionOverride,
+          clearResolutionOverride,
+        },
+      },
+      runtime: {
+        value: {
+          session: { reload: chatReload },
+          services: {
+            resourceLoader: {
+              getExtensions: () => ({ extensions: [], errors: [] }),
+            },
+          },
+        },
+      },
+      heartbeatSession: { value: { reload: heartbeatReload } },
+    });
+
+    await expect(service.mutateResources(operation)).resolves.toBe("written");
+
+    expect(waitForIdle).toHaveBeenCalledOnce();
+    expect(run).toHaveBeenCalledWith("maintenance", expect.any(Function));
+    expect(refresh).toHaveBeenCalledTimes(2);
+    expect(refresh.mock.invocationCallOrder[0]).toBeLessThan(
+      chatReload.mock.invocationCallOrder[0] ?? 0,
+    );
+    expect(chatReload.mock.invocationCallOrder[0]).toBeLessThan(
+      operation.mock.invocationCallOrder[0] ?? 0,
+    );
+    expect(operation.mock.invocationCallOrder[0]).toBeLessThan(
+      refresh.mock.invocationCallOrder[1] ?? 0,
+    );
+    expect(refresh.mock.invocationCallOrder[1]).toBeLessThan(
+      chatReload.mock.invocationCallOrder[1] ?? 0,
+    );
+    expect(setResolutionOverride).toHaveBeenCalledTimes(2);
+    expect(setResolutionOverride).toHaveBeenNthCalledWith(1, true);
+    expect(setResolutionOverride).toHaveBeenNthCalledWith(2, true);
+    expect(clearResolutionOverride).toHaveBeenCalledTimes(2);
+    expect(chatReload).toHaveBeenCalledTimes(2);
+    expect(heartbeatReload).toHaveBeenCalledTimes(2);
+  });
+
+  test("does not publish a resource reload when the post-mutation reload fails", async () => {
+    const operation = vi.fn(async () => "written");
+    const chatReload = vi
+      .fn<() => Promise<void>>()
+      .mockResolvedValueOnce(undefined)
+      .mockRejectedValueOnce(new Error("post-mutation reload failed"));
+    const heartbeatReload = vi.fn(async () => undefined);
+    const publish = vi.fn();
+    const service = Object.create(PiService.prototype) as PiService;
+    Object.defineProperties(service, {
+      coordinator: { value: new RunCoordinator() },
+      events: { value: { publish } },
+      discoverProjectTrustExtensions: {
+        value: async () => ({ extensions: [], errors: [] }),
+      },
+      settingsManager: {
+        value: {
+          isProjectTrusted: () => true,
+          setProjectTrusted: vi.fn(),
+        },
+      },
+      projectTrustPolicy: {
+        value: {
+          refresh: vi.fn(async () => undefined),
+          commitRememberedDecision: vi.fn(),
+          discardRememberedDecision: vi.fn(),
+          setResolutionOverride: vi.fn(),
+          clearResolutionOverride: vi.fn(),
+        },
+      },
+      runtime: {
+        value: {
+          session: { reload: chatReload },
+          services: { resourceLoader: { getExtensions: vi.fn() } },
+        },
+      },
+      heartbeatSession: { value: { reload: heartbeatReload } },
+    });
+
+    await expect(service.mutateResources(operation)).rejects.toThrow(
+      "post-mutation reload failed",
+    );
+
+    expect(operation).toHaveBeenCalledOnce();
+    expect(chatReload).toHaveBeenCalledTimes(2);
+    expect(heartbeatReload).toHaveBeenCalledOnce();
+    expect(publish).toHaveBeenCalledWith("resource_snapshot_changed", {});
+    expect(publish).not.toHaveBeenCalledWith("resources_reloaded", {});
+  });
+
+  test("keeps a refreshed trust revocation when a prompt mutation is denied", async () => {
+    let trusted = true;
+    const setProjectTrusted = vi.fn((value: boolean) => {
+      trusted = value;
+    });
+    const operation = vi.fn(async () => {
+      throw new Error("Prompt is read-only");
+    });
+    const chatReload = vi.fn(async () => undefined);
+    const heartbeatReload = vi.fn(async () => undefined);
+    const publish = vi.fn();
+    const service = Object.create(PiService.prototype) as PiService;
+    Object.defineProperties(service, {
+      coordinator: { value: new RunCoordinator() },
+      events: { value: { publish } },
+      discoverProjectTrustExtensions: {
+        value: async () => ({ extensions: [], errors: [] }),
+      },
+      settingsManager: {
+        value: { isProjectTrusted: () => trusted, setProjectTrusted },
+      },
+      projectTrustPolicy: {
+        value: {
+          refresh: async () => {
+            setProjectTrusted(false);
+          },
+          commitRememberedDecision: vi.fn(),
+          discardRememberedDecision: vi.fn(),
+          setResolutionOverride: vi.fn(),
+          clearResolutionOverride: vi.fn(),
+        },
+      },
+      runtime: {
+        value: {
+          session: { reload: chatReload },
+          services: { resourceLoader: { getExtensions: vi.fn() } },
+        },
+      },
+      heartbeatSession: { value: { reload: heartbeatReload } },
+    });
+
+    await expect(service.mutateResources(operation)).rejects.toThrow(
+      "Prompt is read-only",
+    );
+
+    expect(trusted).toBe(false);
+    expect(setProjectTrusted).toHaveBeenCalledTimes(1);
+    expect(chatReload).toHaveBeenCalledOnce();
+    expect(heartbeatReload).toHaveBeenCalledOnce();
+    expect(publish).toHaveBeenCalledWith("resource_snapshot_changed", {});
+    expect(publish).not.toHaveBeenCalledWith("resources_reloaded", {});
   });
 
   test("restores runtime trust when a general reload fails", async () => {
@@ -412,9 +1021,15 @@ describe("Pi project trust", () => {
       .fn<() => Promise<void>>()
       .mockRejectedValueOnce(new Error("heartbeat reload failed"))
       .mockResolvedValue(undefined);
+    const commitRememberedDecision = vi.fn();
+    const discardRememberedDecision = vi.fn();
     const service = Object.create(PiService.prototype) as PiService;
     Object.defineProperties(service, {
       coordinator: { value: new RunCoordinator() },
+      events: { value: { publish: vi.fn() } },
+      discoverProjectTrustExtensions: {
+        value: async () => ({ extensions: [], errors: [] }),
+      },
       settingsManager: {
         value: { isProjectTrusted: () => trusted, setProjectTrusted },
       },
@@ -423,9 +1038,22 @@ describe("Pi project trust", () => {
           refresh: async () => {
             setProjectTrusted(false);
           },
+          commitRememberedDecision,
+          discardRememberedDecision,
+          setResolutionOverride: vi.fn(),
+          clearResolutionOverride: vi.fn(),
         },
       },
-      runtime: { value: { session: { reload: chatReload } } },
+      runtime: {
+        value: {
+          session: { reload: chatReload },
+          services: {
+            resourceLoader: {
+              getExtensions: () => ({ extensions: [], errors: [] }),
+            },
+          },
+        },
+      },
       heartbeatSession: { value: { reload: heartbeatReload } },
     });
 
@@ -435,7 +1063,24 @@ describe("Pi project trust", () => {
     expect(setProjectTrusted).toHaveBeenNthCalledWith(2, true);
     expect(chatReload).toHaveBeenCalledTimes(2);
     expect(heartbeatReload).toHaveBeenCalledTimes(2);
+    expect(commitRememberedDecision).not.toHaveBeenCalled();
+    expect(discardRememberedDecision).toHaveBeenCalledOnce();
     expect(trusted).toBe(true);
+  });
+
+  test("can proactively trust a clean project before creating resources", async () => {
+    const state = trustService({ required: false });
+
+    await expect(state.service.setProjectTrust(true)).resolves.toEqual({
+      required: false,
+      trusted: true,
+    });
+
+    expect(state.setProjectTrusted).toHaveBeenCalledWith(true);
+    expect(state.chatReload).toHaveBeenCalledOnce();
+    expect(state.heartbeatReload).toHaveBeenCalledOnce();
+    expect(state.persist).toHaveBeenCalledWith(true);
+    expect(state.publish).toHaveBeenCalledWith("resources_reloaded", {});
   });
 
   test("holds a maintenance lease after waiting for an active run", async () => {
@@ -462,6 +1107,30 @@ describe("Pi project trust", () => {
     expect(coordinator.isIdle).toBe(true);
   });
 
+  test("holds resource reads until maintenance commits", async () => {
+    const coordinator = new RunCoordinator();
+    let releaseMaintenance: (() => void) | undefined;
+    const maintenance = coordinator.run(
+      "maintenance",
+      () =>
+        new Promise<void>((resolve) => {
+          releaseMaintenance = resolve;
+        }),
+    );
+    const service = Object.create(PiService.prototype) as PiService;
+    Object.defineProperty(service, "coordinator", { value: coordinator });
+    const operation = vi.fn(() => "committed snapshot");
+
+    const reading = service.readResourceSnapshot(operation);
+    await Promise.resolve();
+    expect(operation).not.toHaveBeenCalled();
+    releaseMaintenance?.();
+    await maintenance;
+
+    await expect(reading).resolves.toBe("committed snapshot");
+    expect(operation).toHaveBeenCalledOnce();
+  });
+
   test("waits for idle, reloads both sessions, and then persists trust", async () => {
     const state = trustService();
 
@@ -472,6 +1141,11 @@ describe("Pi project trust", () => {
 
     expect(state.waitForIdle).toHaveBeenCalledOnce();
     expect(state.run).toHaveBeenCalledWith("maintenance", expect.any(Function));
+    expect(state.setResolutionOverride).toHaveBeenCalledWith(true);
+    expect(
+      state.setResolutionOverride.mock.invocationCallOrder[0],
+    ).toBeLessThan(state.chatReload.mock.invocationCallOrder[0] ?? 0);
+    expect(state.clearResolutionOverride).toHaveBeenCalledOnce();
     expect(state.setProjectTrusted).toHaveBeenCalledWith(true);
     expect(state.chatReload).toHaveBeenCalledOnce();
     expect(state.heartbeatReload).toHaveBeenCalledOnce();
@@ -481,6 +1155,32 @@ describe("Pi project trust", () => {
     );
   });
 
+  test("keeps redundant trust updates idempotent without policy reevaluation", async () => {
+    const state = trustService();
+    await state.service.setProjectTrust(true);
+    state.assertCanEnable.mockClear();
+    state.assertCanEnable.mockRejectedValueOnce(new Error("late denial"));
+    state.chatReload.mockClear();
+    state.heartbeatReload.mockClear();
+    state.persist.mockClear();
+    state.publish.mockClear();
+    state.setResolutionOverride.mockClear();
+    state.clearResolutionOverride.mockClear();
+
+    await expect(state.service.setProjectTrust(true)).resolves.toEqual({
+      required: true,
+      trusted: true,
+    });
+
+    expect(state.assertCanEnable).not.toHaveBeenCalled();
+    expect(state.persist).toHaveBeenCalledWith(true);
+    expect(state.setResolutionOverride).not.toHaveBeenCalled();
+    expect(state.clearResolutionOverride).not.toHaveBeenCalled();
+    expect(state.chatReload).not.toHaveBeenCalled();
+    expect(state.heartbeatReload).not.toHaveBeenCalled();
+    expect(state.publish).not.toHaveBeenCalled();
+  });
+
   test("restores untrusted runtime state when reload fails", async () => {
     const state = trustService({ reloadError: new Error("reload failed") });
 
@@ -488,9 +1188,14 @@ describe("Pi project trust", () => {
       "reload failed",
     );
 
+    expect(state.setResolutionOverride).toHaveBeenNthCalledWith(1, true);
+    expect(state.setResolutionOverride).toHaveBeenNthCalledWith(2, false);
+    expect(state.clearResolutionOverride).toHaveBeenCalledTimes(2);
     expect(state.setProjectTrusted).toHaveBeenNthCalledWith(1, true);
     expect(state.setProjectTrusted).toHaveBeenNthCalledWith(2, false);
     expect(state.persist).not.toHaveBeenCalled();
+    expect(state.commitRememberedDecision).not.toHaveBeenCalled();
+    expect(state.discardRememberedDecision).toHaveBeenCalledTimes(2);
     expect(state.chatReload).toHaveBeenCalledTimes(2);
     expect(state.heartbeatReload).toHaveBeenCalledOnce();
     expect(state.trusted()).toBe(false);
@@ -503,6 +1208,9 @@ describe("Pi project trust", () => {
       "store failed",
     );
 
+    expect(state.setResolutionOverride).toHaveBeenNthCalledWith(1, true);
+    expect(state.setResolutionOverride).toHaveBeenNthCalledWith(2, false);
+    expect(state.clearResolutionOverride).toHaveBeenCalledTimes(2);
     expect(state.setProjectTrusted).toHaveBeenNthCalledWith(1, true);
     expect(state.setProjectTrusted).toHaveBeenNthCalledWith(2, false);
     expect(state.chatReload).toHaveBeenCalledTimes(2);

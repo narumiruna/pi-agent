@@ -101,6 +101,7 @@ export function LibraryPage() {
               </div>
               <Flex gap="2">
                 <Button
+                  highContrast
                   onClick={() =>
                     void api(
                       "/api/packages/update",
@@ -116,6 +117,7 @@ export function LibraryPage() {
                 </Button>
                 <Button
                   color="red"
+                  highContrast
                   onClick={() =>
                     void api(
                       "/api/packages",

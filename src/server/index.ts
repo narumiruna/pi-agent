@@ -37,6 +37,7 @@ export async function main(): Promise<void> {
     pi = await PiService.create(config, events, interactions, mcp);
     const resources = new ResourceService(
       config.agentDir,
+      config.workspace,
       pi.packageManager,
       pi,
     );

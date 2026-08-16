@@ -53,9 +53,11 @@ function sourceLabel(
 
 export function SettingsPage({
   chooseModelRequest = 0,
+  refresh = 0,
   session,
 }: {
   chooseModelRequest?: number;
+  refresh?: number;
   session: SessionInfo;
 }) {
   const { t, i18n } = useTranslation();
@@ -70,30 +72,35 @@ export function SettingsPage({
   const [disconnectProvider, setDisconnectProvider] =
     useState<ProviderOption>();
 
-  const load = useCallback(async () => {
-    const result = await api<ModelData>("/api/models");
-    const normalized = {
-      ...result,
-      agent: result.agent ?? {
-        steeringMode: "all" as const,
-        followUpMode: "all" as const,
-        autoCompaction: true,
-        autoRetry: true,
-        activeTools: session.tools,
-        availableTools: session.tools.map((name) => ({
-          name,
-          description: name,
-        })),
-      },
-    };
-    setData(normalized);
-    setProjectTrust(result.projectTrust ?? { required: false, trusted: true });
-    return normalized;
-  }, [session.tools]);
+  const load = useCallback(
+    async (_refresh?: number) => {
+      const result = await api<ModelData>("/api/models");
+      const normalized = {
+        ...result,
+        agent: result.agent ?? {
+          steeringMode: "all" as const,
+          followUpMode: "all" as const,
+          autoCompaction: true,
+          autoRetry: true,
+          activeTools: session.tools,
+          availableTools: session.tools.map((name) => ({
+            name,
+            description: name,
+          })),
+        },
+      };
+      setData(normalized);
+      setProjectTrust(
+        result.projectTrust ?? { required: false, trusted: false },
+      );
+      return normalized;
+    },
+    [session.tools],
+  );
 
   useEffect(() => {
-    void load().catch((reason) => setError(errorMessage(reason)));
-  }, [load]);
+    void load(refresh).catch((reason) => setError(errorMessage(reason)));
+  }, [load, refresh]);
 
   useEffect(() => {
     if (chooseModelRequest > 0) {
@@ -107,24 +114,33 @@ export function SettingsPage({
     key: string,
     action: () => Promise<unknown>,
     successMessage?: string,
+    applyResult?: (result: unknown) => void,
   ): Promise<boolean> => {
     setPending(key);
     setError(undefined);
     setSuccess(undefined);
     try {
-      await action();
-      await load();
+      let result: unknown;
+      try {
+        result = await action();
+      } catch (reason) {
+        if (!(reason instanceof ApiError && reason.code === "cancelled"))
+          setError(errorMessage(reason));
+        try {
+          await load();
+        } catch {
+          // Keep the actionable operation error when recovery also fails.
+        }
+        return false;
+      }
+      applyResult?.(result);
       if (successMessage) setSuccess(successMessage);
-      return true;
-    } catch (reason) {
-      if (!(reason instanceof ApiError && reason.code === "cancelled"))
-        setError(errorMessage(reason));
       try {
         await load();
-      } catch {
-        // Keep the actionable operation error when recovery refresh also fails.
+      } catch (reason) {
+        setError(errorMessage(reason));
       }
-      return false;
+      return true;
     } finally {
       setPending(undefined);
     }
@@ -175,6 +191,7 @@ export function SettingsPage({
           mutation("PUT", { trusted, acknowledgeRisk: true }),
         ),
       t(trusted ? "projectTrustEnabled" : "projectTrustDisabled"),
+      (result) => setProjectTrust(result as WebProjectTrust),
     ).then((success) => {
       if (success) setProjectRiskAccepted(false);
     });
@@ -374,49 +391,49 @@ export function SettingsPage({
                 >
                   <Callout.Text>
                     {t(
-                      projectTrust.required
-                        ? projectTrust.trusted
-                          ? "projectTrustStatusTrusted"
-                          : "projectTrustStatusUntrusted"
-                        : "projectTrustStatusNotRequired",
+                      projectTrust.trusted
+                        ? "projectTrustStatusTrusted"
+                        : projectTrust.required
+                          ? "projectTrustStatusUntrusted"
+                          : "projectTrustStatusNotRequired",
                     )}
                   </Callout.Text>
                 </Callout.Root>
-                {projectTrust.required &&
-                  (projectTrust.trusted ? (
+                {projectTrust.trusted ? (
+                  <Button
+                    color="red"
+                    variant="soft"
+                    disabled={pending === "projectTrust"}
+                    highContrast
+                    onClick={() => void updateProjectTrust(false)}
+                  >
+                    {t("disableProjectTrust")}
+                  </Button>
+                ) : (
+                  <Flex direction="column" gap="3" align="start">
+                    <Text as="label" size="2">
+                      <Flex gap="2" align="center">
+                        <Checkbox
+                          checked={projectRiskAccepted}
+                          onCheckedChange={(value) =>
+                            setProjectRiskAccepted(value === true)
+                          }
+                        />
+                        {t("projectTrustAcknowledge")}
+                      </Flex>
+                    </Text>
                     <Button
-                      color="red"
-                      variant="soft"
-                      disabled={pending === "projectTrust"}
-                      onClick={() => void updateProjectTrust(false)}
+                      color="orange"
+                      highContrast
+                      disabled={
+                        !projectRiskAccepted || pending === "projectTrust"
+                      }
+                      onClick={() => void updateProjectTrust(true)}
                     >
-                      {t("disableProjectTrust")}
+                      {t("enableProjectTrust")}
                     </Button>
-                  ) : (
-                    <Flex direction="column" gap="3" align="start">
-                      <Text as="label" size="2">
-                        <Flex gap="2" align="center">
-                          <Checkbox
-                            checked={projectRiskAccepted}
-                            onCheckedChange={(value) =>
-                              setProjectRiskAccepted(value === true)
-                            }
-                          />
-                          {t("projectTrustAcknowledge")}
-                        </Flex>
-                      </Text>
-                      <Button
-                        color="orange"
-                        highContrast
-                        disabled={
-                          !projectRiskAccepted || pending === "projectTrust"
-                        }
-                        onClick={() => void updateProjectTrust(true)}
-                      >
-                        {t("enableProjectTrust")}
-                      </Button>
-                    </Flex>
-                  ))}
+                  </Flex>
+                )}
               </>
             )}
           </section>

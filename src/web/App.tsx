@@ -108,6 +108,7 @@ export function App() {
     undefined,
   );
   const [refresh, setRefresh] = useState(0);
+  const [resourceRefresh, setResourceRefresh] = useState(0);
   const [delta, setDelta] = useState("");
   const [running, setRunning] = useState(false);
   const [eventsConnectedFor, setEventsConnectedFor] = useState<string>();
@@ -546,6 +547,14 @@ export function App() {
             : {}),
         });
     });
+    source.addEventListener("resource_snapshot_changed", () => {
+      replayVersion++;
+      setResourceRefresh((value) => value + 1);
+    });
+    source.addEventListener("resources_reloaded", () => {
+      replayVersion++;
+      setResourceRefresh((value) => value + 1);
+    });
     source.addEventListener("provider_auth", (raw) => {
       const event = JSON.parse((raw as MessageEvent).data) as
         | ProviderAuthTask
@@ -555,6 +564,7 @@ export function App() {
     source.addEventListener("reset", () => {
       replayVersion++;
       setRefresh((value) => value + 1);
+      setResourceRefresh((value) => value + 1);
       if (activeId) void loadAgentState(activeId).catch(() => undefined);
     });
     source.onerror = () => {
@@ -788,6 +798,7 @@ export function App() {
                 key={activeId}
                 conversationId={activeId}
                 refresh={refresh}
+                resourceRefresh={resourceRefresh}
                 delta={delta}
                 thinking={thinking}
                 transcriptRecovery={
@@ -841,12 +852,13 @@ export function App() {
                 onDirtyChange={setFilesDirty}
               />
             )}
-            {page === "prompts" && <PromptsPage />}
+            {page === "prompts" && <PromptsPage refresh={resourceRefresh} />}
             {page === "heartbeat" && <HeartbeatPage refresh={refresh} />}
             {page === "library" && <LibraryPage />}
             {page === "settings" && (
               <SettingsPage
                 chooseModelRequest={chooseModelRequest}
+                refresh={resourceRefresh}
                 session={session}
               />
             )}
