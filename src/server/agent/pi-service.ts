@@ -35,6 +35,7 @@ import type {
   WebProjectTrust,
   WebPromptResource,
   WebResourceCommand,
+  WebSkillSettings,
 } from "../../shared/contracts.js";
 import {
   opaquePromptId,
@@ -228,9 +229,10 @@ export interface ProviderAccess {
 }
 
 /**
- * Single lifecycle facade for one mutable Pi runtime and its coordinator.
- * Keeping ownership together prevents competing session/tool/provider state; pure
- * projections and policies live in focused sibling modules as they grow.
+ * Single lifecycle facade for one mutable Pi runtime and its maintenance lease.
+ * Keeping ownership together makes chat/heartbeat reload, trust rollback,
+ * settings persistence, and event publication one atomic boundary; pure
+ * projections and filesystem policies live in focused sibling modules.
  */
 export class PiService {
   readonly coordinator = new RunCoordinator();
@@ -1331,6 +1333,23 @@ export class PiService {
     return this.runtime.services.resourceLoader.getSkills();
   }
 
+  skillCommandsEnabled(): boolean {
+    return this.settingsManager.getEnableSkillCommands();
+  }
+
+  skillSettings(): WebSkillSettings {
+    return { enableSkillCommands: this.skillCommandsEnabled() };
+  }
+
+  async setSkillCommandsEnabled(enabled: boolean): Promise<WebSkillSettings> {
+    if (enabled === this.skillCommandsEnabled()) return this.skillSettings();
+    await this.mutateResources(async () => {
+      this.settingsManager.setEnableSkillCommands(enabled);
+      await this.settingsManager.flush();
+    });
+    return this.skillSettings();
+  }
+
   commands(
     promptResources: readonly WebPromptResource[],
   ): WebResourceCommand[] {
@@ -1381,24 +1400,26 @@ export class PiService {
         provenance: projectResourceProvenance(prompt.sourceInfo),
       });
     }
-    for (const skill of this.runtime.services.resourceLoader.getSkills()
-      .skills) {
-      const name = `skill:${safePromptMetadataText(skill.name).replaceAll("\n", " ")}`;
-      result.push({
-        id: opaqueResourceCommandId("skill", name, skill.sourceInfo),
-        name,
-        description: safePromptMetadataText(skill.description),
-        source: "skill",
-        sourceLabel: safePromptSourceLabel(
-          skill.sourceInfo,
-          [
-            join(this.config.agentDir, "skills"),
-            join(this.config.workspace, ".pi", "skills"),
-          ],
-          true,
-        ),
-        provenance: projectResourceProvenance(skill.sourceInfo),
-      });
+    if (this.skillCommandsEnabled()) {
+      for (const skill of this.runtime.services.resourceLoader.getSkills()
+        .skills) {
+        const name = `skill:${safePromptMetadataText(skill.name).replaceAll("\n", " ")}`;
+        result.push({
+          id: opaqueResourceCommandId("skill", name, skill.sourceInfo),
+          name,
+          description: safePromptMetadataText(skill.description),
+          source: "skill",
+          sourceLabel: safePromptSourceLabel(
+            skill.sourceInfo,
+            [
+              join(this.config.agentDir, "skills"),
+              join(this.config.workspace, ".pi", "skills"),
+            ],
+            true,
+          ),
+          provenance: projectResourceProvenance(skill.sourceInfo),
+        });
+      }
     }
     return result;
   }
