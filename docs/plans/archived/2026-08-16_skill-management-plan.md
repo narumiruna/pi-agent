@@ -71,7 +71,7 @@ Extend the read-only Skills UI with a trusted create form, editable entry docume
 - [x] Run directly related unit suites, formatting, and TypeScript/Web build checks; record exact results.
 - [x] Audit scope against this plan and Roadmap milestone, then update evidence and completion checks.
 - [x] Commit, push, and merge dedicated signed implementation pull request [#55](https://github.com/narumiruna/pi-agent/pull/55), which linked this plan and Roadmap milestone, as `437f028` after CI passed with no blocking feedback.
-- [x] After merge, check the matching Roadmap milestone and archive this plan through this administrative documentation pull request.
+- [x] After merge, check the matching Roadmap milestone and archive this plan through administrative documentation pull request [#56](https://github.com/narumiruna/pi-agent/pull/56).
 
 ## Completion Checklist
 
