@@ -1316,6 +1316,15 @@ describe("API contracts", () => {
         scope: "user",
       }),
     });
+    const oversizedUtf8Name = await app.request("/api/prompts", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        name: "界".repeat(85),
+        content: "Prompt",
+        scope: "user",
+      }),
+    });
     const invalidScope = await app.request("/api/prompts", {
       method: "POST",
       headers: { "content-type": "application/json" },
@@ -1355,6 +1364,7 @@ describe("API contracts", () => {
     expect(invalidName.status).toBe(400);
     expect(hiddenName.status).toBe(400);
     expect(longName.status).toBe(400);
+    expect(oversizedUtf8Name.status).toBe(400);
     expect(invalidScope.status).toBe(400);
     expect(extraUpdate.status).toBe(400);
     expect(extra.status).toBe(400);

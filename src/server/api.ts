@@ -8,6 +8,7 @@ import { Type } from "typebox";
 import {
   apiError,
   CHAT_IMAGE_MIME_TYPES,
+  isValidPromptName,
   MAX_CHAT_IMAGE_BASE64_LENGTH,
   MAX_CHAT_IMAGES,
   MAX_PROMPT_NAME_LENGTH,
@@ -945,6 +946,8 @@ export function registerApi<E extends ApiEnv>(
     async (context) => {
       try {
         const body = context.req.valid("json");
+        if (!isValidPromptName(body.name))
+          return context.json(apiError("bad_request"), 400);
         await services.resources.createPromptResource(
           body.scope,
           body.name,

@@ -26,14 +26,17 @@ describe("parseDuration", () => {
 });
 
 describe("safeMarkdownPath", () => {
-  test.each(["daily-review", "Existing_Name", "review.v2", "foo:bar"])(
-    "builds a contained markdown path for native name %s",
-    (name) => {
-      expect(safeMarkdownPath("/agent/prompts", name)).toBe(
-        `/agent/prompts/${name}.md`,
-      );
-    },
-  );
+  test.each([
+    "daily-review",
+    "Existing_Name",
+    "review.v2",
+    "foo:bar",
+    "界".repeat(84),
+  ])("builds a contained markdown path for native name %s", (name) => {
+    expect(safeMarkdownPath("/agent/prompts", name)).toBe(
+      `/agent/prompts/${name}.md`,
+    );
+  });
 
   test("uses native Windows path semantics for containment", () => {
     expect(
@@ -56,6 +59,7 @@ describe("safeMarkdownPath", () => {
     "a b",
     "line\nbreak",
     "a".repeat(201),
+    "界".repeat(85),
   ])("rejects %j", (name) => {
     expect(() => safeMarkdownPath("/agent/prompts", name)).toThrow(/name/i);
   });

@@ -103,6 +103,36 @@ describe("Prompts page", () => {
     expect(saves).toHaveLength(1);
   });
 
+  test("enforces the UTF-8 filename limit before prompt creation", async () => {
+    vi.mocked(fetch).mockImplementation(async (input, init) => {
+      const url = String(input);
+      const method = init?.method ?? "GET";
+      if (url.startsWith("/api/documents/") && method === "GET")
+        return json({ content: "" });
+      if (url === "/api/prompt-inventory" && method === "GET")
+        return json({
+          prompts: [],
+          projectTrust: { required: false, trusted: false },
+        });
+      throw new Error(`Unexpected request: ${method} ${url}`);
+    });
+    const user = userEvent.setup();
+    renderPage();
+
+    await user.click(
+      await screen.findByRole("tab", { name: /Prompt templates/ }),
+    );
+    const panel = screen.getByRole("tabpanel", { name: /Prompt templates/ });
+    const name = within(panel).getByRole("textbox", { name: "Template name" });
+    const save = within(panel).getByRole("button", { name: "Save changes" });
+    await user.type(name, "界".repeat(85));
+    expect(save).toBeDisabled();
+
+    await user.clear(name);
+    await user.type(name, "界".repeat(84));
+    expect(save).toBeEnabled();
+  });
+
   test("creates, edits, and deletes user templates without renaming selected files", async () => {
     let templates: WebPromptResource[] = [
       {

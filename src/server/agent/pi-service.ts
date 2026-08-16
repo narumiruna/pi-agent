@@ -323,14 +323,10 @@ export class PiService {
               agentDir: config.agentDir,
               settingsManager,
               modelRuntime,
-              ...(projectTrustPolicy.status().required
-                ? {
-                    resourceLoaderReloadOptions: {
-                      resolveProjectTrust: ({ extensionsResult }) =>
-                        projectTrustPolicy.resolveForLoader(extensionsResult),
-                    },
-                  }
-                : {}),
+              resourceLoaderReloadOptions: {
+                resolveProjectTrust: ({ extensionsResult }) =>
+                  projectTrustPolicy.resolveForLoader(extensionsResult),
+              },
               resourceLoaderOptions: {
                 appendSystemPrompt: [heartbeatGuidance],
                 ...(mcp ? { extensionFactories: [mcp.extension()] } : {}),
@@ -1206,23 +1202,27 @@ export class PiService {
     await this.heartbeatSession.reload();
   }
 
+  private async refreshTrustAndReloadSessions(): Promise<void> {
+    await withProjectTrustRollback(
+      this.settingsManager,
+      async () => {
+        await this.projectTrustPolicy.refresh(
+          await this.discoverProjectTrustExtensions(),
+        );
+      },
+      async () => {
+        await this.reloadSessions();
+        this.projectTrustPolicy.commitRememberedDecision();
+      },
+      () => this.reloadSessions(),
+    );
+  }
+
   async reload(): Promise<void> {
     await this.coordinator.waitForIdle();
     try {
       await this.coordinator.run("maintenance", () =>
-        withProjectTrustRollback(
-          this.settingsManager,
-          async () => {
-            await this.projectTrustPolicy.refresh(
-              await this.discoverProjectTrustExtensions(),
-            );
-          },
-          async () => {
-            await this.reloadSessions();
-            this.projectTrustPolicy.commitRememberedDecision();
-          },
-          () => this.reloadSessions(),
-        ),
+        this.refreshTrustAndReloadSessions(),
       );
       this.events.publish("resources_reloaded", {});
     } catch (error) {
@@ -1236,22 +1236,10 @@ export class PiService {
     let preReloaded = false;
     try {
       const result = await this.coordinator.run("maintenance", async () => {
-        await withProjectTrustRollback(
-          this.settingsManager,
-          async () => {
-            await this.projectTrustPolicy.refresh(
-              await this.discoverProjectTrustExtensions(),
-            );
-          },
-          async () => {
-            await this.reloadSessions();
-            this.projectTrustPolicy.commitRememberedDecision();
-          },
-          () => this.reloadSessions(),
-        );
+        await this.refreshTrustAndReloadSessions();
         preReloaded = true;
         const result = await operation();
-        await this.reloadSessions();
+        await this.refreshTrustAndReloadSessions();
         return result;
       });
       this.events.publish("resources_reloaded", {});

@@ -186,7 +186,7 @@ const resources = {
       promptTemplatesLoadFailed: "Could not load prompt templates.",
       promptTemplateName: "Template name",
       promptNameRequirement:
-        "Use 1–200 non-space characters; names cannot start with a dot or contain path separators or control characters.",
+        "Use 1–200 non-space characters and at most 252 UTF-8 bytes; names cannot start with a dot or contain path separators or control characters.",
       promptTemplateContent: "Template content",
       promptScope: "Create in",
       promptScopeUser: "User prompts",
@@ -588,7 +588,7 @@ const resources = {
       promptTemplatesLoadFailed: "無法載入提示詞模板。",
       promptTemplateName: "模板名稱",
       promptNameRequirement:
-        "請使用 1–200 個不含空白的字元；不可用點開頭，也不可包含路徑分隔符或控制字元。",
+        "請使用 1–200 個不含空白的字元，且 UTF-8 最多 252 bytes；不可用點開頭，也不可包含路徑分隔符或控制字元。",
       promptTemplateContent: "模板內容",
       promptScope: "建立位置",
       promptScopeUser: "使用者提示詞",

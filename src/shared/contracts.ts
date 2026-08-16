@@ -111,12 +111,15 @@ export interface WebPromptTemplateDocument {
 export const PROMPT_NAME_PATTERN =
   "^(?!\\.)[^\\s/\\\\\\u0000-\\u001F\\u007F]+$";
 export const MAX_PROMPT_NAME_LENGTH = 200;
+export const MAX_PROMPT_FILENAME_BYTES = 255;
 const PROMPT_NAME = new RegExp(PROMPT_NAME_PATTERN);
+const UTF8_ENCODER = new TextEncoder();
 
 export function isValidPromptName(name: string): boolean {
   return (
     name.length >= 1 &&
     name.length <= MAX_PROMPT_NAME_LENGTH &&
+    UTF8_ENCODER.encode(`${name}.md`).byteLength <= MAX_PROMPT_FILENAME_BYTES &&
     PROMPT_NAME.test(name)
   );
 }

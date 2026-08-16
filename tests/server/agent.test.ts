@@ -23,6 +23,7 @@ import { projectTranscript } from "../../src/server/agent/transcript.js";
 import { opaquePromptId } from "../../src/server/api-metadata.js";
 import { InteractionBroker } from "../../src/server/interactions/broker.js";
 import { WebExtensionState } from "../../src/server/interactions/web-state.js";
+import { ResourceService } from "../../src/server/resources/service.js";
 
 const temporaryDirectories: string[] = [];
 
@@ -584,6 +585,81 @@ describe("Pi project trust", () => {
     });
   });
 
+  test("keeps the trust resolver active before the first project resource", async () => {
+    const root = await mkdtemp(join(tmpdir(), "pi-agent-first-trust-"));
+    temporaryDirectories.push(root);
+    const workspace = join(root, "workspace");
+    const agentDir = join(root, "agent");
+    const dataDir = join(root, "data");
+    await Promise.all([
+      mkdir(workspace, { recursive: true }),
+      mkdir(join(agentDir, "extensions"), { recursive: true }),
+      mkdir(dataDir, { recursive: true }),
+    ]);
+    await writeFile(
+      join(agentDir, "settings.json"),
+      '{"defaultProjectTrust":"always"}\n',
+    );
+    await writeFile(
+      join(agentDir, "extensions", "deny-first-project.js"),
+      'export default function (pi) { pi.on("project_trust", () => ({ trusted: "no" })); }\n',
+    );
+    const previousAgentDir = process.env.PI_CODING_AGENT_DIR;
+    const events = new EventHub();
+    let service: PiService | undefined;
+    try {
+      service = await PiService.create(
+        {
+          host: "127.0.0.1",
+          port: 30_000,
+          appOrigin: "http://localhost:30000",
+          agentDir,
+          dataDir,
+          workspace,
+          sqlitePath: join(dataDir, "app.db"),
+          agentTools: ["read"],
+          auth: { mode: "disabled" },
+        },
+        events,
+        new InteractionBroker(events),
+      );
+      expect(service.projectTrust()).toEqual({
+        required: false,
+        trusted: true,
+      });
+      const resources = new ResourceService(
+        agentDir,
+        workspace,
+        service.packageManager,
+        service,
+      );
+
+      await resources.createPromptResource(
+        "project",
+        "first-project",
+        "First project prompt\n",
+      );
+
+      await expect(
+        readFile(join(workspace, ".pi", "prompts", "first-project.md"), "utf8"),
+      ).resolves.toBe("First project prompt\n");
+      expect(service.projectTrust()).toEqual({
+        required: true,
+        trusted: false,
+      });
+      expect(
+        service
+          .promptTemplates()
+          .some((prompt) => prompt.name === "first-project"),
+      ).toBe(false);
+    } finally {
+      await service?.dispose();
+      if (previousAgentDir === undefined)
+        delete process.env.PI_CODING_AGENT_DIR;
+      else process.env.PI_CODING_AGENT_DIR = previousAgentDir;
+    }
+  });
+
   test("discovers trust policies from global extension settings", async () => {
     const root = await mkdtemp(join(tmpdir(), "pi-agent-global-trust-"));
     temporaryDirectories.push(root);
@@ -733,6 +809,7 @@ describe("Pi project trust", () => {
 
     expect(waitForIdle).toHaveBeenCalledOnce();
     expect(run).toHaveBeenCalledWith("maintenance", expect.any(Function));
+    expect(refresh).toHaveBeenCalledTimes(2);
     expect(refresh.mock.invocationCallOrder[0]).toBeLessThan(
       chatReload.mock.invocationCallOrder[0] ?? 0,
     );
@@ -740,6 +817,9 @@ describe("Pi project trust", () => {
       operation.mock.invocationCallOrder[0] ?? 0,
     );
     expect(operation.mock.invocationCallOrder[0]).toBeLessThan(
+      refresh.mock.invocationCallOrder[1] ?? 0,
+    );
+    expect(refresh.mock.invocationCallOrder[1]).toBeLessThan(
       chatReload.mock.invocationCallOrder[1] ?? 0,
     );
     expect(chatReload).toHaveBeenCalledTimes(2);
