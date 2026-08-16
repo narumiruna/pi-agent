@@ -1,6 +1,6 @@
 # Native Prompt Discovery and Permissions Plan
 
-Status: In progress.
+Status: Completed on 2026-08-16.
 
 ## Goal
 
@@ -80,8 +80,8 @@ Project Chat commands from Pi’s resolved extension invocation list and include
 - [x] Update README with native discovery sources, safe logical paths, editability rules, project trust, and reload/autocomplete behavior.
 - [x] Run focused tests, `npm run ci`, full E2E, PostgreSQL storage verification, and production Docker build; record exact results.
 - [x] Audit native source fidelity, precedence/deduplication, trust races, symlink/containment, raw frontmatter, path/source leakage, stale IDs, reload ordering, command expansion, accessibility, responsive layout, and unrelated changes.
-- [ ] Commit, push, open one dedicated signed pull request linking this plan and Roadmap milestone, resolve all checks/review feedback with regressions, and merge.
-- [ ] After merge, check the matching Roadmap milestone and archive this plan through an administrative documentation pull request.
+- [x] Commit, push, open dedicated pull request [#47](https://github.com/narumiruna/pi-agent/pull/47), resolve all actionable check and review feedback with regressions, and merge as `f924609`.
+- [x] After merge, check the matching Roadmap milestone and archive this plan through administrative documentation pull request [#50](https://github.com/narumiruna/pi-agent/pull/50).
 
 ## Completion Checklist
 
@@ -94,8 +94,8 @@ Project Chat commands from Pi’s resolved extension invocation list and include
 - [x] Legacy template APIs remain compatible and no parallel prompt state exists.
 - [x] Desktop/mobile permission, command, keyboard, responsive, and accessibility regressions pass.
 - [x] Focused tests, CI, full E2E, PostgreSQL verification, and Docker build pass.
-- [ ] The dedicated implementation PR is merged with all feedback resolved.
-- [ ] The Roadmap milestone is checked and this plan is archived only after merge.
+- [x] Dedicated implementation pull request [#47](https://github.com/narumiruna/pi-agent/pull/47) merged as `f924609` with CI passing and every submitted review thread resolved.
+- [x] The Roadmap milestone is checked and this plan is archived after the implementation merge.
 
 ## Progress updates
 
