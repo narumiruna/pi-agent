@@ -248,6 +248,38 @@ describe("ProjectTrustPolicy", () => {
     },
   );
 
+  test("uses an explicit trust override only for its reload window", async () => {
+    const settings = SettingsManager.inMemory(
+      { defaultProjectTrust: "never" },
+      { projectTrusted: false },
+    );
+    const handler = vi.fn(() => ({ trusted: "no" as const }));
+    const policy = new ProjectTrustPolicy(
+      "/workspace",
+      "/agent",
+      settings,
+      { get: () => false, set: vi.fn() },
+      () => true,
+    );
+    const extensions = {
+      extensions: [
+        {
+          sourceInfo: { scope: "user" },
+          handlers: new Map([["project_trust", [handler]]]),
+        },
+      ],
+      errors: [],
+    } as never;
+
+    policy.setResolutionOverride(true);
+    await expect(policy.resolveForLoader(extensions)).resolves.toBe(true);
+    expect(handler).not.toHaveBeenCalled();
+
+    policy.clearResolutionOverride();
+    await expect(policy.resolveForLoader(extensions)).resolves.toBe(false);
+    expect(handler).toHaveBeenCalledOnce();
+  });
+
   test("discards an uncommitted remembered extension decision", async () => {
     const settings = SettingsManager.inMemory(
       { defaultProjectTrust: "always" },

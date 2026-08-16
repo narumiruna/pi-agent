@@ -45,6 +45,7 @@ export async function withProjectTrustRollback<T>(
 export class ProjectTrustPolicy {
   private readonly trustStore: ProjectTrustStoreLike;
   private rememberedDecision: boolean | undefined;
+  private resolutionOverride: boolean | undefined;
 
   constructor(
     private readonly workspace: string,
@@ -140,9 +141,18 @@ export class ProjectTrustPolicy {
     extensionsResult: LoadExtensionsResult,
   ): Promise<boolean> {
     this.rememberedDecision = undefined;
+    if (this.resolutionOverride !== undefined) return this.resolutionOverride;
     return (
       (await this.extensionDecision(extensionsResult)) ?? this.resolve().trusted
     );
+  }
+
+  setResolutionOverride(trusted: boolean): void {
+    this.resolutionOverride = trusted;
+  }
+
+  clearResolutionOverride(): void {
+    this.resolutionOverride = undefined;
   }
 
   async assertCanEnable(extensionsResult: LoadExtensionsResult): Promise<void> {

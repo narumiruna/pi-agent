@@ -1280,6 +1280,7 @@ export class PiService {
             await this.discoverProjectTrustExtensions(),
           );
 
+        this.projectTrustPolicy.setResolutionOverride(trusted);
         this.settingsManager.setProjectTrusted(trusted);
         try {
           await this.reloadSessions();
@@ -1288,6 +1289,7 @@ export class PiService {
           this.projectTrustPolicy.persist(trusted);
           return this.projectTrustPolicy.status();
         } catch (error) {
+          this.projectTrustPolicy.setResolutionOverride(previous);
           this.settingsManager.setProjectTrusted(previous);
           await this.reloadSessions().catch(() => undefined);
           throw error;
@@ -1299,6 +1301,8 @@ export class PiService {
     } catch (error) {
       this.projectTrustPolicy.discardRememberedDecision();
       throw error;
+    } finally {
+      this.projectTrustPolicy.clearResolutionOverride();
     }
   }
 
