@@ -124,7 +124,7 @@ Pi package 仍是 prompt、skill 與 extension 的共同安裝來源，不建立
   - 顯示 skill name、description、scope、source、package provenance、validation warning 與實際入口檔。
   - 支援檢視 `SKILL.md`、references、scripts 與 assets，但 binary assets 只顯示 metadata。
   - Global、trusted project、package 與 settings-added skill 都會顯示正確 provenance。
-- [ ] 支援受信任 skill CRUD、activation settings 與 native reload。
+- [x] 支援受信任 skill CRUD、activation settings 與 native reload。
   - 支援建立 user skill，並產生符合 Agent Skills standard 的 `SKILL.md` 骨架。
   - 支援編輯與刪除 user skill，以及 trusted project skill。
   - 支援 `/skill:name` 啟用狀態與 `enableSkillCommands` 設定。
