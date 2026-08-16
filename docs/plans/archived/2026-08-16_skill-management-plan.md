@@ -95,4 +95,5 @@ Extend the read-only Skills UI with a trusted create form, editable entry docume
 - `npm run build:server` — passed.
 - `npm run build:web` — passed with the existing Monaco chunk-size warning.
 - Scope audit: no package/filter management, arbitrary skill paths, helper-script execution, parallel skill catalog, or parallel activation store was added.
-- GitHub CI passed on final implementation head `a9304ab`; implementation pull request [#55](https://github.com/narumiruna/pi-agent/pull/55) merged as `437f028` with no submitted review findings or blocking feedback.
+- GitHub CI passed on final implementation head `a9304ab`; implementation pull request [#55](https://github.com/narumiruna/pi-agent/pull/55) merged as `437f028` with no blocking feedback before merge.
+- A [non-blocking P2 concurrency finding](https://github.com/narumiruna/pi-agent/pull/55#discussion_r3791013275) arrived after merge; per the Roadmap workflow, its maintenance-lease fix and opposite-value request regression coverage are recorded under Phase 8 rather than reopening this completed milestone.
