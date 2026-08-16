@@ -40,6 +40,7 @@ describe("app route contract", () => {
       { id: "chats", path: "/chats" },
       { id: "files", path: "/files" },
       { id: "prompts", path: "/prompts" },
+      { id: "skills", path: "/skills" },
       { id: "heartbeat", path: "/heartbeat" },
       { id: "library", path: "/library" },
       { id: "settings", path: "/settings" },
@@ -51,17 +52,13 @@ describe("app route contract", () => {
     }
   });
 
-  test.each([
-    "/",
-    "/unknown",
-    "/nested/unknown",
-    "/files/",
-    "/skills",
-    "/extensions",
-  ])("safely maps invalid or unavailable path %s to Chats", (pathname) => {
-    expect(isCurrentPagePathname(pathname)).toBe(false);
-    expect(pageFromPathname(pathname)).toBe("chats");
-  });
+  test.each(["/", "/unknown", "/nested/unknown", "/files/", "/extensions"])(
+    "safely maps invalid or unavailable path %s to Chats",
+    (pathname) => {
+      expect(isCurrentPagePathname(pathname)).toBe(false);
+      expect(pageFromPathname(pathname)).toBe("chats");
+    },
+  );
 
   test("defaults to Chats and keeps Library outside the target contract", () => {
     expect(DEFAULT_APP_ROUTE).toBe("chats");
@@ -74,6 +71,7 @@ describe("app route contract", () => {
       "chats",
       "files",
       "prompts",
+      "skills",
       "heartbeat",
       "library",
       "settings",

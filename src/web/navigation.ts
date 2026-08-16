@@ -6,7 +6,8 @@ export type NavigationIconKey =
   | "heartbeat"
   | "library"
   | "prompt"
-  | "settings";
+  | "settings"
+  | "skill";
 
 export type NavigationLabelKey =
   | "chat"
@@ -14,7 +15,8 @@ export type NavigationLabelKey =
   | "heartbeat"
   | "library"
   | "prompts"
-  | "settings";
+  | "settings"
+  | "skills";
 
 export interface PrimaryNavigationItem {
   page: Page;
@@ -41,6 +43,12 @@ export const PRIMARY_NAVIGATION_ITEMS = [
     page: "prompts",
     labelKey: "prompts",
     icon: "prompt",
+    access: "authenticated",
+  },
+  {
+    page: "skills",
+    labelKey: "skills",
+    icon: "skill",
     access: "authenticated",
   },
   {

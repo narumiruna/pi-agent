@@ -19,6 +19,7 @@ import { HeartbeatPage } from "./pages/HeartbeatPage.js";
 import { LibraryPage } from "./pages/LibraryPage.js";
 import { PromptsPage } from "./pages/PromptsPage.js";
 import { SettingsPage } from "./pages/SettingsPage.js";
+import { SkillsPage } from "./pages/SkillsPage.js";
 import { type Page, pageFromPathname, pathnameForPage } from "./routes.js";
 import type {
   AgentActivity,
@@ -853,6 +854,7 @@ export function App() {
               />
             )}
             {page === "prompts" && <PromptsPage refresh={resourceRefresh} />}
+            {page === "skills" && <SkillsPage refresh={resourceRefresh} />}
             {page === "heartbeat" && <HeartbeatPage refresh={refresh} />}
             {page === "library" && <LibraryPage />}
             {page === "settings" && (

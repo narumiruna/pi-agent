@@ -35,6 +35,7 @@ import {
   type ResourceService,
   ResourceValidationError,
 } from "./resources/service.js";
+import { MAX_SKILL_PATH_LENGTH } from "./resources/skill-viewer.js";
 import type { AppStore, WebSessionRecord } from "./storage/types.js";
 import { WorkspaceError } from "./workspace/errors.js";
 import { MAX_WORKSPACE_PATH_LENGTH } from "./workspace/policy.js";
@@ -189,6 +190,12 @@ const McpBody = Type.Object({
 const WorkspacePathQuery = Type.Object(
   {
     path: Type.Optional(Type.String({ maxLength: MAX_WORKSPACE_PATH_LENGTH })),
+  },
+  { additionalProperties: false },
+);
+const SkillFileQuery = Type.Object(
+  {
+    path: Type.String({ minLength: 1, maxLength: MAX_SKILL_PATH_LENGTH }),
   },
   { additionalProperties: false },
 );
@@ -776,6 +783,31 @@ export function registerApi<E extends ApiEnv>(
         };
       }),
     ),
+  );
+  app.get("/api/skill-inventory", async (context) =>
+    context.json(
+      await services.pi.readResourceSnapshot(() =>
+        services.resources.listSkillInventory(),
+      ),
+    ),
+  );
+  app.get(
+    "/api/skills/:id/files",
+    tbValidator("query", SkillFileQuery),
+    async (context) => {
+      try {
+        return context.json(
+          await services.pi.readResourceSnapshot(() =>
+            services.resources.readSkillFile(
+              context.req.param("id"),
+              context.req.valid("query").path,
+            ),
+          ),
+        );
+      } catch (error) {
+        return errorResponse(context, error);
+      }
+    },
   );
   app.get("/api/commands", async (context) =>
     context.json(

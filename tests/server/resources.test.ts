@@ -65,6 +65,7 @@ async function setup() {
     projectTrust: vi.fn(() => ({ required: false, trusted: false })),
     promptDiagnostics: vi.fn(() => []),
     promptTemplates: vi.fn(() => []),
+    skillSnapshot: vi.fn(() => ({ skills: [], diagnostics: [] })),
   };
   return {
     agentDir,
@@ -343,6 +344,7 @@ describe("ResourceService", () => {
       projectTrust: () => ({ required: false, trusted: false }),
       promptDiagnostics: () => loader.getPrompts().diagnostics,
       promptTemplates: () => loader.getPrompts().prompts,
+      skillSnapshot: () => loader.getSkills(),
     };
     const service = new ResourceService(
       agentDir,
@@ -387,6 +389,7 @@ describe("ResourceService", () => {
       projectTrust: () => ({ required: false, trusted: false }),
       promptDiagnostics: () => loader.getPrompts().diagnostics,
       promptTemplates: () => loader.getPrompts().prompts,
+      skillSnapshot: () => loader.getSkills(),
     };
     const service = new ResourceService(
       agentDir,

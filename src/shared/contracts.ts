@@ -148,6 +148,46 @@ export interface WebPromptResource {
   deletable: boolean;
 }
 
+export type WebSkillFileKind = "binary" | "text" | "too_large" | "unavailable";
+
+export interface WebSkillFileEntry {
+  path: string;
+  size: number;
+  kind: WebSkillFileKind;
+  entry: boolean;
+}
+
+export interface WebSkillResource {
+  id: string;
+  name: string;
+  description: string;
+  provenance: WebResourceProvenance;
+  source: string;
+  path: string;
+  files: WebSkillFileEntry[];
+  filesTruncated: boolean;
+}
+
+export interface WebSkillDiagnostic {
+  severity: "error" | "warning";
+  message: string;
+  path?: string;
+  skillId?: string;
+}
+
+export interface WebSkillInventory {
+  skills: WebSkillResource[];
+  diagnostics: WebSkillDiagnostic[];
+  projectTrust: WebProjectTrust;
+}
+
+export interface WebSkillFileDocument {
+  path: string;
+  size: number;
+  kind: WebSkillFileKind;
+  content?: string;
+}
+
 export interface WebPackageSummary {
   id: string;
   name: string;

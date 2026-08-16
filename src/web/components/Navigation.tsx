@@ -54,6 +54,7 @@ const NAVIGATION_ICONS: Record<NavigationIconKey, typeof ChatBubbleIcon> = {
   library: ReaderIcon,
   prompt: Pencil2Icon,
   settings: GearIcon,
+  skill: ReaderIcon,
 };
 
 interface NavContentProps extends Props {

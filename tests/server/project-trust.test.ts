@@ -160,6 +160,7 @@ describe("ProjectTrustPolicy", () => {
       projectTrust: () => policy.status(),
       promptDiagnostics: () => loader.getPrompts().diagnostics,
       promptTemplates: () => loader.getPrompts().prompts,
+      skillSnapshot: () => loader.getSkills(),
     };
     const packages = {
       installAndPersist: async () => undefined,
