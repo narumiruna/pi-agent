@@ -2,6 +2,7 @@ import { describe, expect, test } from "vitest";
 import {
   opaquePackageId,
   opaquePromptId,
+  opaqueSkillId,
   projectMcpDiagnostics,
   projectPackageProgress,
   projectPackageSummary,
@@ -70,6 +71,23 @@ describe("safe API metadata projections", () => {
     expect(response).not.toContain("source");
     expect(response).not.toContain("installedPath");
     expect(response).not.toContain("/private");
+  });
+
+  test("creates stable path-free skill IDs", () => {
+    const sourceInfo = {
+      path: "/private/cache/package/skills/review/SKILL.md",
+      source: "https://secret@example.com/org/review.git?token=private",
+      scope: "project" as const,
+      origin: "package" as const,
+    };
+    const id = opaqueSkillId(sourceInfo);
+
+    expect(id).toMatch(/^skill_[A-Za-z0-9_-]{43}$/);
+    expect(id).toBe(opaqueSkillId(sourceInfo));
+    expect(id).not.toMatch(/private|secret|review/);
+    expect(id).not.toBe(
+      opaqueSkillId({ ...sourceInfo, path: `${sourceInfo.path}.other` }),
+    );
   });
 
   test("creates opaque prompt IDs and safe source labels", () => {

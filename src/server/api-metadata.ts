@@ -45,6 +45,22 @@ export function opaquePromptId(
   return `prompt_${digest}`;
 }
 
+export function opaqueSkillId(
+  sourceInfo: Pick<SourceInfo, "origin" | "path" | "scope" | "source">,
+): string {
+  const digest = createHash("sha256")
+    .update(
+      JSON.stringify([
+        sourceInfo.scope,
+        sourceInfo.origin,
+        sourceInfo.source,
+        sourceInfo.path,
+      ]),
+    )
+    .digest("base64url");
+  return `skill_${digest}`;
+}
+
 export function opaqueResourceCommandId(
   kind: "extension" | "prompt" | "skill",
   name: string,

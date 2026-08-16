@@ -34,7 +34,14 @@ afterEach(() => {
 
 function renderNavigation(
   options: {
-    page?: "chats" | "files" | "prompts" | "heartbeat" | "library" | "settings";
+    page?:
+      | "chats"
+      | "files"
+      | "prompts"
+      | "skills"
+      | "heartbeat"
+      | "library"
+      | "settings";
     mobileOpen?: boolean;
     conversationFilters?: ConversationFilters;
     conversations?: Conversation[];
@@ -97,6 +104,9 @@ describe("Navigation accessibility", () => {
     ).not.toHaveAttribute("aria-current");
     expect(
       within(navigation).getByRole("button", { name: "Prompts" }),
+    ).toBeVisible();
+    expect(
+      within(navigation).getByRole("button", { name: "Skills" }),
     ).toBeVisible();
 
     files.focus();

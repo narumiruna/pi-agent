@@ -841,6 +841,62 @@ describe("API contracts", () => {
     expect(listPromptResources).toHaveBeenCalledOnce();
   });
 
+  test("reads native skill inventory and files inside one resource snapshot", async () => {
+    const inventory = {
+      skills: [
+        {
+          id: "skill_safe",
+          name: "review",
+          description: "Review changes",
+          provenance: { scope: "user" as const, origin: "top-level" as const },
+          source: "local",
+          path: "~/.pi/agent/skills/review/SKILL.md",
+          files: [
+            { path: "SKILL.md", size: 42, kind: "text" as const, entry: true },
+          ],
+          filesTruncated: false,
+        },
+      ],
+      diagnostics: [],
+      projectTrust: { required: false, trusted: false },
+    };
+    const document = {
+      path: "references/guide.md",
+      size: 5,
+      kind: "text" as const,
+      content: "Guide",
+    };
+    const listSkillInventory = vi.fn(async () => inventory);
+    const readSkillFile = vi.fn(async () => document);
+    const readResourceSnapshot = vi.fn(
+      async <T>(operation: () => Promise<T> | T): Promise<T> =>
+        await operation(),
+    );
+    const app = appWith({
+      pi: { readResourceSnapshot } as never,
+      resources: { listSkillInventory, readSkillFile } as never,
+    });
+
+    const listed = await app.request("/api/skill-inventory");
+    const file = await app.request(
+      "/api/skills/skill_safe/files?path=references%2Fguide.md",
+    );
+    const invalid = await app.request(
+      "/api/skills/skill_safe/files?path=SKILL.md&absolute=%2Fprivate%2Ffile",
+    );
+
+    expect(listed.status).toBe(200);
+    expect(await listed.json()).toEqual(inventory);
+    expect(file.status).toBe(200);
+    expect(await file.json()).toEqual(document);
+    expect(readSkillFile).toHaveBeenCalledWith(
+      "skill_safe",
+      "references/guide.md",
+    );
+    expect(invalid.status).toBe(400);
+    expect(readResourceSnapshot).toHaveBeenCalledTimes(2);
+  });
+
   test("returns path-free native provenance for resource commands", async () => {
     const commands = vi.fn(() => [
       {

@@ -43,6 +43,7 @@ import {
 } from "./atomic-write.js";
 import { safeMarkdownPath } from "./paths.js";
 import { projectPromptDiagnostics } from "./prompt-diagnostics.js";
+import { type NativeSkillSnapshot, SkillViewer } from "./skill-viewer.js";
 
 export type DocumentKind = "append" | "heartbeat" | "system" | "template";
 
@@ -56,13 +57,14 @@ type PackageOperations = Pick<
   "installAndPersist" | "listConfiguredPackages" | "removeAndPersist" | "update"
 >;
 
-/** Application adapter for Pi's native prompt snapshot and reload lifecycle. */
+/** Application adapter for Pi's native resource snapshots and reload lifecycle. */
 export interface NativeResourceRuntime {
   reload(): Promise<void>;
   mutateResources<T>(operation: () => Promise<T>): Promise<T>;
   projectTrust(): WebProjectTrust;
   promptDiagnostics(): ReadonlyArray<ResourceDiagnostic>;
   promptTemplates(): ReadonlyArray<PromptTemplate>;
+  skillSnapshot(): NativeSkillSnapshot;
 }
 
 export class ResourceConflictError extends Error {}
@@ -175,6 +177,7 @@ function packageSource(value: string): string {
 export class ResourceService {
   private readonly agentRoot: PinnedRoot;
   private readonly promptDir: string;
+  private readonly skillViewer: SkillViewer;
   private readonly workspaceRoot: PinnedRoot;
 
   constructor(
@@ -188,6 +191,7 @@ export class ResourceService {
   ) {
     this.agentRoot = pinRoot(agentDir);
     this.promptDir = join(agentDir, "prompts");
+    this.skillViewer = new SkillViewer(agentDir, workspace);
     this.workspaceRoot = pinRoot(workspace);
   }
 
@@ -616,6 +620,17 @@ export class ResourceService {
       resourcePath: (prompt) => this.logicalPromptPath(prompt),
       userRoot: this.promptRoot("user"),
     });
+  }
+
+  async listSkillInventory() {
+    return this.skillViewer.inventory(
+      this.runtime.skillSnapshot(),
+      this.runtime.projectTrust(),
+    );
+  }
+
+  async readSkillFile(id: string, path: string) {
+    return this.skillViewer.readFile(this.runtime.skillSnapshot(), id, path);
   }
 
   private nativePrompt(id: string): PromptTemplate {

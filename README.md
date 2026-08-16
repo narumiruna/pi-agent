@@ -321,6 +321,14 @@ Prompt mutations refresh trust and discovery under Pi’s maintenance lease, use
 
 Chat autocomplete uses Pi’s resolved extension invocation names plus native prompt argument hints and safe source/provenance labels.
 
+The Skills page lists only Pi’s active `ResourceLoader.getSkills()` snapshot, including native validation warnings and scope/origin provenance for global, trusted-project, package, settings-added, and temporary skills.
+
+Skill IDs are opaque and entry locations are logical paths; the browser never receives native absolute paths or installation roots.
+
+The read-only viewer exposes a directory skill’s regular `SKILL.md`, references, scripts, and assets within bounded file/depth/size limits, while a direct Markdown skill exposes only its own entry file.
+
+UTF-8 text can be viewed as plain text; binary, oversized, symlinked, hard-linked, and unavailable assets expose metadata only and are never executed.
+
 Library retains package and MCP controls during the remaining resource migration.
 
 Skills and extensions are installed as native Pi packages from npm, git, or a relative or absolute path inside the container.

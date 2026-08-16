@@ -26,6 +26,12 @@ describe("primary navigation model", () => {
         access: "authenticated",
       },
       {
+        page: "skills",
+        labelKey: "skills",
+        icon: "skill",
+        access: "authenticated",
+      },
+      {
         page: "heartbeat",
         labelKey: "heartbeat",
         icon: "heartbeat",
@@ -54,12 +60,12 @@ describe("primary navigation model", () => {
     expect(primaryNavigationFor({ authenticated: false })).toEqual([]);
   });
 
-  test("exposes Prompts but not later planned resource routes", () => {
+  test("exposes Prompts and Skills but not later planned resource routes", () => {
     const pages = primaryNavigationFor({ authenticated: true }).map(
       ({ page }) => page,
     );
     expect(pages).toContain("prompts");
-    expect(pages).not.toContain("skills");
+    expect(pages).toContain("skills");
     expect(pages).not.toContain("extensions");
   });
 });

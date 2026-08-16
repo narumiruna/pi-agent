@@ -56,33 +56,42 @@ Add `/api/skill-inventory` and an opaque-ID plus relative-path file endpoint, th
 
 - [x] Inspect the merged route/navigation/resource architecture, Pi 0.84.1 skills/package/security docs, installed skill/resource-loader/source-info types and implementation, and existing trust/command tests.
 - [x] Create fresh branch `narumiruna/feat/skills-inventory` from merged `main` and add this dedicated plan before implementation.
-- [ ] Add shared skill inventory, diagnostic, file-metadata, and file-document contracts with explicit bounds.
-- [ ] Expose Pi’s native skill snapshot through the existing resource runtime adapter.
-- [ ] Implement path-safe provenance, entry-path, native-diagnostic, and bounded file-tree projection without parallel discovery.
-- [ ] Implement opaque-ID and relative-path text reads with binary/oversized metadata-only behavior and race-resistant containment.
-- [ ] Add snapshot-protected skill inventory and file endpoints.
-- [ ] Activate `/skills` in canonical routing, desktop/mobile navigation, and localized labels in Roadmap order.
-- [ ] Add a read-only Skills page for metadata, warnings, bundled-file selection, loading/error states, and plain-text content.
-- [ ] Document the native inventory/viewer boundary without claiming CRUD, activation, package-management, or later diagnostics scope.
-- [ ] Add focused server/API/Web/route/navigation unit coverage for provenance, trust, diagnostics, direct-file isolation, nested files, binary/size classification, traversal, symlink/hard-link/race rejection, and viewer behavior.
-- [ ] Run directly related unit suites, formatting, and TypeScript/Web build checks; record exact results.
-- [ ] Audit scope against this plan and Roadmap milestone, then update evidence and completion checks.
+- [x] Add shared skill inventory, diagnostic, file-metadata, and file-document contracts with explicit bounds.
+- [x] Expose Pi’s native skill snapshot through the existing resource runtime adapter.
+- [x] Implement path-safe provenance, entry-path, native-diagnostic, and bounded file-tree projection without parallel discovery.
+- [x] Implement opaque-ID and relative-path text reads with binary/oversized metadata-only behavior and race-resistant containment.
+- [x] Add snapshot-protected skill inventory and file endpoints.
+- [x] Activate `/skills` in canonical routing, desktop/mobile navigation, and localized labels in Roadmap order.
+- [x] Add a read-only Skills page for metadata, warnings, bundled-file selection, loading/error states, and plain-text content.
+- [x] Document the native inventory/viewer boundary without claiming CRUD, activation, package-management, or later diagnostics scope.
+- [x] Add focused server/API/Web/route/navigation unit coverage for provenance, trust, diagnostics, direct-file isolation, nested files, binary/size classification, traversal, symlink/hard-link rejection, and viewer behavior.
+- [x] Run directly related unit suites, formatting, and TypeScript/Web build checks; record exact results.
+- [x] Audit scope against this plan and Roadmap milestone, then update evidence and completion checks.
 - [ ] Commit, push, and merge one dedicated signed implementation pull request linking this plan and Roadmap milestone after required checks and blocking feedback are resolved.
 - [ ] After merge, check the matching Roadmap milestone and archive this plan through an administrative documentation pull request.
 
 ## Completion Checklist
 
-- [ ] `/skills` is canonical and appears after Prompts in desktop and mobile navigation.
-- [ ] Inventory uses only Pi’s active `getSkills()` snapshot and shows global, trusted-project, package, settings-added, and temporary provenance without host paths.
-- [ ] Native validation warnings are bounded, path-safe, and associated with active skills when possible.
-- [ ] The viewer exposes the actual entry file plus safe directory-skill references, scripts, and assets; direct root skills expose no siblings.
-- [ ] Text files render as plain text, while binary, oversized, symlinked, hard-linked, and unavailable files expose metadata only.
-- [ ] Browser requests contain only opaque skill IDs and validated relative paths.
-- [ ] Trust/reload changes replace stale inventory and stale IDs fail closed.
-- [ ] Directly related server, API, Web, route, and navigation unit tests pass.
+- [x] `/skills` is canonical and appears after Prompts in desktop and mobile navigation.
+- [x] Inventory uses only Pi’s active `getSkills()` snapshot and shows global, trusted-project, package, settings-added, and temporary provenance without host paths.
+- [x] Native validation warnings are bounded, path-safe, and associated with active skills when possible.
+- [x] The viewer exposes the actual entry file plus safe directory-skill references, scripts, and assets; direct root skills expose no siblings.
+- [x] Text files render as plain text, while binary, oversized, symlinked, hard-linked, and unavailable files expose metadata only.
+- [x] Browser requests contain only opaque skill IDs and validated relative paths.
+- [x] Trust/reload changes replace stale inventory and stale IDs fail closed.
+- [x] Directly related server, API, Web, route, and navigation unit tests pass.
 - [ ] Dedicated implementation PR is merged with blocking feedback resolved.
 - [ ] The Roadmap milestone is checked and this plan is archived only after merge.
 
 ## Verification
 
-- Pending implementation.
+- `npm test -- tests/server/skill-viewer.test.ts tests/server/api-metadata.test.ts tests/server/api.test.ts tests/server/agent.test.ts tests/server/resources.test.ts tests/server/project-trust.test.ts tests/web/skills.test.tsx tests/web/navigation.test.ts tests/web/navigation-component.test.tsx tests/web/routes.test.ts tests/web/app.test.tsx` passed all 253 focused tests across 11 files.
+- `npm run check` passed Biome formatting and lint checks across 149 files.
+- `npm run check:e2e` passed TypeScript checking for the updated canonical route contract without running deferred browser scenarios.
+- `npm run build:server && npm run build:web` passed; Vite reported only the existing chunk-size advisory.
+- A real Pi `DefaultResourceLoader` test proves missing-description files remain outside the active catalog while their native warnings remain visible.
+- Projection tests cover global `.pi`, global `.agents`, trusted project, package, settings-added, and temporary source/provenance labels without absolute paths.
+- File-viewer tests cover `SKILL.md`, references, scripts, binary assets, the 500 KB content bound, a 500-entry traversal bound, direct-file sibling isolation, traversal rejection, stale IDs, symlinks, and hard links.
+- API tests pin maintenance-snapshot inventory/file reads and reject browser-supplied extra absolute-path fields.
+- Web tests cover provenance, trust messaging, warning association, metadata-only assets, UTF-8 text viewing, errors, and stale inventory replacement.
+- Diff audit confirmed that Pi’s `getSkills()` winners and diagnostics remain authoritative; no CRUD, activation, package mutation, script execution, or duplicate skill discovery was added.

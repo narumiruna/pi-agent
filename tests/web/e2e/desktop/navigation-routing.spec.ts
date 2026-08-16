@@ -13,6 +13,8 @@ function destinationContent(page: PlaywrightPage, destination: Page) {
       return page.getByRole("heading", { name: "Files" });
     case "prompts":
       return page.getByRole("heading", { name: "Prompts" });
+    case "skills":
+      return page.getByRole("heading", { name: "Skills" });
     case "heartbeat":
       return page.getByRole("heading", { name: "Heartbeat" });
     case "library":
@@ -46,7 +48,6 @@ test("restores canonical destinations and safely recovers invalid routes", async
     "/unknown",
     "/nested/unknown",
     "/files/",
-    "/skills",
     "/extensions",
   ]) {
     const response = await page.goto(invalidPath);

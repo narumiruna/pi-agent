@@ -1327,6 +1327,10 @@ export class PiService {
     return this.runtime.services.resourceLoader.getPrompts().diagnostics;
   }
 
+  skillSnapshot() {
+    return this.runtime.services.resourceLoader.getSkills();
+  }
+
   commands(
     promptResources: readonly WebPromptResource[],
   ): WebResourceCommand[] {

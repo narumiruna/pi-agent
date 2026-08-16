@@ -413,6 +413,7 @@ describe("Pi resource provenance", () => {
                   },
                 },
               ],
+              diagnostics: [],
             }),
           },
         },
@@ -451,6 +452,11 @@ describe("Pi resource provenance", () => {
         type: "collision",
         message: 'name "/native-prompt" collision',
       },
+    ]);
+    expect(service.skillSnapshot().skills).toEqual([
+      expect.objectContaining({ name: "project-package-skill" }),
+      expect.objectContaining({ name: "temporary-package-skill" }),
+      expect.objectContaining({ name: "configured-skill" }),
     ]);
     expect(commands.map(({ name, source }) => ({ name, source }))).toEqual([
       { name: "shared:1", source: "extension" },
