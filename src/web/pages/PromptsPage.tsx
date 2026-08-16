@@ -14,10 +14,16 @@ import {
   isValidPromptName,
   resourceProvenanceLabel,
   type WebProjectTrust,
+  type WebPromptDiagnostic,
   type WebPromptInventory,
   type WebPromptResource,
   type WebPromptWriteScope,
 } from "../../shared/contracts.js";
+import {
+  type PromptValidationDiagnostic,
+  validatePromptContent,
+  validatePromptName,
+} from "../../shared/prompt-validation.js";
 import { ApiError, api, mutation } from "../api.js";
 
 interface Feedback {
@@ -44,6 +50,74 @@ function MutationFeedback({ feedback }: { feedback?: Feedback }) {
     >
       {feedback.message}
     </Text>
+  );
+}
+
+type DisplayPromptDiagnostic = PromptValidationDiagnostic | WebPromptDiagnostic;
+
+function PromptDiagnosticMessage({
+  diagnostic,
+}: {
+  diagnostic: DisplayPromptDiagnostic;
+}) {
+  const { t } = useTranslation();
+  const path = "path" in diagnostic ? diagnostic.path : undefined;
+  const name = "name" in diagnostic ? diagnostic.name : undefined;
+  const relatedPath =
+    "relatedPath" in diagnostic ? diagnostic.relatedPath : undefined;
+  const target = path ?? t("promptDraft");
+  switch (diagnostic.code) {
+    case "invalid_name":
+      return t("promptDiagnosticInvalidName", { target });
+    case "invalid_frontmatter":
+      return t("promptDiagnosticInvalidFrontmatter", { target });
+    case "content_too_large":
+      return t("promptDiagnosticContentTooLarge", { target });
+    case "name_collision":
+      return relatedPath
+        ? t("promptDiagnosticNativeCollision", {
+            name,
+            winner: path,
+            loser: relatedPath,
+          })
+        : t("promptDiagnosticDraftCollision", { name, winner: path });
+  }
+}
+
+function PromptDiagnostics({
+  diagnostics,
+  live = false,
+}: {
+  diagnostics: DisplayPromptDiagnostic[];
+  live?: boolean;
+}) {
+  const { t } = useTranslation();
+  if (diagnostics.length === 0) return null;
+  return (
+    <ul
+      aria-label={t("promptDiagnostics")}
+      aria-live={live ? "polite" : undefined}
+      className="promptDiagnostics"
+    >
+      {diagnostics.map((diagnostic) => (
+        <li
+          key={[
+            diagnostic.code,
+            "name" in diagnostic ? diagnostic.name : "",
+            "path" in diagnostic ? diagnostic.path : "",
+            "relatedPath" in diagnostic ? diagnostic.relatedPath : "",
+          ].join("\0")}
+        >
+          <Text
+            color={diagnostic.severity === "error" ? "red" : "amber"}
+            highContrast
+            size="2"
+          >
+            <PromptDiagnosticMessage diagnostic={diagnostic} />
+          </Text>
+        </li>
+      ))}
+    </ul>
   );
 }
 
@@ -128,6 +202,7 @@ function DocumentEditor({
 export function PromptsPage({ refresh = 0 }: { refresh?: number }) {
   const { t } = useTranslation();
   const [templates, setTemplates] = useState<WebPromptResource[]>();
+  const [diagnostics, setDiagnostics] = useState<WebPromptDiagnostic[]>([]);
   const [projectTrust, setProjectTrust] = useState<WebProjectTrust>();
   const [templateName, setTemplateName] = useState("");
   const [templateContent, setTemplateContent] = useState("");
@@ -142,7 +217,36 @@ export function PromptsPage({ refresh = 0 }: { refresh?: number }) {
   selectedRef.current = selected;
   templateContentRef.current = templateContent;
 
+  const normalizedName = templateName.trim();
+  const draftDiagnostics: DisplayPromptDiagnostic[] = [
+    ...(!selected && templateName.length > 0
+      ? validatePromptName(normalizedName)
+      : []),
+    ...(selected && !selected.editable
+      ? []
+      : validatePromptContent(templateContent)),
+  ];
+  const collision =
+    !selected && normalizedName
+      ? templates?.find((template) => template.name === normalizedName)
+      : undefined;
+  if (
+    collision &&
+    !draftDiagnostics.some(({ code }) => code === "invalid_name")
+  )
+    draftDiagnostics.push({
+      code: "name_collision",
+      severity: "warning",
+      name: normalizedName,
+      path: collision.path,
+      promptId: collision.id,
+    });
+  const draftHasErrors = draftDiagnostics.some(
+    ({ severity }) => severity === "error",
+  );
+
   const invalidateDiscoveryPermissions = useCallback(() => {
+    setDiagnostics([]);
     setProjectTrust(undefined);
     setTemplateScope("user");
     const current = selectedRef.current;
@@ -156,12 +260,17 @@ export function PromptsPage({ refresh = 0 }: { refresh?: number }) {
     async (selectedId?: string, preserveDraft = false) => {
       const request = ++discoveryRequest.current;
       setTemplates(undefined);
+      setDiagnostics([]);
       setFeedback(undefined);
       try {
-        const { prompts: resources, projectTrust: trust } =
-          await api<WebPromptInventory>("/api/prompt-inventory");
+        const {
+          prompts: resources,
+          diagnostics: refreshedDiagnostics,
+          projectTrust: trust,
+        } = await api<WebPromptInventory>("/api/prompt-inventory");
         if (request !== discoveryRequest.current) return;
         setTemplates(resources);
+        setDiagnostics(refreshedDiagnostics ?? []);
         setProjectTrust(trust);
         if (!trust.trusted) setTemplateScope("user");
         if (selectedId) {
@@ -225,10 +334,14 @@ export function PromptsPage({ refresh = 0 }: { refresh?: number }) {
   > => {
     const request = ++discoveryRequest.current;
     try {
-      const { prompts: resources, projectTrust: trust } =
-        await api<WebPromptInventory>("/api/prompt-inventory");
+      const {
+        prompts: resources,
+        diagnostics: refreshedDiagnostics,
+        projectTrust: trust,
+      } = await api<WebPromptInventory>("/api/prompt-inventory");
       if (request !== discoveryRequest.current) return undefined;
       setTemplates(resources);
+      setDiagnostics(refreshedDiagnostics ?? []);
       setProjectTrust(trust);
       if (!trust.trusted) setTemplateScope("user");
       return resources;
@@ -277,6 +390,7 @@ export function PromptsPage({ refresh = 0 }: { refresh?: number }) {
     const name = templateName.trim();
     if (
       (!selected && !isValidPromptName(name)) ||
+      draftHasErrors ||
       pending ||
       (selected && !selected.editable)
     )
@@ -401,6 +515,17 @@ export function PromptsPage({ refresh = 0 }: { refresh?: number }) {
           />
         </Tabs.Content>
         <Tabs.Content className="tabContent" value="templates">
+          {diagnostics.length > 0 ? (
+            <section
+              className="promptDiagnosticPanel"
+              aria-labelledby="prompt-diagnostics-title"
+            >
+              <Heading id="prompt-diagnostics-title" size="3">
+                {t("promptDiagnostics")}
+              </Heading>
+              <PromptDiagnostics diagnostics={diagnostics} />
+            </section>
+          ) : null}
           <section
             className="editorBlock"
             aria-labelledby="template-editor-title"
@@ -482,6 +607,7 @@ export function PromptsPage({ refresh = 0 }: { refresh?: number }) {
               rows={10}
               value={templateContent}
             />
+            <PromptDiagnostics diagnostics={draftDiagnostics} live />
             {selected && !selected.editable ? (
               <Text as="p" className="inlineNotice" role="status" size="2">
                 {selected.contentTruncated
@@ -494,6 +620,7 @@ export function PromptsPage({ refresh = 0 }: { refresh?: number }) {
                 <Button
                   disabled={
                     Boolean(pending) ||
+                    draftHasErrors ||
                     (!selected && !isValidPromptName(templateName.trim()))
                   }
                   highContrast

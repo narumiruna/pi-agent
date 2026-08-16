@@ -187,6 +187,17 @@ const resources = {
       promptTemplateName: "Template name",
       promptNameRequirement:
         "Use 1–200 non-space characters and at most 252 UTF-8 bytes; names cannot start with a dot or contain path separators or control characters.",
+      promptDiagnostics: "Validation diagnostics",
+      promptDraft: "Current draft",
+      promptDiagnosticInvalidName: "{{target}} has an invalid prompt name.",
+      promptDiagnosticInvalidFrontmatter:
+        "{{target}} has invalid YAML frontmatter. Description and argument-hint must be strings.",
+      promptDiagnosticContentTooLarge:
+        "{{target}} exceeds the 1 MB UTF-8 content limit.",
+      promptDiagnosticNativeCollision:
+        "/{{name}} collides: Pi uses {{winner}} and ignores {{loser}}.",
+      promptDiagnosticDraftCollision:
+        "/{{name}} already matches {{winner}}. Pi precedence will decide which prompt is active.",
       promptTemplateContent: "Template content",
       promptScope: "Create in",
       promptScopeUser: "User prompts",
@@ -589,6 +600,16 @@ const resources = {
       promptTemplateName: "模板名稱",
       promptNameRequirement:
         "請使用 1–200 個不含空白的字元，且 UTF-8 最多 252 bytes；不可用點開頭，也不可包含路徑分隔符或控制字元。",
+      promptDiagnostics: "驗證診斷",
+      promptDraft: "目前草稿",
+      promptDiagnosticInvalidName: "{{target}} 的提示詞名稱無效。",
+      promptDiagnosticInvalidFrontmatter:
+        "{{target}} 的 YAML frontmatter 無效；description 與 argument-hint 必須是字串。",
+      promptDiagnosticContentTooLarge: "{{target}} 超過 1 MB UTF-8 內容上限。",
+      promptDiagnosticNativeCollision:
+        "/{{name}} 發生命名衝突：Pi 使用 {{winner}}，並忽略 {{loser}}。",
+      promptDiagnosticDraftCollision:
+        "/{{name}} 已與 {{winner}} 同名；Pi 將依優先順序決定啟用哪一份提示詞。",
       promptTemplateContent: "模板內容",
       promptScope: "建立位置",
       promptScopeUser: "使用者提示詞",

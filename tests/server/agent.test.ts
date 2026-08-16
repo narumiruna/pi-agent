@@ -385,7 +385,12 @@ describe("Pi resource provenance", () => {
                   sourceInfo: sourceInfo("user", "top-level"),
                 },
               ],
-              diagnostics: [],
+              diagnostics: [
+                {
+                  type: "collision",
+                  message: 'name "/native-prompt" collision',
+                },
+              ],
             }),
             getSkills: () => ({
               skills: [
@@ -440,6 +445,12 @@ describe("Pi resource provenance", () => {
 
     expect(service.promptTemplates()).toEqual([
       expect.objectContaining({ name: "native-prompt" }),
+    ]);
+    expect(service.promptDiagnostics()).toEqual([
+      {
+        type: "collision",
+        message: 'name "/native-prompt" collision',
+      },
     ]);
     expect(commands.map(({ name, source }) => ({ name, source }))).toEqual([
       { name: "shared:1", source: "extension" },

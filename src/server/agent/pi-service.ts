@@ -1323,6 +1323,10 @@ export class PiService {
     return this.runtime.services.resourceLoader.getPrompts().prompts;
   }
 
+  promptDiagnostics() {
+    return this.runtime.services.resourceLoader.getPrompts().diagnostics;
+  }
+
   commands(
     promptResources: readonly WebPromptResource[],
   ): WebResourceCommand[] {

@@ -4,6 +4,7 @@ import { Theme } from "@radix-ui/themes";
 import {
   act,
   cleanup,
+  fireEvent,
   render,
   screen,
   waitFor,
@@ -833,6 +834,15 @@ describe("Prompts page", () => {
 
   test("refreshes native discovery when deleting a collision winner", async () => {
     let trustLoads = 0;
+    let diagnostics = [
+      {
+        code: "name_collision" as const,
+        severity: "warning" as const,
+        name: "review",
+        path: "~/.pi/agent/prompts/review.md",
+        relatedPath: "packages/review/prompts/review.md",
+      },
+    ];
     let resources: WebPromptResource[] = [
       {
         id: "prompt_user_review",
@@ -856,10 +866,12 @@ describe("Prompts page", () => {
         trustLoads += 1;
         return json({
           prompts: resources,
+          diagnostics,
           projectTrust: { required: false, trusted: false },
         });
       }
       if (url === "/api/prompts/prompt_user_review" && method === "DELETE") {
+        diagnostics = [];
         resources = [
           {
             id: "prompt_package_review",
@@ -904,7 +916,110 @@ describe("Prompts page", () => {
     expect(
       within(panel).getByRole("textbox", { name: "Template name" }),
     ).toBeEnabled();
+    expect(
+      within(panel).queryByText(
+        "/review collides: Pi uses ~/.pi/agent/prompts/review.md and ignores packages/review/prompts/review.md.",
+      ),
+    ).toBeNull();
     expect(trustLoads).toBeGreaterThanOrEqual(2);
+  });
+
+  test("shows inventory and live name, frontmatter, size, and collision diagnostics", async () => {
+    const resource: WebPromptResource = {
+      id: "prompt_review",
+      name: "review",
+      description: "Review changes",
+      content: "Review changes",
+      contentTruncated: false,
+      provenance: { scope: "user", origin: "top-level" },
+      source: "local",
+      path: "~/.pi/agent/prompts/review.md",
+      editable: true,
+      deletable: true,
+    };
+    vi.mocked(fetch).mockImplementation(async (input, init) => {
+      const url = String(input);
+      const method = init?.method ?? "GET";
+      if (url.startsWith("/api/documents/") && method === "GET")
+        return json({ content: "" });
+      if (url === "/api/prompt-inventory")
+        return json({
+          prompts: [resource],
+          diagnostics: [
+            {
+              code: "invalid_frontmatter",
+              severity: "error",
+              name: "broken",
+              path: "~/.pi/agent/prompts/broken.md",
+            },
+            {
+              code: "name_collision",
+              severity: "warning",
+              name: "review",
+              path: ".pi/prompts/review.md",
+              relatedPath: "~/.pi/agent/prompts/review.md",
+            },
+          ],
+          projectTrust: { required: false, trusted: false },
+        });
+      throw new Error(`Unexpected request: ${method} ${url}`);
+    });
+    const user = userEvent.setup();
+    renderPage();
+
+    await user.click(
+      await screen.findByRole("tab", { name: /Prompt templates/ }),
+    );
+    const panel = screen.getByRole("tabpanel", { name: /Prompt templates/ });
+    expect(within(panel).getByText("Validation diagnostics")).toBeVisible();
+    expect(
+      within(panel).getByText(
+        "~/.pi/agent/prompts/broken.md has invalid YAML frontmatter. Description and argument-hint must be strings.",
+      ),
+    ).toBeVisible();
+    expect(
+      within(panel).getByText(
+        "/review collides: Pi uses .pi/prompts/review.md and ignores ~/.pi/agent/prompts/review.md.",
+      ),
+    ).toBeVisible();
+
+    const name = within(panel).getByRole("textbox", { name: "Template name" });
+    const content = within(panel).getByRole("textbox", {
+      name: "Template content",
+    });
+    const save = within(panel).getByRole("button", { name: "Save changes" });
+    await user.type(name, "bad name");
+    expect(
+      within(panel).getByText("Current draft has an invalid prompt name."),
+    ).toBeVisible();
+    expect(save).toBeDisabled();
+
+    await user.clear(name);
+    await user.type(name, "review");
+    expect(
+      within(panel).getByText(
+        "/review already matches ~/.pi/agent/prompts/review.md. Pi precedence will decide which prompt is active.",
+      ),
+    ).toBeVisible();
+    expect(save).toBeEnabled();
+
+    fireEvent.change(content, {
+      target: { value: "---\ndescription: [\n---\nBody" },
+    });
+    expect(
+      within(panel).getByText(
+        "Current draft has invalid YAML frontmatter. Description and argument-hint must be strings.",
+      ),
+    ).toBeVisible();
+    expect(save).toBeDisabled();
+
+    fireEvent.change(content, { target: { value: "é".repeat(500_001) } });
+    expect(
+      within(panel).getByText(
+        "Current draft exceeds the 1 MB UTF-8 content limit.",
+      ),
+    ).toBeVisible();
+    expect(save).toBeDisabled();
   });
 
   test("shows package and temporary prompts as path-safe read-only resources", async () => {

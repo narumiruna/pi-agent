@@ -1,3 +1,17 @@
+import type { PromptDiagnosticCode } from "./prompt-validation.js";
+
+export type {
+  PromptDiagnosticCode,
+  PromptValidationDiagnostic,
+} from "./prompt-validation.js";
+export {
+  isValidPromptName,
+  MAX_PROMPT_CONTENT_BYTES,
+  MAX_PROMPT_FILENAME_BYTES,
+  MAX_PROMPT_NAME_LENGTH,
+  PROMPT_NAME_PATTERN,
+} from "./prompt-validation.js";
+
 export const CHAT_IMAGE_MIME_TYPES = [
   "image/png",
   "image/jpeg",
@@ -99,29 +113,23 @@ export interface WebResourceCommand {
 
 export interface WebPromptInventory {
   prompts: WebPromptResource[];
+  diagnostics: WebPromptDiagnostic[];
   projectTrust: WebProjectTrust;
+}
+
+export interface WebPromptDiagnostic {
+  code: PromptDiagnosticCode;
+  severity: "error" | "warning";
+  name?: string;
+  path?: string;
+  relatedPath?: string;
+  promptId?: string;
 }
 
 export interface WebPromptTemplateDocument {
   name: string;
   content: string;
   provenance: WebResourceProvenance;
-}
-
-export const PROMPT_NAME_PATTERN =
-  "^(?!\\.)[^\\s/\\\\\\u0000-\\u001F\\u007F]+$";
-export const MAX_PROMPT_NAME_LENGTH = 200;
-export const MAX_PROMPT_FILENAME_BYTES = 255;
-const PROMPT_NAME = new RegExp(PROMPT_NAME_PATTERN);
-const UTF8_ENCODER = new TextEncoder();
-
-export function isValidPromptName(name: string): boolean {
-  return (
-    name.length >= 1 &&
-    name.length <= MAX_PROMPT_NAME_LENGTH &&
-    UTF8_ENCODER.encode(`${name}.md`).byteLength <= MAX_PROMPT_FILENAME_BYTES &&
-    PROMPT_NAME.test(name)
-  );
 }
 
 export type WebPromptWriteScope = "project" | "user";

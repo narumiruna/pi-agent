@@ -12,6 +12,7 @@ import { basename, dirname, join, relative, resolve, sep } from "node:path";
 import type {
   PackageManager,
   PromptTemplate,
+  ResourceDiagnostic,
 } from "@earendil-works/pi-coding-agent";
 import type {
   WebPackageSummary,
@@ -20,6 +21,12 @@ import type {
   WebPromptTemplateDocument,
   WebPromptWriteScope,
 } from "../../shared/contracts.js";
+import {
+  MAX_PROMPT_CONTENT_BYTES,
+  type PromptValidationDiagnostic,
+  validatePrompt,
+  validatePromptContent,
+} from "../../shared/prompt-validation.js";
 import {
   opaquePackageId,
   opaquePromptId,
@@ -35,6 +42,7 @@ import {
   type ExpectedFileIdentity,
 } from "./atomic-write.js";
 import { safeMarkdownPath } from "./paths.js";
+import { projectPromptDiagnostics } from "./prompt-diagnostics.js";
 
 export type DocumentKind = "append" | "heartbeat" | "system" | "template";
 
@@ -53,6 +61,7 @@ export interface NativeResourceRuntime {
   reload(): Promise<void>;
   mutateResources<T>(operation: () => Promise<T>): Promise<T>;
   projectTrust(): WebProjectTrust;
+  promptDiagnostics(): ReadonlyArray<ResourceDiagnostic>;
   promptTemplates(): ReadonlyArray<PromptTemplate>;
 }
 
@@ -60,7 +69,11 @@ export class ResourceConflictError extends Error {}
 
 export class ResourcePermissionError extends Error {}
 
-const MAX_PROMPT_CONTENT = 1_000_000;
+export class ResourceValidationError extends Error {
+  constructor(readonly diagnostic: PromptValidationDiagnostic["code"]) {
+    super(`Prompt validation failed: ${diagnostic}`);
+  }
+}
 
 export function noFollowReadFlags(noFollow: number | undefined): number {
   return constants.O_RDONLY | (noFollow ?? 0);
@@ -354,7 +367,7 @@ export class ResourceService {
       await this.upsertUserTemplate(name, content);
       return;
     }
-    if (Buffer.byteLength(content) > 1_000_000)
+    if (Buffer.byteLength(content) > MAX_PROMPT_CONTENT_BYTES)
       throw new Error("Document is too large");
     const path = this.documentPath(kind, name);
     const parent = await this.assertSafeParent(path, this.agentDir, true);
@@ -514,7 +527,7 @@ export class ResourceService {
         const raw = await this.readSafeFile(
           prompt.filePath,
           await this.promptReadBoundary(prompt, scope),
-          MAX_PROMPT_CONTENT,
+          MAX_PROMPT_CONTENT_BYTES,
           true,
         );
         content = canonical ? raw.content : snapshotContent;
@@ -545,7 +558,8 @@ export class ResourceService {
       editable = false;
     }
     const contentTruncated =
-      rawContentTruncated || Buffer.byteLength(content) > MAX_PROMPT_CONTENT;
+      rawContentTruncated ||
+      Buffer.byteLength(content) > MAX_PROMPT_CONTENT_BYTES;
     if (contentTruncated) editable = false;
     return {
       id: opaquePromptId(prompt.sourceInfo),
@@ -555,7 +569,7 @@ export class ResourceService {
         ? { argumentHint: safePromptMetadataText(argumentHint) }
         : {}),
       content: contentTruncated
-        ? truncateUtf8(content, MAX_PROMPT_CONTENT)
+        ? truncateUtf8(content, MAX_PROMPT_CONTENT_BYTES)
         : content,
       contentTruncated,
       provenance: projectResourceProvenance(prompt.sourceInfo),
@@ -574,6 +588,36 @@ export class ResourceService {
     );
   }
 
+  async listPromptDiagnostics() {
+    const prompts = this.runtime.promptTemplates();
+    const projectTrusted = this.runtime.projectTrust().trusted;
+    return projectPromptDiagnostics({
+      nativeDiagnostics: this.runtime.promptDiagnostics(),
+      projectRoot: this.promptRoot("project"),
+      projectTrusted,
+      prompts,
+      readActive: async (prompt) =>
+        this.readSafeFile(
+          prompt.filePath,
+          await this.promptReadBoundary(
+            prompt,
+            this.canonicalPromptScope(prompt),
+          ),
+          MAX_PROMPT_CONTENT_BYTES,
+          true,
+        ),
+      readCanonical: (filePath, scope) =>
+        this.readSafeFile(
+          filePath,
+          this.promptBoundary(scope),
+          MAX_PROMPT_CONTENT_BYTES,
+          true,
+        ),
+      resourcePath: (prompt) => this.logicalPromptPath(prompt),
+      userRoot: this.promptRoot("user"),
+    });
+  }
+
   private nativePrompt(id: string): PromptTemplate {
     const prompt = this.runtime
       .promptTemplates()
@@ -585,6 +629,16 @@ export class ResourceService {
   private assertProjectWritable(scope: WebPromptWriteScope): void {
     if (scope === "project" && !this.runtime.projectTrust().trusted)
       throw new ResourcePermissionError("Project prompts are not trusted");
+  }
+
+  private assertPromptValid(name: string, content: string): void {
+    const [diagnostic] = validatePrompt(name, content);
+    if (diagnostic) throw new ResourceValidationError(diagnostic.code);
+  }
+
+  private assertPromptContentValid(content: string): void {
+    const [diagnostic] = validatePromptContent(content);
+    if (diagnostic) throw new ResourceValidationError(diagnostic.code);
   }
 
   private assertNoHigherPrecedenceWinner(
@@ -716,8 +770,7 @@ export class ResourceService {
     content: string,
   ): Promise<void> {
     await this.runtime.mutateResources(async () => {
-      if (Buffer.byteLength(content) > MAX_PROMPT_CONTENT)
-        throw new Error("Document is too large");
+      this.assertPromptValid(name, content);
       const path = safeMarkdownPath(this.promptRoot("user"), name);
       const promptName = basename(path).slice(0, -3);
       this.assertNoHigherPrecedenceWinner("user", promptName, path);
@@ -781,6 +834,7 @@ export class ResourceService {
   ): Promise<void> {
     await this.runtime.mutateResources(async () => {
       this.assertProjectWritable(scope);
+      this.assertPromptValid(name, content);
       const path = safeMarkdownPath(this.promptRoot(scope), name);
       const promptName = basename(path).slice(0, -3);
       let existingParent: string | undefined;
@@ -801,8 +855,6 @@ export class ResourceService {
         }
       }
       this.assertNoHigherPrecedenceWinner(scope, promptName, path);
-      if (Buffer.byteLength(content) > MAX_PROMPT_CONTENT)
-        throw new Error("Document is too large");
       const parent = await this.assertSafeParent(
         path,
         this.promptBoundary(scope),
@@ -820,8 +872,7 @@ export class ResourceService {
 
   async updatePromptResource(id: string, content: string): Promise<void> {
     await this.runtime.mutateResources(async () => {
-      if (Buffer.byteLength(content) > MAX_PROMPT_CONTENT)
-        throw new Error("Document is too large");
+      this.assertPromptContentValid(content);
       const prompt = this.nativePrompt(id);
       const scope = this.canonicalPromptScope(prompt);
       if (!scope) throw new ResourcePermissionError("Prompt is read-only");

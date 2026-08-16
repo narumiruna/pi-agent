@@ -158,6 +158,7 @@ describe("ProjectTrustPolicy", () => {
         return result;
       },
       projectTrust: () => policy.status(),
+      promptDiagnostics: () => loader.getPrompts().diagnostics,
       promptTemplates: () => loader.getPrompts().prompts,
     };
     const packages = {
