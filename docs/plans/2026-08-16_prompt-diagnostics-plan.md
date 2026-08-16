@@ -60,7 +60,7 @@ Collision diagnostics are warnings because Pi has a deterministic winner; invali
 - [x] Add focused shared/server/Web unit coverage for invalid names, malformed or mistyped frontmatter, multibyte size limits, omitted files, path redaction, collision warnings, and write rejection.
 - [x] Run the directly related unit suites and formatting checks; record exact results.
 - [x] Audit scope against this plan and the Roadmap milestone, then update this plan’s evidence and checklist.
-- [ ] Commit, push, open one dedicated signed implementation pull request linking this plan and Roadmap milestone, address blocking feedback, and merge.
+- [ ] Commit, push, and merge dedicated signed implementation pull request [#51](https://github.com/narumiruna/pi-agent/pull/51), which links this plan and Roadmap milestone, after required checks and blocking feedback are resolved.
 - [ ] After merge, check the matching Roadmap milestone and archive this plan through an administrative documentation pull request.
 
 ## Completion Checklist
