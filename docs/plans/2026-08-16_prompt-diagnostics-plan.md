@@ -1,6 +1,6 @@
 # Prompt Validation Diagnostics Plan
 
-Status: In progress.
+Status: Closeout in progress after implementation merge.
 
 ## Goal
 
@@ -60,7 +60,7 @@ Collision diagnostics are warnings because Pi has a deterministic winner; invali
 - [x] Add focused shared/server/Web unit coverage for invalid names, malformed or mistyped frontmatter, multibyte size limits, omitted files, path redaction, collision warnings, and write rejection.
 - [x] Run the directly related unit suites and formatting checks; record exact results.
 - [x] Audit scope against this plan and the Roadmap milestone, then update this plan’s evidence and checklist.
-- [ ] Commit, push, and merge dedicated signed implementation pull request [#51](https://github.com/narumiruna/pi-agent/pull/51), which links this plan and Roadmap milestone, after required checks and blocking feedback are resolved.
+- [x] Commit, push, and merge dedicated signed implementation pull request [#51](https://github.com/narumiruna/pi-agent/pull/51), which linked this plan and Roadmap milestone, as `d96f9a8` after required checks passed with no blocking feedback.
 - [ ] After merge, check the matching Roadmap milestone and archive this plan through an administrative documentation pull request.
 
 ## Completion Checklist
@@ -71,7 +71,7 @@ Collision diagnostics are warnings because Pi has a deterministic winner; invali
 - [x] Collision warnings identify Pi’s winner and hidden loser without exposing absolute host paths or changing precedence.
 - [x] Prompt inventory refresh replaces stale diagnostics after mutations and trust/reload changes.
 - [x] Directly related shared, server, API, and Web unit tests pass.
-- [ ] Dedicated implementation PR is merged with blocking feedback resolved.
+- [x] Dedicated implementation pull request [#51](https://github.com/narumiruna/pi-agent/pull/51) merged as `d96f9a8` with CI passing and no blocking feedback.
 - [ ] The Roadmap milestone is checked and this plan is archived only after merge.
 
 ## Verification
@@ -84,3 +84,4 @@ Collision diagnostics are warnings because Pi has a deterministic winner; invali
 - API tests pin structured validation error codes and snapshot-coherent inventory diagnostics without adding diagnostics to command expansion.
 - Web tests cover localized inventory/live diagnostics, warning-only collisions, error-only write blocking, and replacement of stale diagnostics after native refresh.
 - Diff audit confirmed no prompt discovery, precedence, provenance, trust, package management, command expansion, or reload lifecycle replacement; the canonical scan produces diagnostics only.
+- GitHub CI passed on final implementation head `d809708`; implementation PR [#51](https://github.com/narumiruna/pi-agent/pull/51) merged as `d96f9a8` with no submitted review findings or blocking feedback.
