@@ -275,13 +275,13 @@ Resource metadata preserves Pi's native `scope` (`user`, `project`, or `temporar
 
 The Web renders those path-free fields directly and does not infer ownership from resource names or filesystem paths.
 
-Project-local Pi settings, skills, packages, and extensions remain disabled until Pi's native project trust is effective.
+Project-local Pi settings, prompts, skills, packages, and extensions remain disabled until Pi's native project trust is effective.
 
 Startup, every session rebuild, and every general resource reload first refresh native settings and then honor the nearest saved `trust.json` decision and the global non-interactive `defaultProjectTrust`; `ask`, `never`, and trust-store read failures remain untrusted.
 
 The Settings status reports the effective runtime state, so an external `trust.json` change appears only when one of those synchronized resource-discovery boundaries applies it, and loaded resources remain disableable after their source files are removed.
 
-The authenticated Settings page requires an executable-code acknowledgement before enabling project trust, waits for the agent to become idle, reloads chat and heartbeat through Pi, and persists the decision in Pi's native trust store.
+The authenticated Settings page requires an executable-code acknowledgement before enabling project trust, including proactively before the first project resource is created, waits for the agent to become idle, reloads chat and heartbeat through Pi, and persists the decision in Pi's native trust store.
 
 Disabling trust reloads and unloads project resources.
 
@@ -301,9 +301,21 @@ Project trust controls input loading and is not a sandbox for Pi tools, extensio
 
 ## Prompts, skills, and extensions
 
-The Prompts page edits global `SYSTEM.md`, `APPEND_SYSTEM.md`, and user files under `prompts/` through the existing resource API.
+The Prompts page edits global `SYSTEM.md` and `APPEND_SYSTEM.md` through the existing resource API.
 
-Those files remain under Pi’s native agent directory, use atomic writes, and trigger Pi’s native reload lifecycle after each mutation; no data conversion or parallel prompt store is involved.
+Its template inventory comes directly from Pi’s active resource loader, including global user, trusted project, package, settings-added, and temporary prompt templates after native precedence and deduplication.
+
+The Web receives opaque prompt IDs, Pi’s scope/origin provenance, prompt-authored descriptions and argument hints, sanitized source labels, and logical paths such as `~/.pi/agent/prompts/review.md`, `.pi/prompts/review.md`, or a package-relative path; native absolute paths, raw package sources, and installation roots remain server-only.
+
+Direct, non-symlink user files in Pi’s canonical global prompt directory and effectively trusted project files in the canonical project prompt directory are editable through opaque IDs.
+
+Package-origin, temporary, settings-added files outside those canonical directories, nested files, symlinked files, and untrusted project prompts are read-only.
+
+New templates are created only in Pi’s canonical global or trusted-project prompt directories, reject existing or higher-precedence native winners, and never overwrite an existing file.
+
+Prompt mutations refresh trust and discovery under Pi’s maintenance lease, use atomic persistence, and reload both native sessions afterward, so `/command` discovery refreshes without a parallel prompt store or command cache.
+
+Chat autocomplete uses Pi’s resolved extension invocation names plus native prompt argument hints and safe source/provenance labels.
 
 Library retains package and MCP controls during the remaining resource migration.
 

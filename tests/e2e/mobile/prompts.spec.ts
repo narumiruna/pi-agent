@@ -43,7 +43,7 @@ test("keyboard-manages prompts without overflow at 390px", async ({ page }) => {
   await expect(remove).toBeEnabled();
   const deleted = page.waitForResponse(
     (response) =>
-      response.url().endsWith(`/api/templates/${name}`) &&
+      new URL(response.url()).pathname.startsWith("/api/prompts/prompt_") &&
       response.request().method() === "DELETE",
   );
   await remove.focus();

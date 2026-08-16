@@ -44,6 +44,7 @@ import type {
 interface Props {
   conversationId?: string;
   refresh: number;
+  resourceRefresh?: number;
   delta: string;
   thinking: string;
   running: boolean;
@@ -204,9 +205,14 @@ function ToolBlock({
   );
 }
 
+/**
+ * Keep chat orchestration in one state owner so transcript, queue, composer, and
+ * reconnect transitions cannot diverge; visual primitives are extracted above.
+ */
 export function ChatPage({
   conversationId,
   refresh,
+  resourceRefresh = 0,
   delta,
   thinking,
   running,
@@ -248,10 +254,15 @@ export function ChatPage({
   const end = useRef<HTMLDivElement>(null);
   const imageInput = useRef<HTMLInputElement>(null);
   useEffect(() => {
-    void api<WebResourceCommand[]>("/api/commands")
+    void resourceRefresh;
+    const abort = new AbortController();
+    void api<WebResourceCommand[]>("/api/commands", { signal: abort.signal })
       .then(setCommands)
-      .catch(() => setCommands([]));
-  }, []);
+      .catch(() => {
+        if (!abort.signal.aborted) setCommands([]);
+      });
+    return () => abort.abort();
+  }, [resourceRefresh]);
   useEffect(() => {
     void refresh;
     const request = ++transcriptRequest.current;
@@ -362,10 +373,16 @@ export function ChatPage({
         )
         .slice(0, 20)
         .map(({ command }) => ({
-          id: `command:${command.name}`,
+          id: command.id,
           kind: "command",
           label: `/${command.name}`,
-          description: `${command.description || command.source} · ${resourceProvenanceLabel(command.provenance)}`,
+          description: [
+            command.argumentHint,
+            command.description,
+            `${command.sourceLabel} · ${resourceProvenanceLabel(command.provenance)}`,
+          ]
+            .filter(Boolean)
+            .join(" · "),
           value: command.name,
         }));
     }

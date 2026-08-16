@@ -4,12 +4,17 @@ import { join } from "node:path";
 import { Hono } from "hono";
 import { describe, expect, test, vi } from "vitest";
 import { EventHub } from "../../src/server/agent/events.js";
+import { ProjectTrustDeniedError } from "../../src/server/agent/project-trust.js";
 import { AgentBusyError } from "../../src/server/agent/run-coordinator.js";
 import {
   type ApiEnv,
   type ApiServices,
   registerApi,
 } from "../../src/server/api.js";
+import {
+  ResourceConflictError,
+  ResourcePermissionError,
+} from "../../src/server/resources/service.js";
 import { WorkspaceError } from "../../src/server/workspace/errors.js";
 
 function appWith(overrides: Partial<ApiServices> = {}) {
@@ -19,6 +24,8 @@ function appWith(overrides: Partial<ApiServices> = {}) {
     modelRuntime: { getProviders: () => [] },
     models: () => [],
     projectTrust: () => ({ required: false, trusted: true }),
+    readResourceSnapshot: async <T>(operation: () => Promise<T> | T) =>
+      operation(),
     preferences: () => ({
       steeringMode: "all",
       followUpMode: "all",
@@ -546,6 +553,36 @@ describe("API contracts", () => {
     expect(JSON.stringify(body)).not.toContain("private-key");
   });
 
+  test("builds the complete model payload inside the resource snapshot", async () => {
+    let release: (() => void) | undefined;
+    let markEntered: (() => void) | undefined;
+    const entered = new Promise<void>((resolve) => {
+      markEntered = resolve;
+    });
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const models = vi.fn(() => []);
+    const readResourceSnapshot = vi.fn(
+      async <T>(operation: () => Promise<T> | T): Promise<T> => {
+        markEntered?.();
+        await gate;
+        return await operation();
+      },
+    );
+    const app = appWith({ pi: { models, readResourceSnapshot } as never });
+
+    const responsePromise = app.request("/api/models");
+    await entered;
+    expect(models).not.toHaveBeenCalled();
+    release?.();
+    const response = await responsePromise;
+
+    expect(response.status).toBe(200);
+    expect(models).toHaveBeenCalledOnce();
+    expect(readResourceSnapshot).toHaveBeenCalledOnce();
+  });
+
   test("returns a recoverable provider-auth task without credential secrets", async () => {
     const app = appWith({
       pi: {
@@ -751,29 +788,84 @@ describe("API contracts", () => {
     expect(setProjectTrust).toHaveBeenCalledWith(true);
   });
 
+  test("returns forbidden when an extension policy denies project trust", async () => {
+    const setProjectTrust = vi.fn(async () => {
+      throw new ProjectTrustDeniedError("Denied by policy");
+    });
+    const app = appWith({ pi: { setProjectTrust } as never });
+
+    const response = await app.request("/api/project-trust", {
+      method: "PUT",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ trusted: true, acknowledgeRisk: true }),
+    });
+
+    expect(response.status).toBe(403);
+    expect(await response.json()).toEqual({ error: { code: "forbidden" } });
+  });
+
+  test("returns prompt inventory and trust from one resource snapshot", async () => {
+    const prompts = [{ id: "prompt_inventory" }];
+    const listPromptResources = vi.fn(async () => prompts);
+    const readResourceSnapshot = vi.fn(
+      async <T>(operation: () => Promise<T> | T): Promise<T> =>
+        await operation(),
+    );
+    const app = appWith({
+      pi: {
+        projectTrust: () => ({ required: true, trusted: false }),
+        readResourceSnapshot,
+      } as never,
+      resources: { listPromptResources } as never,
+    });
+
+    const response = await app.request("/api/prompt-inventory");
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({
+      prompts,
+      projectTrust: { required: true, trusted: false },
+    });
+    expect(readResourceSnapshot).toHaveBeenCalledOnce();
+    expect(listPromptResources).toHaveBeenCalledOnce();
+  });
+
   test("returns path-free native provenance for resource commands", async () => {
     const commands = vi.fn(() => [
       {
+        id: "command_review",
         name: "review",
         description: "Review changes",
+        argumentHint: "<PR>",
         source: "prompt" as const,
+        sourceLabel: "local",
         provenance: { scope: "project" as const, origin: "package" as const },
       },
     ]);
-    const app = appWith({ pi: { commands } as never });
+    const promptResources = [{ id: "prompt_safe" }];
+    const listPromptResources = vi.fn(async () => promptResources);
+    const app = appWith({
+      pi: { commands } as never,
+      resources: { listPromptResources } as never,
+    });
 
     const response = await app.request("/api/commands");
 
     expect(response.status).toBe(200);
     expect(await response.json()).toEqual([
       {
+        id: "command_review",
         name: "review",
         description: "Review changes",
+        argumentHint: "<PR>",
         source: "prompt",
+        sourceLabel: "local",
         provenance: { scope: "project", origin: "package" },
       },
     ]);
     expect(commands).toHaveBeenCalledOnce();
+    expect(commands).toHaveBeenCalledWith(promptResources);
+    expect(listPromptResources).toHaveBeenCalledOnce();
   });
 
   test("returns only bounded path-safe diagnostics required by the Web", async () => {
@@ -1099,6 +1191,192 @@ describe("API contracts", () => {
     expect(await response.text()).toBe("download");
   });
 
+  test("lists and mutates native prompt resources through opaque IDs", async () => {
+    const resource = {
+      id: `prompt_${"a".repeat(43)}`,
+      name: "review",
+      description: "Review changes",
+      content: "Review changes",
+      contentTruncated: false,
+      provenance: { scope: "project" as const, origin: "top-level" as const },
+      source: "local",
+      path: ".pi/prompts/review.md",
+      editable: true,
+      deletable: true,
+    };
+    const listPromptResources = vi.fn(async () => [resource]);
+    const createPromptResource = vi.fn(async () => undefined);
+    const updatePromptResource = vi.fn(async () => undefined);
+    const deletePromptResource = vi.fn(async () => undefined);
+    const app = appWith({
+      resources: {
+        listPromptResources,
+        createPromptResource,
+        updatePromptResource,
+        deletePromptResource,
+      } as never,
+    });
+
+    const listed = await app.request("/api/prompts");
+    const created = await app.request("/api/prompts", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        name: "daily",
+        content: "Daily review",
+        scope: "project",
+      }),
+    });
+    const updated = await app.request(`/api/prompts/${resource.id}`, {
+      method: "PUT",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ content: "Updated" }),
+    });
+    const deleted = await app.request(`/api/prompts/${resource.id}`, {
+      method: "DELETE",
+    });
+
+    expect(listed.status).toBe(200);
+    expect(await listed.json()).toEqual([resource]);
+    expect(created.status).toBe(201);
+    expect(updated.status).toBe(200);
+    expect(deleted.status).toBe(204);
+    expect(createPromptResource).toHaveBeenCalledWith(
+      "project",
+      "daily",
+      "Daily review",
+    );
+    expect(updatePromptResource).toHaveBeenCalledWith(resource.id, "Updated");
+    expect(deletePromptResource).toHaveBeenCalledWith(resource.id);
+  });
+
+  test("rejects invalid or unauthorized native prompt mutations", async () => {
+    const createPromptResource = vi
+      .fn<() => Promise<void>>()
+      .mockRejectedValueOnce(
+        new ResourcePermissionError("Project prompts are not trusted"),
+      )
+      .mockRejectedValueOnce(new ResourceConflictError("Prompt exists"));
+    const updatePromptResource = vi.fn(async () => undefined);
+    const app = appWith({
+      resources: { createPromptResource, updatePromptResource } as never,
+    });
+
+    const forbidden = await app.request("/api/prompts", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        name: "project",
+        content: "Prompt",
+        scope: "project",
+      }),
+    });
+    const conflict = await app.request("/api/prompts", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        name: "existing",
+        content: "Prompt",
+        scope: "user",
+      }),
+    });
+    const nativeName = await app.request("/api/prompts", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        name: "Existing_Name.v2:review",
+        content: "Prompt",
+        scope: "user",
+      }),
+    });
+    const invalidName = await app.request("/api/prompts", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        name: "bad name",
+        content: "Prompt",
+        scope: "user",
+      }),
+    });
+    const hiddenName = await app.request("/api/prompts", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        name: ".hidden",
+        content: "Prompt",
+        scope: "user",
+      }),
+    });
+    const longName = await app.request("/api/prompts", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        name: "a".repeat(201),
+        content: "Prompt",
+        scope: "user",
+      }),
+    });
+    const invalidScope = await app.request("/api/prompts", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        name: "invalid",
+        content: "Prompt",
+        scope: "temporary",
+      }),
+    });
+    const extraUpdate = await app.request(
+      `/api/prompts/prompt_${"a".repeat(43)}`,
+      {
+        method: "PUT",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          content: "Prompt",
+          path: "/private/prompt.md",
+        }),
+      },
+    );
+    const extra = await app.request("/api/prompts", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        name: "invalid",
+        content: "Prompt",
+        scope: "user",
+        path: "/private/prompt.md",
+      }),
+    });
+
+    expect(forbidden.status).toBe(403);
+    expect(await forbidden.json()).toEqual({ error: { code: "forbidden" } });
+    expect(conflict.status).toBe(409);
+    expect(await conflict.json()).toEqual({ error: { code: "conflict" } });
+    expect(nativeName.status).toBe(201);
+    expect(invalidName.status).toBe(400);
+    expect(hiddenName.status).toBe(400);
+    expect(longName.status).toBe(400);
+    expect(invalidScope.status).toBe(400);
+    expect(extraUpdate.status).toBe(400);
+    expect(extra.status).toBe(400);
+    expect(updatePromptResource).not.toHaveBeenCalled();
+  });
+
+  test("returns conflict when a legacy template would lose native precedence", async () => {
+    const writeDocument = vi.fn(async () => {
+      throw new ResourceConflictError("Higher-precedence prompt exists");
+    });
+    const app = appWith({ resources: { writeDocument } as never });
+
+    const response = await app.request("/api/templates/review", {
+      method: "PUT",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ content: "Hidden loser" }),
+    });
+
+    expect(response.status).toBe(409);
+    expect(await response.json()).toEqual({ error: { code: "conflict" } });
+  });
+
   test("preserves system and user-template resource contracts for Prompts", async () => {
     const readDocument = vi.fn(async () => "System instructions");
     const writeDocument = vi.fn(async () => undefined);
@@ -1131,6 +1409,14 @@ describe("API contracts", () => {
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ content: "Review daily" }),
     });
+    const templateExtra = await app.request("/api/templates/daily-review", {
+      method: "PUT",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        content: "Review daily",
+        source: "/private/prompt.md",
+      }),
+    });
     const templateDelete = await app.request("/api/templates/daily-review", {
       method: "DELETE",
     });
@@ -1147,6 +1433,7 @@ describe("API contracts", () => {
       },
     ]);
     expect(templateSave.status).toBe(200);
+    expect(templateExtra.status).toBe(400);
     expect(templateDelete.status).toBe(204);
     expect(readDocument).toHaveBeenCalledWith("system");
     expect(writeDocument).toHaveBeenNthCalledWith(

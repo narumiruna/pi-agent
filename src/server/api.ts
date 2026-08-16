@@ -10,9 +10,12 @@ import {
   CHAT_IMAGE_MIME_TYPES,
   MAX_CHAT_IMAGE_BASE64_LENGTH,
   MAX_CHAT_IMAGES,
+  MAX_PROMPT_NAME_LENGTH,
+  PROMPT_NAME_PATTERN,
   type WebEvent,
 } from "../shared/contracts.js";
 import type { PiService } from "./agent/pi-service.js";
+import { ProjectTrustDeniedError } from "./agent/project-trust.js";
 import { AgentBusyError } from "./agent/run-coordinator.js";
 import { projectMcpDiagnostics } from "./api-metadata.js";
 import type { AppConfig } from "./config.js";
@@ -25,7 +28,11 @@ import {
   writeMcpConfig,
 } from "./mcp/config.js";
 import type { McpManager } from "./mcp/manager.js";
-import type { ResourceService } from "./resources/service.js";
+import {
+  ResourceConflictError,
+  ResourcePermissionError,
+  type ResourceService,
+} from "./resources/service.js";
 import type { AppStore, WebSessionRecord } from "./storage/types.js";
 import { WorkspaceError } from "./workspace/errors.js";
 import { MAX_WORKSPACE_PATH_LENGTH } from "./workspace/policy.js";
@@ -137,9 +144,22 @@ const ProviderLoginBody = Type.Object({
   type: Type.Union([Type.Literal("api_key"), Type.Literal("oauth")]),
   apiKey: Type.Optional(Type.String({ minLength: 1, maxLength: 100_000 })),
 });
-const DocumentBody = Type.Object({
-  content: Type.String({ maxLength: 1_000_000 }),
-});
+const DocumentBody = Type.Object(
+  { content: Type.String({ maxLength: 1_000_000 }) },
+  { additionalProperties: false },
+);
+const PromptCreateBody = Type.Object(
+  {
+    name: Type.String({
+      minLength: 1,
+      maxLength: MAX_PROMPT_NAME_LENGTH,
+      pattern: PROMPT_NAME_PATTERN,
+    }),
+    content: Type.String({ maxLength: 1_000_000 }),
+    scope: Type.Union([Type.Literal("project"), Type.Literal("user")]),
+  },
+  { additionalProperties: false },
+);
 const PackageInstallBody = Type.Object(
   {
     source: Type.String({ maxLength: 2_048 }),
@@ -206,6 +226,13 @@ function errorResponse<E extends Env, P extends string, I extends Input>(
 ) {
   if (error instanceof AgentBusyError)
     return context.json(apiError("agent_busy"), 409);
+  if (
+    error instanceof ResourcePermissionError ||
+    error instanceof ProjectTrustDeniedError
+  )
+    return context.json(apiError("forbidden"), 403);
+  if (error instanceof ResourceConflictError)
+    return context.json(apiError("conflict"), 409);
   if (error instanceof DOMException && error.name === "AbortError")
     return context.json(apiError("cancelled"), 400);
   const message = error instanceof Error ? error.message : "";
@@ -258,6 +285,10 @@ function attachmentHeader(name: string): string {
   return `attachment; filename="${fallback}"; filename*=UTF-8''${encoded}`;
 }
 
+/**
+ * Keep Hono route registration centralized so route ordering, shared validators,
+ * and cross-route security policy remain auditable; domain logic stays in services.
+ */
 export function registerApi<E extends ApiEnv>(
   app: Hono<E>,
   services: ApiServices,
@@ -593,37 +624,41 @@ export function registerApi<E extends ApiEnv>(
     },
   );
 
-  app.get("/api/models", async (context) => {
-    const activeModel = services.pi.activeSession.model;
-    const current = activeModel
-      ? {
-          id: activeModel.id,
-          name: activeModel.name,
-          provider: activeModel.provider,
-        }
-      : undefined;
-    return context.json({
-      current,
-      thinkingLevel: services.pi.activeSession.thinkingLevel,
-      thinkingLevels: activeModel
-        ? getSupportedThinkingLevels(activeModel)
-        : ["off"],
-      authPending: services.pi.providerLoginPending,
-      projectTrust: services.pi.projectTrust(),
-      agent: services.pi.preferences(),
-      models: services.pi.models().map((model) => ({
-        id: model.id,
-        name: model.name,
-        provider: model.provider,
-        api: model.api,
-        reasoning: model.reasoning,
-        input: model.input,
-        contextWindow: model.contextWindow,
-        maxTokens: model.maxTokens,
-      })),
-      providers: await services.pi.providerAccess(),
-    });
-  });
+  app.get("/api/models", async (context) =>
+    context.json(
+      await services.pi.readResourceSnapshot(async () => {
+        const activeModel = services.pi.activeSession.model;
+        const current = activeModel
+          ? {
+              id: activeModel.id,
+              name: activeModel.name,
+              provider: activeModel.provider,
+            }
+          : undefined;
+        return {
+          current,
+          thinkingLevel: services.pi.activeSession.thinkingLevel,
+          thinkingLevels: activeModel
+            ? getSupportedThinkingLevels(activeModel)
+            : ["off"],
+          authPending: services.pi.providerLoginPending,
+          projectTrust: services.pi.projectTrust(),
+          agent: services.pi.preferences(),
+          models: services.pi.models().map((model) => ({
+            id: model.id,
+            name: model.name,
+            provider: model.provider,
+            api: model.api,
+            reasoning: model.reasoning,
+            input: model.input,
+            contextWindow: model.contextWindow,
+            maxTokens: model.maxTokens,
+          })),
+          providers: await services.pi.providerAccess(),
+        };
+      }),
+    ),
+  );
   app.get("/api/provider-auth", (context) =>
     context.json(services.pi.providerAuthTask() ?? null),
   );
@@ -702,8 +737,10 @@ export function registerApi<E extends ApiEnv>(
       return errorResponse(context, error);
     }
   });
-  app.get("/api/project-trust", (context) =>
-    context.json(services.pi.projectTrust()),
+  app.get("/api/project-trust", async (context) =>
+    context.json(
+      await services.pi.readResourceSnapshot(() => services.pi.projectTrust()),
+    ),
   );
   app.put(
     "/api/project-trust",
@@ -718,7 +755,21 @@ export function registerApi<E extends ApiEnv>(
       }
     },
   );
-  app.get("/api/commands", (context) => context.json(services.pi.commands()));
+  app.get("/api/prompt-inventory", async (context) =>
+    context.json(
+      await services.pi.readResourceSnapshot(async () => ({
+        prompts: await services.resources.listPromptResources(),
+        projectTrust: services.pi.projectTrust(),
+      })),
+    ),
+  );
+  app.get("/api/commands", async (context) =>
+    context.json(
+      await services.pi.readResourceSnapshot(async () =>
+        services.pi.commands(await services.resources.listPromptResources()),
+      ),
+    ),
+  );
   app.get("/api/workspace/files", async (context) => {
     const query = context.req.query("q") ?? "";
     const rawLimit = Number(context.req.query("limit") ?? "20");
@@ -877,8 +928,64 @@ export function registerApi<E extends ApiEnv>(
       }
     },
   );
+  app.get("/api/prompts", async (context) => {
+    try {
+      return context.json(
+        await services.pi.readResourceSnapshot(() =>
+          services.resources.listPromptResources(),
+        ),
+      );
+    } catch (error) {
+      return errorResponse(context, error);
+    }
+  });
+  app.post(
+    "/api/prompts",
+    tbValidator("json", PromptCreateBody),
+    async (context) => {
+      try {
+        const body = context.req.valid("json");
+        await services.resources.createPromptResource(
+          body.scope,
+          body.name,
+          body.content,
+        );
+        return context.json({ ok: true }, 201);
+      } catch (error) {
+        return errorResponse(context, error);
+      }
+    },
+  );
+  app.put(
+    "/api/prompts/:id",
+    tbValidator("json", DocumentBody),
+    async (context) => {
+      try {
+        await services.resources.updatePromptResource(
+          context.req.param("id"),
+          context.req.valid("json").content,
+        );
+        return context.json({ ok: true });
+      } catch (error) {
+        return errorResponse(context, error);
+      }
+    },
+  );
+  app.delete("/api/prompts/:id", async (context) => {
+    try {
+      await services.resources.deletePromptResource(context.req.param("id"));
+      return context.body(null, 204);
+    } catch (error) {
+      return errorResponse(context, error);
+    }
+  });
+
   app.get("/api/templates", async (context) =>
-    context.json(await services.resources.listTemplates()),
+    context.json(
+      await services.pi.readResourceSnapshot(() =>
+        services.resources.listTemplates(),
+      ),
+    ),
   );
   app.put(
     "/api/templates/:name",

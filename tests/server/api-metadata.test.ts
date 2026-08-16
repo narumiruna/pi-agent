@@ -1,11 +1,14 @@
 import { describe, expect, test } from "vitest";
 import {
   opaquePackageId,
+  opaquePromptId,
   projectMcpDiagnostics,
   projectPackageProgress,
   projectPackageSummary,
   projectResourceProvenance,
   safePackageName,
+  safePromptMetadataText,
+  safePromptSourceLabel,
 } from "../../src/server/api-metadata.js";
 
 describe("safe API metadata projections", () => {
@@ -33,11 +36,28 @@ describe("safe API metadata projections", () => {
       provenance: { scope: "project", origin: "package" },
     });
     expect(JSON.stringify(remote)).not.toMatch(/secret|token|private/);
-    expect(safePackageName("/private/host/packages/local-tool")).toBe(
-      "local-tool",
-    );
+    const firstLocal = safePackageName("/private/host/packages/local-tool");
+    const secondLocal = safePackageName("/other/host/packages/local-tool");
+    expect(firstLocal).toMatch(/^local-tool-[a-f0-9]{8}$/);
+    expect(secondLocal).toMatch(/^local-tool-[a-f0-9]{8}$/);
+    expect(firstLocal).not.toBe(secondLocal);
     expect(safePackageName("npm:@scope/package@1.0.0")).toBe(
       "@scope/package@1.0.0",
+    );
+    expect(safePackageName("git:git@github.com:org/repository.git@v1")).toBe(
+      "github.com/org/repository",
+    );
+    expect(
+      safePackageName("https://github.com/org/repository@refs/tags/v1"),
+    ).toBe("github.com/org/repository");
+    expect(
+      safePackageName("git:git@github.com:org/repository@feature/review-ui"),
+    ).toBe("github.com/org/repository");
+    expect(safePackageName("git:git@gitlab.com:org/repository.git@v1")).toBe(
+      "gitlab.com/org/repository",
+    );
+    expect(safePackageName("git:github.com/org/repository")).toBe(
+      "github.com/org/repository",
     );
 
     const response = JSON.stringify(
@@ -50,6 +70,69 @@ describe("safe API metadata projections", () => {
     expect(response).not.toContain("source");
     expect(response).not.toContain("installedPath");
     expect(response).not.toContain("/private");
+  });
+
+  test("creates opaque prompt IDs and safe source labels", () => {
+    const sourceInfo = {
+      path: "/private/cache/package/prompts/review.md",
+      source: "https://secret@example.com/org/review.git?token=private",
+      scope: "project" as const,
+      origin: "package" as const,
+    };
+    const id = opaquePromptId(sourceInfo);
+
+    expect(id).toMatch(/^prompt_[A-Za-z0-9_-]{43}$/);
+    expect(id).toBe(opaquePromptId(sourceInfo));
+    expect(id).not.toMatch(/private|secret|review/);
+    expect(safePromptSourceLabel(sourceInfo)).toBe("example.com/org/review");
+    expect(
+      safePromptSourceLabel({
+        path: "/private/temporary/review.md",
+        source: "local",
+        scope: "temporary",
+        origin: "top-level",
+      }),
+    ).toBe("CLI");
+    expect(
+      safePromptSourceLabel({
+        path: "/private/temporary/review.md",
+        source: "extension:review-tools",
+        scope: "temporary",
+        origin: "top-level",
+      }),
+    ).toBe("extension:review-tools");
+    const roots = ["/agent/prompts", "/workspace/.pi/prompts"];
+    expect(
+      safePromptSourceLabel(
+        {
+          path: "/private/settings/review.md",
+          source: "local",
+          scope: "user",
+          origin: "top-level",
+        },
+        roots,
+      ),
+    ).toBe("settings");
+    expect(
+      safePromptSourceLabel(
+        {
+          path: "/agent/prompts/review.md",
+          source: "auto",
+          scope: "user",
+          origin: "top-level",
+        },
+        roots,
+      ),
+    ).toBe("local");
+  });
+
+  test("preserves slash commands in prompt-authored metadata", () => {
+    expect(safePromptMetadataText("Use /review before merge")).toBe(
+      "Use /review before merge",
+    );
+    expect(safePromptMetadataText("\u001b[31m/review\u001b[0m")).toBe(
+      "/review",
+    );
   });
 
   test("projects only native scope and origin provenance", () => {
@@ -92,7 +175,7 @@ describe("safe API metadata projections", () => {
         server: "local\nserver",
         level: "error",
         message:
-          "\u001b[31mspawn failed at /private/agent/server.ts and C:\\Users\\owner\\secret.txt\u001b[0m",
+          '\u001b[31mspawn failed at "/private/agent/server.ts" and `C:\\Users\\owner\\secret.txt`\u001b[0m',
       },
     ]);
 
@@ -100,7 +183,7 @@ describe("safe API metadata projections", () => {
       {
         server: "local server",
         level: "error",
-        message: "spawn failed at <path> and <path>",
+        message: 'spawn failed at "<path>" and `<path>`',
       },
     ]);
     expect(

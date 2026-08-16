@@ -19,7 +19,10 @@ import {
   createAgentSessionRuntime,
   createAgentSessionServices,
   DefaultPackageManager,
+  DefaultResourceLoader,
+  type LoadExtensionsResult,
   ModelRuntime,
+  type PromptTemplate,
   SessionManager,
   SettingsManager,
 } from "@earendil-works/pi-coding-agent";
@@ -30,12 +33,17 @@ import type {
   ConversationAgentState,
   QueueMode,
   WebProjectTrust,
+  WebPromptResource,
   WebResourceCommand,
 } from "../../shared/contracts.js";
 import {
+  opaquePromptId,
+  opaqueResourceCommandId,
   projectPackageProgress,
   projectResourceProvenance,
   safeMetadataText,
+  safePromptMetadataText,
+  safePromptSourceLabel,
 } from "../api-metadata.js";
 import type { AppConfig } from "../config.js";
 import { HeartbeatExecutionError } from "../heartbeat/scheduler.js";
@@ -274,6 +282,13 @@ export class PiService {
       config.workspace,
       config.agentDir,
       settingsManager,
+      undefined,
+      undefined,
+      (message) =>
+        events.publish("notification", {
+          type: "warning",
+          message: safeMetadataText(message),
+        }),
     );
     await projectTrustPolicy.refresh();
     await settingsManager.reload();
@@ -292,39 +307,62 @@ export class PiService {
       cwd,
       sessionManager,
       sessionStartEvent,
-    }) =>
-      withProjectTrustRollback(
-        settingsManager,
-        async () => {
-          await projectTrustPolicy.refresh();
-        },
-        async (trustChanged) => {
-          if (trustChanged) await heartbeatSession?.reload();
-          const services = await createAgentSessionServices({
-            cwd,
-            agentDir: config.agentDir,
-            settingsManager,
-            modelRuntime,
-            resourceLoaderOptions: {
-              appendSystemPrompt: [heartbeatGuidance],
-              ...(mcp ? { extensionFactories: [mcp.extension()] } : {}),
-            },
-          });
-          return {
-            ...(await createAgentSessionFromServices({
+    }) => {
+      try {
+        const result = await withProjectTrustRollback(
+          settingsManager,
+          async () => {
+            await projectTrustPolicy.refresh();
+          },
+          async (trustChanged) => {
+            if (trustChanged) await heartbeatSession?.reload();
+            const trustBeforeNativeResolution =
+              settingsManager.isProjectTrusted();
+            const services = await createAgentSessionServices({
+              cwd,
+              agentDir: config.agentDir,
+              settingsManager,
+              modelRuntime,
+              ...(projectTrustPolicy.status().required
+                ? {
+                    resourceLoaderReloadOptions: {
+                      resolveProjectTrust: ({ extensionsResult }) =>
+                        projectTrustPolicy.resolveForLoader(extensionsResult),
+                    },
+                  }
+                : {}),
+              resourceLoaderOptions: {
+                appendSystemPrompt: [heartbeatGuidance],
+                ...(mcp ? { extensionFactories: [mcp.extension()] } : {}),
+              },
+            });
+            if (
+              trustBeforeNativeResolution !== settingsManager.isProjectTrusted()
+            )
+              await heartbeatSession?.reload();
+            const created = await createAgentSessionFromServices({
               services,
               sessionManager,
               ...(sessionStartEvent ? { sessionStartEvent } : {}),
               tools: config.agentTools,
-            })),
-            services,
-            diagnostics: services.diagnostics,
-          };
-        },
-        async () => {
-          await heartbeatSession?.reload();
-        },
-      );
+            });
+            projectTrustPolicy.commitRememberedDecision();
+            return {
+              ...created,
+              services,
+              diagnostics: services.diagnostics,
+            };
+          },
+          async () => {
+            await heartbeatSession?.reload();
+          },
+        );
+        return result;
+      } catch (error) {
+        projectTrustPolicy.discardRememberedDecision();
+        throw error;
+      }
+    };
     const runtime = await createAgentSessionRuntime(createRuntime, {
       cwd: config.workspace,
       agentDir: config.agentDir,
@@ -1148,6 +1186,21 @@ export class PiService {
     await this.modelRuntime.logout(providerId);
   }
 
+  private async discoverProjectTrustExtensions(): Promise<LoadExtensionsResult> {
+    const isolatedSettings = SettingsManager.create(
+      this.config.workspace,
+      this.config.agentDir,
+      { projectTrusted: false },
+    );
+    const loader = new DefaultResourceLoader({
+      cwd: this.config.workspace,
+      agentDir: this.config.agentDir,
+      settingsManager: isolatedSettings,
+    });
+    await loader.reload();
+    return loader.getExtensions();
+  }
+
   private async reloadSessions(): Promise<void> {
     await this.runtime.session.reload();
     await this.heartbeatSession.reload();
@@ -1155,16 +1208,78 @@ export class PiService {
 
   async reload(): Promise<void> {
     await this.coordinator.waitForIdle();
-    await this.coordinator.run("maintenance", () =>
-      withProjectTrustRollback(
-        this.settingsManager,
-        async () => {
-          await this.projectTrustPolicy.refresh();
-        },
-        () => this.reloadSessions(),
-        () => this.reloadSessions(),
-      ),
-    );
+    try {
+      await this.coordinator.run("maintenance", () =>
+        withProjectTrustRollback(
+          this.settingsManager,
+          async () => {
+            await this.projectTrustPolicy.refresh(
+              await this.discoverProjectTrustExtensions(),
+            );
+          },
+          async () => {
+            await this.reloadSessions();
+            this.projectTrustPolicy.commitRememberedDecision();
+          },
+          () => this.reloadSessions(),
+        ),
+      );
+      this.events.publish("resources_reloaded", {});
+    } catch (error) {
+      this.projectTrustPolicy.discardRememberedDecision();
+      throw error;
+    }
+  }
+
+  async mutateResources<T>(operation: () => Promise<T>): Promise<T> {
+    await this.coordinator.waitForIdle();
+    let preReloaded = false;
+    try {
+      const result = await this.coordinator.run("maintenance", async () => {
+        await withProjectTrustRollback(
+          this.settingsManager,
+          async () => {
+            await this.projectTrustPolicy.refresh(
+              await this.discoverProjectTrustExtensions(),
+            );
+          },
+          async () => {
+            await this.reloadSessions();
+            this.projectTrustPolicy.commitRememberedDecision();
+          },
+          () => this.reloadSessions(),
+        );
+        preReloaded = true;
+        const result = await operation();
+        await this.reloadSessions();
+        return result;
+      });
+      this.events.publish("resources_reloaded", {});
+      return result;
+    } catch (error) {
+      if (preReloaded) {
+        this.events.publish("resource_snapshot_changed", {});
+      } else {
+        this.projectTrustPolicy.discardRememberedDecision();
+      }
+      throw error;
+    }
+  }
+
+  async readResourceSnapshot<T>(operation: () => Promise<T> | T): Promise<T> {
+    for (;;) {
+      await this.coordinator.waitForIdle();
+      let acquired = false;
+      try {
+        return await this.coordinator.run("maintenance", async () => {
+          acquired = true;
+          return await operation();
+        });
+      } catch (error) {
+        if (!acquired && error instanceof AgentBusyError) continue;
+        throw error;
+      }
+    }
   }
 
   projectTrust(): WebProjectTrust {
@@ -1173,61 +1288,118 @@ export class PiService {
 
   async setProjectTrust(trusted: boolean): Promise<WebProjectTrust> {
     await this.coordinator.waitForIdle();
-    return this.coordinator.run("maintenance", async () => {
-      const state = this.projectTrustPolicy.status();
-      const previous = state.trusted;
-      const runtimeTrusted = this.settingsManager.isProjectTrusted();
-      if (!state.required)
-        throw new Error("Project has no trust-gated resources");
-      if (previous === trusted && runtimeTrusted === trusted) {
-        this.projectTrustPolicy.persist(trusted);
-        return this.projectTrustPolicy.status();
-      }
+    this.projectTrustPolicy.discardRememberedDecision();
+    let resourcesReloaded = false;
+    try {
+      const state = await this.coordinator.run("maintenance", async () => {
+        const state = this.projectTrustPolicy.status();
+        const previous = state.trusted;
+        const runtimeTrusted = this.settingsManager.isProjectTrusted();
+        if (previous === trusted && runtimeTrusted === trusted) {
+          this.projectTrustPolicy.persist(trusted);
+          return this.projectTrustPolicy.status();
+        }
+        if (trusted)
+          await this.projectTrustPolicy.assertCanEnable(
+            await this.discoverProjectTrustExtensions(),
+          );
 
-      this.settingsManager.setProjectTrusted(trusted);
-      try {
-        await this.reloadSessions();
-        this.projectTrustPolicy.persist(trusted);
-        return this.projectTrustPolicy.status();
-      } catch (error) {
-        this.settingsManager.setProjectTrusted(previous);
-        await this.reloadSessions().catch(() => undefined);
-        throw error;
-      }
-    });
+        this.settingsManager.setProjectTrusted(trusted);
+        try {
+          await this.reloadSessions();
+          resourcesReloaded = true;
+          this.projectTrustPolicy.discardRememberedDecision();
+          this.projectTrustPolicy.persist(trusted);
+          return this.projectTrustPolicy.status();
+        } catch (error) {
+          this.settingsManager.setProjectTrusted(previous);
+          await this.reloadSessions().catch(() => undefined);
+          throw error;
+        }
+      });
+      this.projectTrustPolicy.commitRememberedDecision();
+      if (resourcesReloaded) this.events.publish("resources_reloaded", {});
+      return state;
+    } catch (error) {
+      this.projectTrustPolicy.discardRememberedDecision();
+      throw error;
+    }
   }
 
   models(): readonly Model<Api>[] {
     return this.modelRuntime.getAvailableSnapshot();
   }
 
-  commands(): WebResourceCommand[] {
+  promptTemplates(): ReadonlyArray<PromptTemplate> {
+    return this.runtime.services.resourceLoader.getPrompts().prompts;
+  }
+
+  commands(
+    promptResources: readonly WebPromptResource[],
+  ): WebResourceCommand[] {
     const result: WebResourceCommand[] = [];
-    for (const extension of this.runtime.services.resourceLoader.getExtensions()
-      .extensions) {
-      for (const [name, command] of extension.commands) {
-        result.push({
-          name,
-          ...(command.description ? { description: command.description } : {}),
-          source: "extension",
-          provenance: projectResourceProvenance(command.sourceInfo),
-        });
-      }
+    const safePrompts = new Map(
+      promptResources.map((prompt) => [prompt.id, prompt] as const),
+    );
+    for (const command of this.runtime.session.extensionRunner.getRegisteredCommands()) {
+      const name = safePromptMetadataText(command.invocationName).replaceAll(
+        "\n",
+        " ",
+      );
+      result.push({
+        id: opaqueResourceCommandId("extension", name, command.sourceInfo),
+        name,
+        ...(command.description
+          ? { description: safePromptMetadataText(command.description) }
+          : {}),
+        source: "extension",
+        sourceLabel: safePromptSourceLabel(
+          command.sourceInfo,
+          [
+            join(this.config.agentDir, "extensions"),
+            join(this.config.workspace, ".pi", "extensions"),
+          ],
+          true,
+        ),
+        provenance: projectResourceProvenance(command.sourceInfo),
+      });
     }
     for (const prompt of this.runtime.session.promptTemplates) {
+      const name = safePromptMetadataText(prompt.name).replaceAll("\n", " ");
+      const safePrompt = safePrompts.get(opaquePromptId(prompt.sourceInfo));
       result.push({
-        name: prompt.name,
-        ...(prompt.description ? { description: prompt.description } : {}),
+        id: opaqueResourceCommandId("prompt", name, prompt.sourceInfo),
+        name,
+        ...(safePrompt?.description
+          ? { description: safePrompt.description }
+          : {}),
+        ...(safePrompt?.argumentHint
+          ? { argumentHint: safePrompt.argumentHint }
+          : {}),
         source: "prompt",
+        sourceLabel: safePromptSourceLabel(prompt.sourceInfo, [
+          join(this.config.agentDir, "prompts"),
+          join(this.config.workspace, ".pi", "prompts"),
+        ]),
         provenance: projectResourceProvenance(prompt.sourceInfo),
       });
     }
     for (const skill of this.runtime.services.resourceLoader.getSkills()
       .skills) {
+      const name = `skill:${safePromptMetadataText(skill.name).replaceAll("\n", " ")}`;
       result.push({
-        name: `skill:${skill.name}`,
-        description: skill.description,
+        id: opaqueResourceCommandId("skill", name, skill.sourceInfo),
+        name,
+        description: safePromptMetadataText(skill.description),
         source: "skill",
+        sourceLabel: safePromptSourceLabel(
+          skill.sourceInfo,
+          [
+            join(this.config.agentDir, "skills"),
+            join(this.config.workspace, ".pi", "skills"),
+          ],
+          true,
+        ),
         provenance: projectResourceProvenance(skill.sourceInfo),
       });
     }

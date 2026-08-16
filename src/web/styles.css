@@ -980,8 +980,24 @@ select:focus-visible,
   min-width: 0;
 }
 
-.promptTemplateSummary {
+.promptTemplateSummary,
+.promptResourceMetadata,
+.promptResourcePath {
   overflow-wrap: anywhere;
+}
+
+.promptScopeField {
+  display: grid;
+  gap: 7px;
+  max-width: 320px;
+}
+
+.promptResourceMetadata {
+  display: grid;
+  gap: 3px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
 }
 
 .listRow,

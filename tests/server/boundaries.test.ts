@@ -1,6 +1,10 @@
+import { win32 } from "node:path";
 import { describe, expect, test } from "vitest";
 import { parseDuration } from "../../src/server/heartbeat/duration.js";
-import { safeMarkdownPath } from "../../src/server/resources/paths.js";
+import {
+  isPathContained,
+  safeMarkdownPath,
+} from "../../src/server/resources/paths.js";
 import { apiError } from "../../src/shared/contracts.js";
 
 describe("parseDuration", () => {
@@ -22,18 +26,39 @@ describe("parseDuration", () => {
 });
 
 describe("safeMarkdownPath", () => {
-  test("builds a contained markdown path from a slug", () => {
-    expect(safeMarkdownPath("/agent/prompts", "daily-review")).toBe(
-      "/agent/prompts/daily-review.md",
-    );
-  });
-
-  test.each(["../auth", "nested/name", ".hidden", "UPPER", "a b", "a.md"])(
-    "rejects %j",
+  test.each(["daily-review", "Existing_Name", "review.v2", "foo:bar"])(
+    "builds a contained markdown path for native name %s",
     (name) => {
-      expect(() => safeMarkdownPath("/agent/prompts", name)).toThrow(/name/i);
+      expect(safeMarkdownPath("/agent/prompts", name)).toBe(
+        `/agent/prompts/${name}.md`,
+      );
     },
   );
+
+  test("uses native Windows path semantics for containment", () => {
+    expect(
+      isPathContained(
+        "C:\\agent\\prompts",
+        "C:\\agent\\prompts\\review.md",
+        win32,
+      ),
+    ).toBe(true);
+    expect(
+      isPathContained("C:\\agent\\prompts", "C:\\agent\\auth.md", win32),
+    ).toBe(false);
+  });
+
+  test.each([
+    "../auth",
+    "nested/name",
+    "nested\\name",
+    ".hidden",
+    "a b",
+    "line\nbreak",
+    "a".repeat(201),
+  ])("rejects %j", (name) => {
+    expect(() => safeMarkdownPath("/agent/prompts", name)).toThrow(/name/i);
+  });
 });
 
 describe("API errors", () => {

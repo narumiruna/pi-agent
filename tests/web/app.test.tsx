@@ -592,20 +592,37 @@ describe("web application", () => {
 
   test("supports command and workspace autocomplete with keyboard input", async () => {
     HTMLElement.prototype.scrollIntoView = vi.fn();
+    let commandVersion = 0;
+    let commandLoads = 0;
     vi.mocked(fetch).mockImplementation(async (input) => {
       const url = String(input);
-      if (url === "/api/commands")
+      if (url === "/api/commands") {
+        commandLoads += 1;
         return new Response(
           JSON.stringify([
-            {
-              name: "review",
-              description: "Review changes",
-              source: "prompt",
-              provenance: { scope: "project", origin: "package" },
-            },
+            commandVersion === 0
+              ? {
+                  id: "command_review",
+                  name: "review",
+                  description: "Review changes",
+                  argumentHint: "<PR>",
+                  source: "prompt",
+                  sourceLabel: "example.com/org/prompts",
+                  provenance: { scope: "project", origin: "package" },
+                }
+              : {
+                  id: "command_deploy",
+                  name: "deploy",
+                  description: "Deploy changes",
+                  argumentHint: "<ENV>",
+                  source: "prompt",
+                  sourceLabel: "local",
+                  provenance: { scope: "user", origin: "top-level" },
+                },
           ]),
           { status: 200, headers: { "content-type": "application/json" } },
         );
+      }
       if (url === "/api/conversations/session")
         return new Response(JSON.stringify({ messages: [] }), {
           status: 200,
@@ -620,7 +637,7 @@ describe("web application", () => {
     });
     const user = userEvent.setup();
 
-    render(
+    const chat = (resourceRefresh: number) => (
       <Theme>
         <ChatPage
           conversationId="session"
@@ -629,6 +646,7 @@ describe("web application", () => {
           inputDisabled={false}
           liveTools={[]}
           refresh={0}
+          resourceRefresh={resourceRefresh}
           running={false}
           thinking=""
           onChooseModel={vi.fn()}
@@ -636,17 +654,29 @@ describe("web application", () => {
           onRunning={vi.fn()}
           onStateChanged={vi.fn()}
         />
-      </Theme>,
+      </Theme>
     );
+    const view = render(chat(0));
     const input = await screen.findByLabelText(/Ask Pi anything/i);
     await user.type(input, "/rev");
     const commandOption = await screen.findByRole("option", {
       name: /Review changes/,
     });
     expect(commandOption).toBeVisible();
+    expect(commandOption).toHaveTextContent("<PR>");
+    expect(commandOption).toHaveTextContent("example.com/org/prompts");
     expect(commandOption).toHaveTextContent("project package");
     await user.keyboard("{Enter}");
     expect(input).toHaveValue("/review ");
+
+    commandVersion = 1;
+    view.rerender(chat(1));
+    await waitFor(() => expect(commandLoads).toBe(2));
+    await user.clear(input);
+    await user.type(input, "/dep");
+    expect(
+      await screen.findByRole("option", { name: /Deploy changes/ }),
+    ).toHaveTextContent("<ENV>");
 
     await user.clear(input);
     await user.type(input, "open @rev");
@@ -668,6 +698,68 @@ describe("web application", () => {
           ([url]) => String(url) === "/api/conversations/session/messages",
         ),
     ).toBe(false);
+  });
+
+  test("keeps duplicate native command names as distinct suggestions", async () => {
+    HTMLElement.prototype.scrollIntoView = vi.fn();
+    vi.mocked(fetch).mockImplementation(async (input) => {
+      const url = String(input);
+      if (url === "/api/commands")
+        return new Response(
+          JSON.stringify([
+            {
+              id: "command_extension_review",
+              name: "review",
+              description: "Extension review",
+              source: "extension",
+              sourceLabel: "review-tools",
+              provenance: { scope: "user", origin: "top-level" },
+            },
+            {
+              id: "command_prompt_review",
+              name: "review",
+              description: "Prompt review",
+              source: "prompt",
+              sourceLabel: "local",
+              provenance: { scope: "user", origin: "top-level" },
+            },
+          ]),
+          { status: 200, headers: { "content-type": "application/json" } },
+        );
+      if (url === "/api/conversations/session")
+        return new Response(JSON.stringify({ messages: [] }), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        });
+      throw new Error(`Unexpected request: ${url}`);
+    });
+    const user = userEvent.setup();
+
+    render(
+      <Theme>
+        <ChatPage
+          conversationId="session"
+          delta=""
+          eventsConnected
+          inputDisabled={false}
+          liveTools={[]}
+          refresh={0}
+          resourceRefresh={0}
+          running={false}
+          thinking=""
+          onChooseModel={vi.fn()}
+          onConversationChanged={vi.fn()}
+          onRunning={vi.fn()}
+          onStateChanged={vi.fn()}
+        />
+      </Theme>,
+    );
+    await user.type(await screen.findByLabelText(/Ask Pi anything/i), "/rev");
+
+    const options = await screen.findAllByRole("option");
+    expect(options).toHaveLength(2);
+    expect(options[0]).toHaveTextContent("Extension review");
+    expect(options[1]).toHaveTextContent("Prompt review");
   });
 
   test("renders thinking, merged tool diffs, extension state, and editor prefill", async () => {
@@ -773,6 +865,7 @@ describe("web application", () => {
     vi.stubGlobal("EventSource", FakeEventSource);
     let stateRequests = 0;
     let transcriptRequests = 0;
+    let commandRequests = 0;
     let recoveryListRequests = 0;
     let releaseHydration: (() => void) | undefined;
     let markHydrationStarted: (() => void) | undefined;
@@ -799,6 +892,10 @@ describe("web application", () => {
           tools: ["read"],
         });
       if (url === "/api/provider-auth") return json(null);
+      if (url === "/api/commands") {
+        commandRequests += 1;
+        return json([]);
+      }
       if (url === "/api/conversations?sort=recent") {
         recoveryListRequests++;
         if (recoveryListRequests === 4) {
@@ -931,6 +1028,7 @@ describe("web application", () => {
     );
     const source = FakeEventSource.instances.at(-1);
     if (!source) throw new Error("EventSource was not created");
+    await waitFor(() => expect(commandRequests).toBe(1));
     source.emit("agent_status", {
       sessionId: "session",
       kind: "retry",
@@ -959,6 +1057,11 @@ describe("web application", () => {
     expect(recoveryListRequests).toBe(3);
     expect(reconnectOperations).toEqual(["state", "state"]);
 
+    const commandsBeforeReset = commandRequests;
+    source.emit("reset", {});
+    await waitFor(() =>
+      expect(commandRequests).toBeGreaterThan(commandsBeforeReset),
+    );
     const stateBeforeStaleRecovery = stateRequests;
     source.onerror?.();
     source.onopen?.();
@@ -1179,21 +1282,30 @@ describe("web application", () => {
 
   test("requires acknowledgement to trust and reload project resources", async () => {
     let trusted = false;
+    let failNextRefresh = false;
     const mutations: boolean[] = [];
     vi.mocked(fetch).mockImplementation(async (input, init) => {
       const url = String(input);
-      if (url === "/api/models")
+      if (url === "/api/models") {
+        if (failNextRefresh) {
+          failNextRefresh = false;
+          return new Response(
+            JSON.stringify({ error: { code: "internal_error" } }),
+            { status: 500, headers: { "content-type": "application/json" } },
+          );
+        }
         return new Response(
           JSON.stringify({
             thinkingLevel: "off",
             thinkingLevels: ["off"],
             authPending: false,
-            projectTrust: { required: true, trusted },
+            projectTrust: { required: false, trusted },
             models: [],
             providers: [],
           }),
           { status: 200, headers: { "content-type": "application/json" } },
         );
+      }
       if (url === "/api/project-trust" && init?.method === "PUT") {
         const body = JSON.parse(String(init.body)) as {
           trusted: boolean;
@@ -1201,8 +1313,9 @@ describe("web application", () => {
         };
         expect(body.acknowledgeRisk).toBe(true);
         trusted = body.trusted;
+        if (trusted) failNextRefresh = true;
         mutations.push(trusted);
-        return new Response(JSON.stringify({ required: true, trusted }), {
+        return new Response(JSON.stringify({ required: false, trusted }), {
           status: 200,
           headers: { "content-type": "application/json" },
         });
@@ -1220,7 +1333,7 @@ describe("web application", () => {
     );
 
     expect(
-      await screen.findByText(/project skills and extensions are not loaded/i),
+      await screen.findByText(/no project resources that require trust/i),
     ).toBeVisible();
     const trustedCodeWarning = screen.getByRole("note");
     expect(trustedCodeWarning).toHaveTextContent(
@@ -1248,6 +1361,47 @@ describe("web application", () => {
       await screen.findByText(/project resources are disabled and reloaded/i),
     ).toBeVisible();
     expect(mutations).toEqual([true, false]);
+  });
+
+  test("refreshes project trust when resources reload", async () => {
+    let trusted = false;
+    let loads = 0;
+    vi.mocked(fetch).mockImplementation(async (input) => {
+      if (String(input) !== "/api/models")
+        throw new Error(`Unexpected request: ${String(input)}`);
+      loads += 1;
+      return new Response(
+        JSON.stringify({
+          thinkingLevel: "off",
+          thinkingLevels: ["off"],
+          authPending: false,
+          projectTrust: { required: true, trusted },
+          models: [],
+          providers: [],
+        }),
+        { status: 200, headers: { "content-type": "application/json" } },
+      );
+    });
+    const settings = (refresh: number) => (
+      <Theme>
+        <SettingsPage
+          refresh={refresh}
+          session={{ authenticated: true, authDisabled: false, tools: [] }}
+        />
+      </Theme>
+    );
+    const view = render(settings(0));
+
+    expect(
+      await screen.findByText(/Not trusted\. Project skills/i),
+    ).toBeVisible();
+    trusted = true;
+    view.rerender(settings(1));
+
+    expect(
+      await screen.findByText(/Trusted\. Project resources can load/i),
+    ).toBeVisible();
+    expect(loads).toBe(2);
   });
 
   test("adds an API key through a focused access flow", async () => {

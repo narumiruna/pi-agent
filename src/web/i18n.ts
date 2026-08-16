@@ -98,7 +98,7 @@ const resources = {
       library: "Library",
       prompts: "Prompts",
       promptsDescription:
-        "Manage Pi's global system instructions and user prompt templates.",
+        "Manage Pi's system instructions and natively discovered prompt templates.",
       settings: "Settings",
       newConversation: "New conversation",
       conversationCreateFailed:
@@ -185,13 +185,35 @@ const resources = {
       promptDocumentSaveFailed: "Could not save this prompt document.",
       promptTemplatesLoadFailed: "Could not load prompt templates.",
       promptTemplateName: "Template name",
+      promptNameRequirement:
+        "Use 1–200 non-space characters; names cannot start with a dot or contain path separators or control characters.",
       promptTemplateContent: "Template content",
+      promptScope: "Create in",
+      promptScopeUser: "User prompts",
+      promptScopeProject: "Project prompts",
+      projectPromptTrustRequired:
+        "Trust project resources in Settings before creating project prompts.",
+      promptSource: "Source",
+      promptPath: "Path",
+      promptArgumentHint: "Argument hint",
+      editable: "Editable",
+      readOnly: "Read-only",
+      view: "View",
+      viewPromptTemplate: "View template {{name}}",
+      promptReadOnlyDescription:
+        "This native prompt source is read-only here. Manage it through its package, settings, or launch configuration.",
+      promptContentTruncated:
+        "This read-only prompt is too large to show completely.",
       editPromptTemplate: "Edit template {{name}}",
       deletePromptTemplate: "Delete template {{name}}",
       promptTemplateSaved: "Prompt template saved and Pi reloaded.",
       promptTemplateSaveFailed: "Could not save this prompt template.",
+      promptTemplateSavedRefreshFailed:
+        "Prompt saved and Pi reloaded, but the refreshed inventory could not be loaded.",
       promptTemplateDeleted: "Prompt template deleted and Pi reloaded.",
       promptTemplateDeleteFailed: "Could not delete this prompt template.",
+      promptTemplateDeletedRefreshFailed:
+        "Prompt deleted and Pi reloaded, but the refreshed inventory could not be loaded.",
       noPromptTemplates: "No user prompt templates yet.",
       saving: "Saving…",
       deleting: "Deleting…",
@@ -222,7 +244,7 @@ const resources = {
         "Credentials available to this Pi agent instance.",
       projectTrust: "Project trust",
       projectTrustDescription:
-        "Project-local Pi settings, skills, packages, and extensions stay disabled until trusted.",
+        "Project-local Pi settings, prompts, skills, packages, and extensions stay disabled until trusted.",
       projectTrustStatusTrusted:
         "Trusted. Project resources can load and extensions can execute.",
       projectTrustStatusUntrusted:
@@ -488,7 +510,7 @@ const resources = {
       heartbeat: "Heartbeat",
       library: "資源庫",
       prompts: "提示詞",
-      promptsDescription: "管理 Pi 的全域系統指示與使用者提示詞模板。",
+      promptsDescription: "管理 Pi 的系統指示與原生探索到的提示詞模板。",
       settings: "設定",
       newConversation: "新增對話",
       conversationCreateFailed: "無法建立新對話，原本的對話仍可使用。",
@@ -565,13 +587,34 @@ const resources = {
       promptDocumentSaveFailed: "無法儲存這份提示詞文件。",
       promptTemplatesLoadFailed: "無法載入提示詞模板。",
       promptTemplateName: "模板名稱",
+      promptNameRequirement:
+        "請使用 1–200 個不含空白的字元；不可用點開頭，也不可包含路徑分隔符或控制字元。",
       promptTemplateContent: "模板內容",
+      promptScope: "建立位置",
+      promptScopeUser: "使用者提示詞",
+      promptScopeProject: "專案提示詞",
+      projectPromptTrustRequired:
+        "請先在設定中信任專案資源，才能建立專案提示詞。",
+      promptSource: "來源",
+      promptPath: "路徑",
+      promptArgumentHint: "參數提示",
+      editable: "可編輯",
+      readOnly: "唯讀",
+      view: "檢視",
+      viewPromptTemplate: "檢視模板 {{name}}",
+      promptReadOnlyDescription:
+        "此原生提示詞來源在這裡是唯讀的，請透過它的 package、設定或啟動參數管理。",
+      promptContentTruncated: "此唯讀提示詞過大，無法完整顯示。",
       editPromptTemplate: "編輯模板 {{name}}",
       deletePromptTemplate: "刪除模板 {{name}}",
       promptTemplateSaved: "已儲存提示詞模板並重新載入 Pi。",
       promptTemplateSaveFailed: "無法儲存這份提示詞模板。",
+      promptTemplateSavedRefreshFailed:
+        "已儲存提示詞並重新載入 Pi，但無法載入更新後的清單。",
       promptTemplateDeleted: "已刪除提示詞模板並重新載入 Pi。",
       promptTemplateDeleteFailed: "無法刪除這份提示詞模板。",
+      promptTemplateDeletedRefreshFailed:
+        "已刪除提示詞並重新載入 Pi，但無法載入更新後的清單。",
       noPromptTemplates: "尚無使用者提示詞模板。",
       saving: "儲存中…",
       deleting: "刪除中…",
@@ -598,7 +641,7 @@ const resources = {
       configuredAccessDescription: "這個 Pi Agent 實例可使用的憑證。",
       projectTrust: "Project trust",
       projectTrustDescription:
-        "信任前，不會載入專案內的 Pi 設定、skills、packages 與 extensions。",
+        "信任前，不會載入專案內的 Pi 設定、prompts、skills、packages 與 extensions。",
       projectTrustStatusTrusted:
         "已信任。專案資源可以載入，extensions 也可以執行。",
       projectTrustStatusUntrusted:

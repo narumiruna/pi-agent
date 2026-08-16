@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
@@ -11,6 +11,7 @@ import {
   ProjectTrustPolicy,
   withProjectTrustRollback,
 } from "../../src/server/agent/project-trust.js";
+import { ResourceService } from "../../src/server/resources/service.js";
 
 const directories: string[] = [];
 
@@ -34,6 +35,13 @@ describe("ProjectTrustPolicy", () => {
       name: "no gated resources",
       required: false,
       saved: null,
+      fallback: "never" as const,
+      trusted: false,
+    },
+    {
+      name: "proactive saved allow",
+      required: false,
+      saved: true,
       fallback: "never" as const,
       trusted: true,
     },
@@ -90,8 +98,8 @@ describe("ProjectTrustPolicy", () => {
     );
 
     expect(policy.initialize()).toEqual({ required, trusted });
-    expect(settings.isProjectTrusted()).toBe(required && trusted);
-    expect(store.get).toHaveBeenCalledTimes(required ? 1 : 0);
+    expect(settings.isProjectTrusted()).toBe(trusted);
+    expect(store.get).toHaveBeenCalledOnce();
   });
 
   test("refreshes the global default before resolving trust", async () => {
@@ -122,6 +130,290 @@ describe("ProjectTrustPolicy", () => {
     expect(settings.isProjectTrusted()).toBe(false);
   });
 
+  test("keeps proactive trust when creating the first project prompt", async () => {
+    const workspace = await temporaryDirectory("pi-agent-trust-clean-");
+    const agentDir = await temporaryDirectory("pi-agent-trust-agent-");
+    const settings = SettingsManager.create(workspace, agentDir, {
+      projectTrusted: false,
+    });
+    const policy = new ProjectTrustPolicy(workspace, agentDir, settings);
+    const loader = new DefaultResourceLoader({
+      cwd: workspace,
+      agentDir,
+      settingsManager: settings,
+    });
+    expect(policy.initialize()).toEqual({ required: false, trusted: false });
+    await loader.reload();
+
+    policy.persist(true);
+    expect(policy.initialize()).toEqual({ required: false, trusted: true });
+    const reload = async () => loader.reload();
+    const runtime = {
+      reload,
+      mutateResources: async <T>(operation: () => Promise<T>): Promise<T> => {
+        await policy.refresh();
+        await loader.reload();
+        const result = await operation();
+        await loader.reload();
+        return result;
+      },
+      projectTrust: () => policy.status(),
+      promptTemplates: () => loader.getPrompts().prompts,
+    };
+    const packages = {
+      installAndPersist: async () => undefined,
+      listConfiguredPackages: () => [],
+      removeAndPersist: async () => false,
+      update: async () => undefined,
+    };
+    const service = new ResourceService(
+      agentDir,
+      workspace,
+      packages as never,
+      runtime,
+    );
+
+    await service.createPromptResource(
+      "project",
+      "first-project-prompt",
+      "First project prompt\n",
+    );
+
+    expect(
+      await readFile(
+        join(workspace, ".pi", "prompts", "first-project-prompt.md"),
+        "utf8",
+      ),
+    ).toBe("First project prompt\n");
+    expect(policy.status()).toEqual({ required: true, trusted: true });
+    await expect(service.listPromptResources()).resolves.toEqual([
+      expect.objectContaining({
+        name: "first-project-prompt",
+        editable: true,
+        provenance: { scope: "project", origin: "top-level" },
+      }),
+    ]);
+  });
+
+  test.each([
+    { scope: "user" as const, decision: "no" as const, trusted: false },
+    {
+      scope: "temporary" as const,
+      decision: "yes" as const,
+      trusted: true,
+    },
+  ])(
+    "honors and remembers $scope extension trust decision $decision",
+    async ({ scope, decision, trusted }) => {
+      const settings = SettingsManager.inMemory(
+        { defaultProjectTrust: trusted ? "never" : "always" },
+        { projectTrusted: false },
+      );
+      const store = { get: vi.fn(() => null), set: vi.fn() };
+      const handler = vi.fn(() => ({ trusted: decision, remember: true }));
+      const policy = new ProjectTrustPolicy(
+        "/workspace",
+        "/agent",
+        settings,
+        store,
+        () => true,
+      );
+      const extensions = {
+        extensions: [
+          {
+            sourceInfo: { scope },
+            handlers: new Map([["project_trust", [handler]]]),
+          },
+        ],
+        errors: [],
+      } as never;
+
+      await expect(policy.refresh(extensions)).resolves.toEqual({
+        required: true,
+        trusted,
+      });
+
+      expect(handler).toHaveBeenCalledWith(
+        { type: "project_trust", cwd: "/workspace" },
+        expect.objectContaining({
+          cwd: "/workspace",
+          mode: "rpc",
+          hasUI: false,
+        }),
+      );
+      expect(store.set).not.toHaveBeenCalled();
+      policy.commitRememberedDecision();
+      expect(store.set).toHaveBeenCalledWith("/workspace", trusted);
+      expect(settings.isProjectTrusted()).toBe(trusted);
+    },
+  );
+
+  test("discards an uncommitted remembered extension decision", async () => {
+    const settings = SettingsManager.inMemory(
+      { defaultProjectTrust: "always" },
+      { projectTrusted: true },
+    );
+    const store = { get: vi.fn(() => true), set: vi.fn() };
+    const policy = new ProjectTrustPolicy(
+      "/workspace",
+      "/agent",
+      settings,
+      store,
+      () => true,
+    );
+    await policy.refresh({
+      extensions: [
+        {
+          sourceInfo: { scope: "user" },
+          handlers: new Map([
+            ["project_trust", [() => ({ trusted: "no", remember: true })]],
+          ]),
+        },
+      ],
+      errors: [],
+    } as never);
+
+    policy.discardRememberedDecision();
+
+    expect(store.set).not.toHaveBeenCalled();
+  });
+
+  test("persists a remembered extension denial of manual trust", async () => {
+    const settings = SettingsManager.inMemory(
+      { defaultProjectTrust: "never" },
+      { projectTrusted: false },
+    );
+    const store = { get: vi.fn(() => null), set: vi.fn() };
+    const policy = new ProjectTrustPolicy(
+      "/workspace",
+      "/agent",
+      settings,
+      store,
+      () => true,
+    );
+    const extensions = {
+      extensions: [
+        {
+          sourceInfo: { scope: "user" },
+          handlers: new Map([
+            ["project_trust", [() => ({ trusted: "no", remember: true })]],
+          ]),
+        },
+      ],
+      errors: [],
+    } as never;
+
+    await expect(policy.assertCanEnable(extensions)).rejects.toThrow(/denied/i);
+    expect(store.set).toHaveBeenCalledWith("/workspace", false);
+  });
+
+  test("reports a broken trust handler and continues to the next policy", async () => {
+    const settings = SettingsManager.inMemory(
+      { defaultProjectTrust: "never" },
+      { projectTrusted: false },
+    );
+    const report = vi.fn();
+    const policy = new ProjectTrustPolicy(
+      "/workspace",
+      "/agent",
+      settings,
+      { get: () => null, set: vi.fn() },
+      () => true,
+      report,
+    );
+    const winner = vi.fn(() => ({ trusted: "yes" as const }));
+
+    await expect(
+      policy.refresh({
+        extensions: [
+          {
+            path: "/private/broken.js",
+            sourceInfo: { scope: "user" },
+            handlers: new Map([
+              [
+                "project_trust",
+                [
+                  () => {
+                    throw new Error("policy failed");
+                  },
+                  winner,
+                ],
+              ],
+            ]),
+          },
+        ],
+        errors: [],
+      } as never),
+    ).resolves.toEqual({ required: true, trusted: true });
+
+    expect(report).toHaveBeenCalledWith(
+      'Extension "broken.js" project_trust error: policy failed',
+    );
+    expect(winner).toHaveBeenCalledOnce();
+  });
+
+  test("applies a remembered trust denial to proactive enable on a clean project", async () => {
+    const settings = SettingsManager.inMemory(
+      { defaultProjectTrust: "always" },
+      { projectTrusted: false },
+    );
+    const store = { get: vi.fn(() => null), set: vi.fn() };
+    const policy = new ProjectTrustPolicy(
+      "/workspace",
+      "/agent",
+      settings,
+      store,
+      () => false,
+    );
+    const handler = vi.fn(() => ({ trusted: "no", remember: true }));
+
+    await expect(
+      policy.assertCanEnable({
+        extensions: [
+          {
+            sourceInfo: { scope: "user" },
+            handlers: new Map([["project_trust", [handler]]]),
+          },
+        ],
+        errors: [],
+      } as never),
+    ).rejects.toThrow(/denied/i);
+
+    expect(handler).toHaveBeenCalledOnce();
+    expect(store.set).toHaveBeenCalledWith("/workspace", false);
+  });
+
+  test("does not allow a project extension to decide its own trust", async () => {
+    const settings = SettingsManager.inMemory(
+      { defaultProjectTrust: "always" },
+      { projectTrusted: false },
+    );
+    const projectHandler = vi.fn(() => ({
+      trusted: "no" as const,
+      remember: true,
+    }));
+    const policy = new ProjectTrustPolicy(
+      "/workspace",
+      "/agent",
+      settings,
+      { get: () => null, set: vi.fn() },
+      () => true,
+    );
+
+    await expect(
+      policy.refresh({
+        extensions: [
+          {
+            sourceInfo: { scope: "project" },
+            handlers: new Map([["project_trust", [projectHandler]]]),
+          },
+        ],
+        errors: [],
+      } as never),
+    ).resolves.toEqual({ required: true, trusted: true });
+    expect(projectHandler).not.toHaveBeenCalled();
+  });
+
   test("fails closed if gated resources appear after startup", () => {
     let required = false;
     const settings = SettingsManager.inMemory(
@@ -136,7 +428,7 @@ describe("ProjectTrustPolicy", () => {
       () => required,
     );
 
-    expect(policy.initialize()).toEqual({ required: false, trusted: true });
+    expect(policy.initialize()).toEqual({ required: false, trusted: false });
     expect(settings.isProjectTrusted()).toBe(false);
     required = true;
     expect(policy.status()).toEqual({ required: true, trusted: false });
@@ -159,9 +451,9 @@ describe("ProjectTrustPolicy", () => {
 
     policy.initialize();
     required = false;
-    expect(policy.status()).toEqual({ required: true, trusted: true });
-    settings.setProjectTrusted(false);
     expect(policy.status()).toEqual({ required: false, trusted: true });
+    settings.setProjectTrusted(false);
+    expect(policy.status()).toEqual({ required: false, trusted: false });
   });
 
   test("reports active runtime trust until a changed saved decision is applied", () => {
