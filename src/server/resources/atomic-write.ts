@@ -52,6 +52,8 @@ export async function atomicCreate(
 export interface ExpectedFileIdentity {
   dev: number;
   ino: number;
+  birthtimeMs: number;
+  size: number;
 }
 
 async function restoreMovedFile(
@@ -99,7 +101,9 @@ export async function atomicWrite(
           !current.isFile() ||
           current.nlink > 1 ||
           current.dev !== expectedTarget.dev ||
-          current.ino !== expectedTarget.ino
+          current.ino !== expectedTarget.ino ||
+          current.birthtimeMs !== expectedTarget.birthtimeMs ||
+          current.size !== expectedTarget.size
         )
           throw new Error("Resource changed before persistence");
         try {

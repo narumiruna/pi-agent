@@ -91,7 +91,9 @@ describe("ResourceService", () => {
     await expect(
       atomicWrite(path, "Replacement\n", 0o600, directory, {
         dev: stat.dev,
-        ino: stat.ino + 1,
+        ino: stat.ino,
+        birthtimeMs: stat.birthtimeMs + 1,
+        size: stat.size,
       }),
     ).rejects.toThrow(/changed/i);
 

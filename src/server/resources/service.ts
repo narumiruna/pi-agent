@@ -70,7 +70,12 @@ function sameFileIdentity(
   left: Awaited<ReturnType<typeof lstat>>,
   right: Awaited<ReturnType<typeof lstat>>,
 ): boolean {
-  return left.dev === right.dev && left.ino === right.ino;
+  return (
+    left.dev === right.dev &&
+    left.ino === right.ino &&
+    left.ctimeMs === right.ctimeMs &&
+    left.size === right.size
+  );
 }
 
 interface PinnedRoot {
@@ -598,7 +603,14 @@ export class ResourceService {
     }
     if (stat.isSymbolicLink() || !stat.isFile() || stat.nlink > 1)
       throw new ResourcePermissionError("Prompt is read-only");
-    return { path: safePath, parent, dev: stat.dev, ino: stat.ino };
+    return {
+      path: safePath,
+      parent,
+      dev: stat.dev,
+      ino: stat.ino,
+      birthtimeMs: stat.birthtimeMs,
+      size: stat.size,
+    };
   }
 
   private async assertPromptTarget(
@@ -617,7 +629,9 @@ export class ResourceService {
       !current.isFile() ||
       current.nlink > 1 ||
       current.dev !== target.dev ||
-      current.ino !== target.ino
+      current.ino !== target.ino ||
+      current.birthtimeMs !== target.birthtimeMs ||
+      current.size !== target.size
     )
       throw new ResourceConflictError("Prompt changed during mutation");
   }
@@ -662,7 +676,9 @@ export class ResourceService {
         !moved.isFile() ||
         moved.nlink > 1 ||
         moved.dev !== target.dev ||
-        moved.ino !== target.ino
+        moved.ino !== target.ino ||
+        moved.birthtimeMs !== target.birthtimeMs ||
+        moved.size !== target.size
       )
         throw new ResourceConflictError("Prompt changed during deletion");
       await rm(quarantine);

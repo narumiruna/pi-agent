@@ -106,3 +106,9 @@ Project Chat commands from Pi’s resolved extension invocation list and include
 - Review: The complete diff and prompt resource lifecycle were audited locally for native fidelity, precedence, trust races, filesystem identity, path disclosure, failure recovery, accessibility, and scope; no external `pi -p` review is part of this delivery.
 - Pull request: [#47](https://github.com/narumiruna/pi-agent/pull/47).
 - Remaining: Required PR checks/review, merge, then Roadmap completion and plan archival in a follow-up documentation PR.
+
+### 2026-08-16 — Linux inode-reuse regression
+
+- GitHub CI exposed that an immediate same-path replacement can reuse the original inode on Linux, so device and inode alone were not a sufficient mutation identity.
+- Expected prompt identities now also bind creation time and size, while secure reads compare change time and size before and after reading.
+- Evidence: the focused resource suite passed five consecutive runs; PostgreSQL-enabled `npm run ci` passed all 435 tests; focused desktop/mobile prompt E2E passed all 5 tests.
