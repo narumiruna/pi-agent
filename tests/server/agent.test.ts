@@ -654,9 +654,17 @@ describe("Pi project trust", () => {
       join(agentDir, "settings.json"),
       '{"defaultProjectTrust":"always"}\n',
     );
+    const trustEventsPath = join(root, "trust-events.log");
     await writeFile(
       join(agentDir, "extensions", "deny-first-project.js"),
-      'export default function (pi) { pi.on("project_trust", () => ({ trusted: "no" })); }\n',
+      `import { appendFileSync } from "node:fs";
+export default function (pi) {
+  pi.on("project_trust", () => {
+    appendFileSync(${JSON.stringify(trustEventsPath)}, "resolved\\n");
+    return { trusted: "no" };
+  });
+}
+`,
     );
     const previousAgentDir = process.env.PI_CODING_AGENT_DIR;
     const events = new EventHub();
@@ -706,6 +714,9 @@ describe("Pi project trust", () => {
           .promptTemplates()
           .some((prompt) => prompt.name === "first-project"),
       ).toBe(false);
+      await expect(readFile(trustEventsPath, "utf8")).resolves.toBe(
+        "resolved\n",
+      );
     } finally {
       await service?.dispose();
       if (previousAgentDir === undefined)
@@ -774,6 +785,8 @@ describe("Pi project trust", () => {
     });
     const chatReload = vi.fn(async () => undefined);
     const heartbeatReload = vi.fn(async () => undefined);
+    const setResolutionOverride = vi.fn();
+    const clearResolutionOverride = vi.fn();
     const service = Object.create(PiService.prototype) as PiService;
     Object.defineProperties(service, {
       coordinator: { value: { waitForIdle, run } },
@@ -789,6 +802,8 @@ describe("Pi project trust", () => {
           refresh,
           commitRememberedDecision: vi.fn(),
           discardRememberedDecision: vi.fn(),
+          setResolutionOverride,
+          clearResolutionOverride,
         },
       },
       runtime: {
@@ -810,8 +825,13 @@ describe("Pi project trust", () => {
     expect(run).toHaveBeenCalledWith("maintenance", expect.any(Function));
     expect(refresh).toHaveBeenCalledOnce();
     expect(refresh.mock.invocationCallOrder[0]).toBeLessThan(
+      setResolutionOverride.mock.invocationCallOrder[0] ?? 0,
+    );
+    expect(setResolutionOverride).toHaveBeenCalledWith(false);
+    expect(setResolutionOverride.mock.invocationCallOrder[0]).toBeLessThan(
       chatReload.mock.invocationCallOrder[0] ?? 0,
     );
+    expect(clearResolutionOverride).toHaveBeenCalledOnce();
     expect(chatReload).toHaveBeenCalledOnce();
     expect(heartbeatReload).toHaveBeenCalledOnce();
     expect(trusted).toBe(false);
@@ -826,6 +846,8 @@ describe("Pi project trust", () => {
     const operation = vi.fn(async () => "written");
     const chatReload = vi.fn(async () => undefined);
     const heartbeatReload = vi.fn(async () => undefined);
+    const setResolutionOverride = vi.fn();
+    const clearResolutionOverride = vi.fn();
     const service = Object.create(PiService.prototype) as PiService;
     Object.defineProperties(service, {
       coordinator: { value: { waitForIdle, run } },
@@ -844,6 +866,8 @@ describe("Pi project trust", () => {
           refresh,
           commitRememberedDecision: vi.fn(),
           discardRememberedDecision: vi.fn(),
+          setResolutionOverride,
+          clearResolutionOverride,
         },
       },
       runtime: {
@@ -876,6 +900,10 @@ describe("Pi project trust", () => {
     expect(refresh.mock.invocationCallOrder[1]).toBeLessThan(
       chatReload.mock.invocationCallOrder[1] ?? 0,
     );
+    expect(setResolutionOverride).toHaveBeenCalledTimes(2);
+    expect(setResolutionOverride).toHaveBeenNthCalledWith(1, true);
+    expect(setResolutionOverride).toHaveBeenNthCalledWith(2, true);
+    expect(clearResolutionOverride).toHaveBeenCalledTimes(2);
     expect(chatReload).toHaveBeenCalledTimes(2);
     expect(heartbeatReload).toHaveBeenCalledTimes(2);
   });
@@ -906,6 +934,8 @@ describe("Pi project trust", () => {
           refresh: vi.fn(async () => undefined),
           commitRememberedDecision: vi.fn(),
           discardRememberedDecision: vi.fn(),
+          setResolutionOverride: vi.fn(),
+          clearResolutionOverride: vi.fn(),
         },
       },
       runtime: {
@@ -956,6 +986,8 @@ describe("Pi project trust", () => {
           },
           commitRememberedDecision: vi.fn(),
           discardRememberedDecision: vi.fn(),
+          setResolutionOverride: vi.fn(),
+          clearResolutionOverride: vi.fn(),
         },
       },
       runtime: {
@@ -1008,6 +1040,8 @@ describe("Pi project trust", () => {
           },
           commitRememberedDecision,
           discardRememberedDecision,
+          setResolutionOverride: vi.fn(),
+          clearResolutionOverride: vi.fn(),
         },
       },
       runtime: {
@@ -1141,7 +1175,7 @@ describe("Pi project trust", () => {
     expect(state.assertCanEnable).not.toHaveBeenCalled();
     expect(state.persist).toHaveBeenCalledWith(true);
     expect(state.setResolutionOverride).not.toHaveBeenCalled();
-    expect(state.clearResolutionOverride).toHaveBeenCalledOnce();
+    expect(state.clearResolutionOverride).not.toHaveBeenCalled();
     expect(state.chatReload).not.toHaveBeenCalled();
     expect(state.heartbeatReload).not.toHaveBeenCalled();
     expect(state.publish).not.toHaveBeenCalled();
@@ -1156,7 +1190,7 @@ describe("Pi project trust", () => {
 
     expect(state.setResolutionOverride).toHaveBeenNthCalledWith(1, true);
     expect(state.setResolutionOverride).toHaveBeenNthCalledWith(2, false);
-    expect(state.clearResolutionOverride).toHaveBeenCalledOnce();
+    expect(state.clearResolutionOverride).toHaveBeenCalledTimes(2);
     expect(state.setProjectTrusted).toHaveBeenNthCalledWith(1, true);
     expect(state.setProjectTrusted).toHaveBeenNthCalledWith(2, false);
     expect(state.persist).not.toHaveBeenCalled();
@@ -1176,7 +1210,7 @@ describe("Pi project trust", () => {
 
     expect(state.setResolutionOverride).toHaveBeenNthCalledWith(1, true);
     expect(state.setResolutionOverride).toHaveBeenNthCalledWith(2, false);
-    expect(state.clearResolutionOverride).toHaveBeenCalledOnce();
+    expect(state.clearResolutionOverride).toHaveBeenCalledTimes(2);
     expect(state.setProjectTrusted).toHaveBeenNthCalledWith(1, true);
     expect(state.setProjectTrusted).toHaveBeenNthCalledWith(2, false);
     expect(state.chatReload).toHaveBeenCalledTimes(2);

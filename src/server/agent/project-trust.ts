@@ -140,8 +140,8 @@ export class ProjectTrustPolicy {
   async resolveForLoader(
     extensionsResult: LoadExtensionsResult,
   ): Promise<boolean> {
-    this.rememberedDecision = undefined;
     if (this.resolutionOverride !== undefined) return this.resolutionOverride;
+    this.rememberedDecision = undefined;
     return (
       (await this.extensionDecision(extensionsResult)) ?? this.resolve().trusted
     );

@@ -1202,6 +1202,17 @@ export class PiService {
     await this.heartbeatSession.reload();
   }
 
+  private async reloadSessionsWithTrustOverride(
+    trusted = this.settingsManager.isProjectTrusted(),
+  ): Promise<void> {
+    this.projectTrustPolicy.setResolutionOverride(trusted);
+    try {
+      await this.reloadSessions();
+    } finally {
+      this.projectTrustPolicy.clearResolutionOverride();
+    }
+  }
+
   private async refreshTrustAndReloadSessions(): Promise<void> {
     await withProjectTrustRollback(
       this.settingsManager,
@@ -1211,10 +1222,10 @@ export class PiService {
         );
       },
       async () => {
-        await this.reloadSessions();
+        await this.reloadSessionsWithTrustOverride();
         this.projectTrustPolicy.commitRememberedDecision();
       },
-      () => this.reloadSessions(),
+      () => this.reloadSessionsWithTrustOverride(),
     );
   }
 
@@ -1280,18 +1291,18 @@ export class PiService {
             await this.discoverProjectTrustExtensions(),
           );
 
-        this.projectTrustPolicy.setResolutionOverride(trusted);
         this.settingsManager.setProjectTrusted(trusted);
         try {
-          await this.reloadSessions();
+          await this.reloadSessionsWithTrustOverride(trusted);
           resourcesReloaded = true;
           this.projectTrustPolicy.discardRememberedDecision();
           this.projectTrustPolicy.persist(trusted);
           return this.projectTrustPolicy.status();
         } catch (error) {
-          this.projectTrustPolicy.setResolutionOverride(previous);
           this.settingsManager.setProjectTrusted(previous);
-          await this.reloadSessions().catch(() => undefined);
+          await this.reloadSessionsWithTrustOverride(previous).catch(
+            () => undefined,
+          );
           throw error;
         }
       });
@@ -1301,8 +1312,6 @@ export class PiService {
     } catch (error) {
       this.projectTrustPolicy.discardRememberedDecision();
       throw error;
-    } finally {
-      this.projectTrustPolicy.clearResolutionOverride();
     }
   }
 

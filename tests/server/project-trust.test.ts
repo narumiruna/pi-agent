@@ -253,12 +253,16 @@ describe("ProjectTrustPolicy", () => {
       { defaultProjectTrust: "never" },
       { projectTrusted: false },
     );
-    const handler = vi.fn(() => ({ trusted: "no" as const }));
+    const handler = vi.fn(() => ({
+      trusted: "no" as const,
+      remember: true,
+    }));
+    const store = { get: () => false, set: vi.fn() };
     const policy = new ProjectTrustPolicy(
       "/workspace",
       "/agent",
       settings,
-      { get: () => false, set: vi.fn() },
+      store,
       () => true,
     );
     const extensions = {
@@ -278,6 +282,12 @@ describe("ProjectTrustPolicy", () => {
     policy.clearResolutionOverride();
     await expect(policy.resolveForLoader(extensions)).resolves.toBe(false);
     expect(handler).toHaveBeenCalledOnce();
+
+    policy.setResolutionOverride(false);
+    await expect(policy.resolveForLoader(extensions)).resolves.toBe(false);
+    policy.commitRememberedDecision();
+    expect(handler).toHaveBeenCalledOnce();
+    expect(store.set).toHaveBeenCalledWith("/workspace", false);
   });
 
   test("discards an uncommitted remembered extension decision", async () => {
