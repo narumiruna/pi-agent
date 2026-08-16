@@ -119,7 +119,7 @@ Pi package 仍是 prompt、skill 與 extension 的共同安裝來源，不建立
 
 ## Phase 4：Skills
 
-- [ ] 建立 Skills inventory 與唯讀 viewer。
+- [x] 建立 Skills inventory 與唯讀 viewer。
   - 使用 Pi resource loader 列出 discovered skills，不另行掃描一套平行 catalog。
   - 顯示 skill name、description、scope、source、package provenance、validation warning 與實際入口檔。
   - 支援檢視 `SKILL.md`、references、scripts 與 assets，但 binary assets 只顯示 metadata。

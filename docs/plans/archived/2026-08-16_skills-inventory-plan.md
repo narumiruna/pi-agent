@@ -1,6 +1,6 @@
 # Skills Inventory and Viewer Plan
 
-Status: In progress.
+Status: Completed on 2026-08-16.
 
 ## Goal
 
@@ -67,8 +67,8 @@ Add `/api/skill-inventory` and an opaque-ID plus relative-path file endpoint, th
 - [x] Add focused server/API/Web/route/navigation unit coverage for provenance, trust, diagnostics, direct-file isolation, nested files, binary/size classification, traversal, symlink/hard-link rejection, and viewer behavior.
 - [x] Run directly related unit suites, formatting, and TypeScript/Web build checks; record exact results.
 - [x] Audit scope against this plan and Roadmap milestone, then update evidence and completion checks.
-- [ ] Commit, push, and merge dedicated signed implementation pull request [#53](https://github.com/narumiruna/pi-agent/pull/53), which links this plan and Roadmap milestone, after required checks and blocking feedback are resolved.
-- [ ] After merge, check the matching Roadmap milestone and archive this plan through an administrative documentation pull request.
+- [x] Commit, push, and merge dedicated signed implementation pull request [#53](https://github.com/narumiruna/pi-agent/pull/53), which linked this plan and Roadmap milestone, as `4b46cd4` after required checks passed with no blocking feedback.
+- [x] After merge, check the matching Roadmap milestone and archive this plan through administrative documentation pull request [#54](https://github.com/narumiruna/pi-agent/pull/54).
 
 ## Completion Checklist
 
@@ -80,8 +80,8 @@ Add `/api/skill-inventory` and an opaque-ID plus relative-path file endpoint, th
 - [x] Browser requests contain only opaque skill IDs and validated relative paths.
 - [x] Trust/reload changes replace stale inventory and stale IDs fail closed.
 - [x] Directly related server, API, Web, route, and navigation unit tests pass.
-- [ ] Dedicated implementation PR is merged with blocking feedback resolved.
-- [ ] The Roadmap milestone is checked and this plan is archived only after merge.
+- [x] Dedicated implementation pull request [#53](https://github.com/narumiruna/pi-agent/pull/53) merged as `4b46cd4` with CI passing and no blocking feedback.
+- [x] The Roadmap milestone is checked and this plan is archived after the implementation merge.
 
 ## Verification
 
@@ -95,3 +95,4 @@ Add `/api/skill-inventory` and an opaque-ID plus relative-path file endpoint, th
 - API tests pin maintenance-snapshot inventory/file reads and reject browser-supplied extra absolute-path fields.
 - Web tests cover provenance, trust messaging, warning association, metadata-only assets, UTF-8 text viewing, errors, and stale inventory replacement.
 - Diff audit confirmed that Pi’s `getSkills()` winners and diagnostics remain authoritative; no CRUD, activation, package mutation, script execution, or duplicate skill discovery was added.
+- GitHub CI passed on final implementation head `2d7c717`; implementation PR [#53](https://github.com/narumiruna/pi-agent/pull/53) merged as `4b46cd4` with no submitted review findings or blocking feedback.
