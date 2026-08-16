@@ -114,7 +114,7 @@ Pi package 仍是 prompt、skill 與 extension 的共同安裝來源，不建立
   - Package 或 temporary prompt 預設為唯讀，避免直接修改 managed installation。
   - User 與 trusted project prompt 使用 Pi 認可的位置與原生 resource discovery。
   - 儲存後執行 native reload，並更新 `/command` autocomplete。
-- [ ] 補齊 prompt validation diagnostics。
+- [x] 補齊 prompt validation diagnostics。
   - 對 prompt name、frontmatter、內容大小與命名衝突顯示 validation diagnostics。
 
 ## Phase 4：Skills
