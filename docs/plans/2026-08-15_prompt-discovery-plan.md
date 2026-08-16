@@ -104,4 +104,5 @@ Project Chat commands from Pi’s resolved extension invocation list and include
 - Status: Implemented and locally verified; the implementation PR and post-merge administration remain.
 - Evidence: `npm run ci` passed 429 tests with 6 skips across 28 files and completed both production builds; `npx playwright test` passed all 30 desktop/mobile tests; PostgreSQL storage verification passed all 14 tests; `docker build -t pi-agent:local .` produced image `sha256:7905abe70e9cc5007dab22c68e19d4149c532a08506116c958b5125200c9828a`.
 - Review: The complete diff and prompt resource lifecycle were audited locally for native fidelity, precedence, trust races, filesystem identity, path disclosure, failure recovery, accessibility, and scope; no external `pi -p` review is part of this delivery.
-- Remaining: Signed commit, push, PR checks/review, merge, then Roadmap completion and plan archival in a follow-up documentation PR.
+- Pull request: [#47](https://github.com/narumiruna/pi-agent/pull/47).
+- Remaining: Required PR checks/review, merge, then Roadmap completion and plan archival in a follow-up documentation PR.
