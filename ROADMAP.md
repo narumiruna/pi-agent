@@ -109,7 +109,7 @@ Pi package 仍是 prompt、skill 與 extension 的共同安裝來源，不建立
   - 將 `SYSTEM.md` 與 `APPEND_SYSTEM.md` editor 移到 `Prompts`。
   - 將目前 `prompts/` template list、create、edit 與 delete 移到 `Prompts`。
   - Existing `SYSTEM.md`、`APPEND_SYSTEM.md` 與 prompt template 不需資料轉換。
-- [ ] 接上 Pi native prompt discovery、provenance、permission 與 reload flow。
+- [x] 接上 Pi native prompt discovery、provenance、permission 與 reload flow。
   - 顯示 prompt 的 scope、source、path、package provenance 與是否可編輯。
   - Package 或 temporary prompt 預設為唯讀，避免直接修改 managed installation。
   - User 與 trusted project prompt 使用 Pi 認可的位置與原生 resource discovery。
