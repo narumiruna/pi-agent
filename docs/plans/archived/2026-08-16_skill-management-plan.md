@@ -1,6 +1,6 @@
 # Trusted Skill Management and Activation Plan
 
-Status: Implementation complete; pull request pending.
+Status: Completed on 2026-08-16.
 
 ## Goal
 
@@ -70,8 +70,8 @@ Extend the read-only Skills UI with a trusted create form, editable entry docume
 - [x] Add focused server/API/Web unit coverage for skeleton creation, name/description bounds, user/project trust, collisions, permissions, stale IDs, symlink/hard-link/race rejection, recursive delete isolation, reload, settings persistence, command filtering, and UI flows.
 - [x] Run directly related unit suites, formatting, and TypeScript/Web build checks; record exact results.
 - [x] Audit scope against this plan and Roadmap milestone, then update evidence and completion checks.
-- [ ] Commit, push, and merge one dedicated signed implementation pull request linking this plan and Roadmap milestone after required checks and blocking feedback are resolved.
-- [ ] After merge, check the matching Roadmap milestone and archive this plan through an administrative documentation pull request.
+- [x] Commit, push, and merge dedicated signed implementation pull request [#55](https://github.com/narumiruna/pi-agent/pull/55), which linked this plan and Roadmap milestone, as `437f028` after CI passed with no blocking feedback.
+- [x] After merge, check the matching Roadmap milestone and archive this plan through administrative documentation pull request [#56](https://github.com/narumiruna/pi-agent/pull/56).
 
 ## Completion Checklist
 
@@ -84,8 +84,8 @@ Extend the read-only Skills UI with a trusted create form, editable entry docume
 - [x] `enableSkillCommands` persists through native settings and Web autocomplete follows it.
 - [x] Browser mutations use only opaque IDs, canonical scopes, bounded text, and explicit delete confirmation.
 - [x] Directly related server, API, Web, and command/settings unit tests pass.
-- [ ] Dedicated implementation PR is merged with blocking feedback resolved.
-- [ ] The Roadmap milestone is checked and this plan is archived only after merge.
+- [x] Dedicated implementation pull request [#55](https://github.com/narumiruna/pi-agent/pull/55) merged as `437f028` with CI passing and no blocking feedback.
+- [x] The Roadmap milestone is checked and this plan is archived only after the implementation merge.
 
 ## Verification
 
@@ -95,3 +95,4 @@ Extend the read-only Skills UI with a trusted create form, editable entry docume
 - `npm run build:server` — passed.
 - `npm run build:web` — passed with the existing Monaco chunk-size warning.
 - Scope audit: no package/filter management, arbitrary skill paths, helper-script execution, parallel skill catalog, or parallel activation store was added.
+- GitHub CI passed on final implementation head `a9304ab`; implementation pull request [#55](https://github.com/narumiruna/pi-agent/pull/55) merged as `437f028` with no submitted review findings or blocking feedback.
