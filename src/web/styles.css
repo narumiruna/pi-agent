@@ -1029,9 +1029,45 @@ select:focus-visible,
   overflow-wrap: anywhere;
 }
 
+.skillManagement,
+.skillCreateForm,
 .skillViewer {
   display: grid;
   gap: 16px;
+}
+
+.skillManagement {
+  padding: 18px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+}
+
+.skillSettingRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--line);
+}
+
+.skillSettingRow p,
+.skillCreateForm p {
+  margin: 3px 0 0;
+}
+
+.skillField,
+.skillScopeField {
+  display: grid;
+  gap: 7px;
+}
+
+.skillCreateForm > button {
+  width: fit-content;
+}
+
+.skillViewer {
   margin-top: 28px;
   padding-top: 28px;
   border-top: 1px solid var(--line);
@@ -1073,6 +1109,11 @@ select:focus-visible,
   overflow: auto;
   white-space: pre-wrap;
   word-break: break-word;
+}
+
+.skillDocument textarea {
+  margin-top: 8px;
+  font-family: var(--code-font);
 }
 
 .listRow,
@@ -1858,9 +1899,14 @@ select:focus-visible,
 
   .settingRow,
   .listRow,
-  .skillFileRow {
+  .skillFileRow,
+  .skillSettingRow {
     align-items: flex-start;
     flex-direction: column;
+  }
+
+  .skillCreateForm > button {
+    width: 100%;
   }
 
   .pageColumn .rt-TabsList {

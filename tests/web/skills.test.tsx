@@ -47,6 +47,10 @@ function inventory(): WebSkillInventory {
           },
         ],
         filesTruncated: false,
+        editable: true,
+        deletable: true,
+        commandEnabled: true,
+        modelInvocationEnabled: true,
       },
       {
         id: "skill_package",
@@ -57,6 +61,10 @@ function inventory(): WebSkillInventory {
         path: "packages/example.com/org/skills/skills/review/SKILL.md",
         files: [{ path: "SKILL.md", size: 40, kind: "text", entry: true }],
         filesTruncated: true,
+        editable: false,
+        deletable: false,
+        commandEnabled: true,
+        modelInvocationEnabled: true,
       },
       {
         id: "skill_settings",
@@ -69,6 +77,10 @@ function inventory(): WebSkillInventory {
           { path: "SKILL.md", size: 30, kind: "unavailable", entry: true },
         ],
         filesTruncated: false,
+        editable: false,
+        deletable: false,
+        commandEnabled: true,
+        modelInvocationEnabled: false,
       },
     ],
     diagnostics: [
@@ -85,6 +97,7 @@ function inventory(): WebSkillInventory {
       },
     ],
     projectTrust: { required: true, trusted: false },
+    skillCommandsEnabled: true,
   };
 }
 
@@ -102,6 +115,14 @@ beforeEach(async () => {
   HTMLElement.prototype.setPointerCapture = vi.fn();
   HTMLElement.prototype.scrollIntoView = vi.fn();
   vi.stubGlobal("fetch", vi.fn());
+  vi.stubGlobal(
+    "ResizeObserver",
+    class {
+      observe() {}
+      unobserve() {}
+      disconnect() {}
+    },
+  );
 });
 
 afterEach(() => {
@@ -190,6 +211,7 @@ describe("Skills page", () => {
                 skills: [],
                 diagnostics: [],
                 projectTrust: { required: false, trusted: true },
+                skillCommandsEnabled: true,
               },
         );
       }
@@ -210,7 +232,7 @@ describe("Skills page", () => {
     await user.click(
       screen.getByRole("button", { name: "View skill file SKILL.md" }),
     );
-    expect(await screen.findByText("Old content")).toBeVisible();
+    expect(await screen.findByDisplayValue("Old content")).toBeVisible();
 
     view.rerender(
       <Theme>
@@ -224,6 +246,118 @@ describe("Skills page", () => {
     expect(screen.queryByRole("heading", { name: "global-review" })).toBeNull();
     expect(screen.queryByText("Old content")).toBeNull();
     expect(loads).toBe(2);
+  });
+
+  test("creates a canonical skill and updates native slash-command settings", async () => {
+    let commandsEnabled = true;
+    vi.mocked(fetch).mockImplementation(async (input, init) => {
+      const url = String(input);
+      if (url === "/api/skill-inventory")
+        return json({ ...inventory(), skillCommandsEnabled: commandsEnabled });
+      if (url === "/api/skill-settings" && init?.method === "PUT") {
+        commandsEnabled = false;
+        return json({ enableSkillCommands: false });
+      }
+      if (url === "/api/skills" && init?.method === "POST")
+        return json({ ok: true }, 201);
+      throw new Error(`Unexpected request: ${url}`);
+    });
+    const user = userEvent.setup();
+    renderPage();
+
+    const commandSwitch = await screen.findByRole("switch", {
+      name: "Slash commands",
+    });
+    expect(commandSwitch).toBeChecked();
+    await user.click(commandSwitch);
+    expect(
+      await screen.findByText(
+        "Skill command setting saved and resources reloaded.",
+      ),
+    ).toBeVisible();
+    expect(
+      screen.getByRole("switch", { name: "Slash commands" }),
+    ).not.toBeChecked();
+
+    await user.type(
+      screen.getByRole("textbox", { name: "Skill name" }),
+      "new-skill",
+    );
+    await user.type(
+      screen.getByRole("textbox", { name: "Skill description" }),
+      "Use this skill for review",
+    );
+    await user.click(screen.getByRole("button", { name: "Create skill" }));
+    expect(
+      await screen.findByText("Skill created and native resources reloaded."),
+    ).toBeVisible();
+    expect(fetch).toHaveBeenCalledWith(
+      "/api/skills",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({
+          scope: "user",
+          name: "new-skill",
+          description: "Use this skill for review",
+        }),
+      }),
+    );
+  });
+
+  test("edits and explicitly confirms deletion of a managed skill", async () => {
+    let skills = inventory().skills;
+    let saved = "Original skill content";
+    vi.mocked(fetch).mockImplementation(async (input, init) => {
+      const url = String(input);
+      if (url === "/api/skill-inventory")
+        return json({ ...inventory(), skills });
+      if (url === "/api/skills/skill_global/files?path=SKILL.md")
+        return json({
+          path: "SKILL.md",
+          size: saved.length,
+          kind: "text",
+          content: saved,
+        });
+      if (url === "/api/skills/skill_global" && init?.method === "PUT") {
+        saved = (JSON.parse(String(init.body)) as { content: string }).content;
+        return json({ ok: true });
+      }
+      if (url === "/api/skills/skill_global" && init?.method === "DELETE") {
+        skills = skills.filter(({ id }) => id !== "skill_global");
+        return new Response(null, { status: 204 });
+      }
+      throw new Error(`Unexpected request: ${url}`);
+    });
+    const user = userEvent.setup();
+    renderPage();
+    await user.click(
+      await screen.findByRole("button", { name: "View skill global-review" }),
+    );
+    await user.click(
+      screen.getByRole("button", { name: "View skill file SKILL.md" }),
+    );
+    const editor = await screen.findByRole("textbox", {
+      name: "Skill entry document",
+    });
+    await user.clear(editor);
+    await user.type(editor, "Updated skill content");
+    await user.click(screen.getByRole("button", { name: "Save changes" }));
+    expect(
+      await screen.findByText("Skill saved and native resources reloaded."),
+    ).toBeVisible();
+    expect(saved).toBe("Updated skill content");
+
+    await user.click(screen.getByRole("button", { name: "Delete" }));
+    const dialog = await screen.findByRole("dialog", {
+      name: "Delete skill global-review",
+    });
+    await user.click(within(dialog).getByRole("button", { name: "Delete" }));
+    expect(
+      await screen.findByText("Skill deleted and native resources reloaded."),
+    ).toBeVisible();
+    expect(
+      screen.queryByRole("button", { name: "View skill global-review" }),
+    ).toBeNull();
   });
 
   test("offers inventory retry and reports file load failures", async () => {

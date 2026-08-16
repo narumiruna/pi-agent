@@ -20,6 +20,7 @@ import type {
   WebPromptResource,
   WebPromptTemplateDocument,
   WebPromptWriteScope,
+  WebSkillWriteScope,
 } from "../../shared/contracts.js";
 import {
   MAX_PROMPT_CONTENT_BYTES,
@@ -41,9 +42,11 @@ import {
   atomicWrite,
   type ExpectedFileIdentity,
 } from "./atomic-write.js";
+import { ResourceConflictError, ResourcePermissionError } from "./errors.js";
 import { safeMarkdownPath } from "./paths.js";
 import { projectPromptDiagnostics } from "./prompt-diagnostics.js";
-import { type NativeSkillSnapshot, SkillViewer } from "./skill-viewer.js";
+import { SkillResourceService } from "./skill-service.js";
+import type { NativeSkillSnapshot } from "./skill-viewer.js";
 
 export type DocumentKind = "append" | "heartbeat" | "system" | "template";
 
@@ -64,12 +67,11 @@ export interface NativeResourceRuntime {
   projectTrust(): WebProjectTrust;
   promptDiagnostics(): ReadonlyArray<ResourceDiagnostic>;
   promptTemplates(): ReadonlyArray<PromptTemplate>;
+  skillCommandsEnabled(): boolean;
   skillSnapshot(): NativeSkillSnapshot;
 }
 
-export class ResourceConflictError extends Error {}
-
-export class ResourcePermissionError extends Error {}
+export { ResourceConflictError, ResourcePermissionError } from "./errors.js";
 
 export class ResourceValidationError extends Error {
   constructor(readonly diagnostic: PromptValidationDiagnostic["code"]) {
@@ -177,7 +179,7 @@ function packageSource(value: string): string {
 export class ResourceService {
   private readonly agentRoot: PinnedRoot;
   private readonly promptDir: string;
-  private readonly skillViewer: SkillViewer;
+  private readonly skills: SkillResourceService;
   private readonly workspaceRoot: PinnedRoot;
 
   constructor(
@@ -191,7 +193,7 @@ export class ResourceService {
   ) {
     this.agentRoot = pinRoot(agentDir);
     this.promptDir = join(agentDir, "prompts");
-    this.skillViewer = new SkillViewer(agentDir, workspace);
+    this.skills = new SkillResourceService(agentDir, workspace, runtime);
     this.workspaceRoot = pinRoot(workspace);
   }
 
@@ -623,14 +625,27 @@ export class ResourceService {
   }
 
   async listSkillInventory() {
-    return this.skillViewer.inventory(
-      this.runtime.skillSnapshot(),
-      this.runtime.projectTrust(),
-    );
+    return this.skills.inventory();
   }
 
   async readSkillFile(id: string, path: string) {
-    return this.skillViewer.readFile(this.runtime.skillSnapshot(), id, path);
+    return this.skills.readFile(id, path);
+  }
+
+  async createSkill(
+    scope: WebSkillWriteScope,
+    name: string,
+    description: string,
+  ): Promise<void> {
+    await this.skills.create(scope, name, description);
+  }
+
+  async updateSkill(id: string, content: string): Promise<void> {
+    await this.skills.update(id, content);
+  }
+
+  async deleteSkill(id: string): Promise<void> {
+    await this.skills.delete(id);
   }
 
   private nativePrompt(id: string): PromptTemplate {

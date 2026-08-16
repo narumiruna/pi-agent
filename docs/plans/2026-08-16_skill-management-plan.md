@@ -1,6 +1,6 @@
 # Trusted Skill Management and Activation Plan
 
-Status: In progress.
+Status: Implementation complete; pull request pending.
 
 ## Goal
 
@@ -59,34 +59,39 @@ Extend the read-only Skills UI with a trusted create form, editable entry docume
 
 - [x] Inspect the merged Skills inventory/viewer, Pi 0.84.1 skills and settings docs, installed `SettingsManager`, `AgentSession`, interactive/RPC command behavior, reload coordinator, and atomic persistence helpers.
 - [x] Create fresh branch `narumiruna/feat/skill-management` from merged `main` and add this dedicated plan before implementation.
-- [ ] Add shared skill name/description policies, write/settings contracts, permissions, and effective activation fields.
-- [ ] Implement canonical ownership checks and standards-shaped user/project skill creation.
-- [ ] Implement identity-pinned entry updates plus quarantine-based direct-file or skill-directory deletion.
-- [ ] Route create/update/delete through native maintenance, trust refresh, and two-session reload without patching loader arrays.
-- [ ] Expose and persist native `enableSkillCommands`, and align Web command projection with its effective value.
-- [ ] Add mutation and settings API endpoints using only opaque skill IDs, trusted scopes, and bounded bodies.
-- [ ] Extend Skills UI with create, entry edit/save, delete confirmation, command toggle, activation state, pending/error/success handling, and read-only fallbacks.
-- [ ] Document canonical ownership, native reload, command setting, and remaining read-only boundaries.
-- [ ] Add focused server/API/Web unit coverage for skeleton creation, name/description bounds, user/project trust, collisions, permissions, stale IDs, symlink/hard-link/race rejection, recursive delete isolation, reload, settings persistence, command filtering, and UI flows.
-- [ ] Run directly related unit suites, formatting, and TypeScript/Web build checks; record exact results.
-- [ ] Audit scope against this plan and Roadmap milestone, then update evidence and completion checks.
+- [x] Add shared skill name/description policies, write/settings contracts, permissions, and effective activation fields.
+- [x] Implement canonical ownership checks and standards-shaped user/project skill creation.
+- [x] Implement identity-pinned entry updates plus quarantine-based direct-file or skill-directory deletion.
+- [x] Route create/update/delete through native maintenance, trust refresh, and two-session reload without patching loader arrays.
+- [x] Expose and persist native `enableSkillCommands`, and align Web command projection with its effective value.
+- [x] Add mutation and settings API endpoints using only opaque skill IDs, trusted scopes, and bounded bodies.
+- [x] Extend Skills UI with create, entry edit/save, delete confirmation, command toggle, activation state, pending/error/success handling, and read-only fallbacks.
+- [x] Document canonical ownership, native reload, command setting, and remaining read-only boundaries.
+- [x] Add focused server/API/Web unit coverage for skeleton creation, name/description bounds, user/project trust, collisions, permissions, stale IDs, symlink/hard-link/race rejection, recursive delete isolation, reload, settings persistence, command filtering, and UI flows.
+- [x] Run directly related unit suites, formatting, and TypeScript/Web build checks; record exact results.
+- [x] Audit scope against this plan and Roadmap milestone, then update evidence and completion checks.
 - [ ] Commit, push, and merge one dedicated signed implementation pull request linking this plan and Roadmap milestone after required checks and blocking feedback are resolved.
 - [ ] After merge, check the matching Roadmap milestone and archive this plan through an administrative documentation pull request.
 
 ## Completion Checklist
 
-- [ ] Valid user skills are created in `~/.pi/agent/skills/<name>/SKILL.md` with an Agent Skills-compatible skeleton.
-- [ ] Canonical user and trusted-project entries are editable and deletable; all other origins and untrusted project entries fail closed.
-- [ ] Direct root Markdown deletion cannot remove sibling skills, while a managed directory skill deletion removes only its own quarantined directory.
-- [ ] Writes reject collisions, existing content, oversized bodies, stale IDs, symlinks, hard links, and replaced targets without overwriting unrelated files.
-- [ ] Every successful mutation reloads both native sessions and refreshes system-prompt plus `/skill:name` state through Pi.
-- [ ] Effective model-invocation and command activation states appear in inventory.
-- [ ] `enableSkillCommands` persists through native settings and Web autocomplete follows it.
-- [ ] Browser mutations use only opaque IDs, canonical scopes, bounded text, and explicit delete confirmation.
-- [ ] Directly related server, API, Web, and command/settings unit tests pass.
+- [x] Valid user skills are created in `~/.pi/agent/skills/<name>/SKILL.md` with an Agent Skills-compatible skeleton.
+- [x] Canonical user and trusted-project entries are editable and deletable; all other origins and untrusted project entries fail closed.
+- [x] Direct root Markdown deletion cannot remove sibling skills, while a managed directory skill deletion removes only its own quarantined directory.
+- [x] Writes reject collisions, existing content, oversized bodies, stale IDs, symlinks, hard links, and replaced targets without overwriting unrelated files.
+- [x] Every successful mutation reloads both native sessions and refreshes system-prompt plus `/skill:name` state through Pi.
+- [x] Effective model-invocation and command activation states appear in inventory.
+- [x] `enableSkillCommands` persists through native settings and Web autocomplete follows it.
+- [x] Browser mutations use only opaque IDs, canonical scopes, bounded text, and explicit delete confirmation.
+- [x] Directly related server, API, Web, and command/settings unit tests pass.
 - [ ] Dedicated implementation PR is merged with blocking feedback resolved.
 - [ ] The Roadmap milestone is checked and this plan is archived only after merge.
 
 ## Verification
 
-- Pending implementation.
+- `npx vitest run tests/server/skill-manager.test.ts tests/server/skill-viewer.test.ts tests/server/api.test.ts tests/server/agent.test.ts tests/server/resources.test.ts tests/server/project-trust.test.ts tests/web/skills.test.tsx` — 197 tests passed.
+- `npm run check` — passed.
+- `npm run check:e2e` — TypeScript E2E contracts passed; browser E2E execution remains deferred to Phase 8.
+- `npm run build:server` — passed.
+- `npm run build:web` — passed with the existing Monaco chunk-size warning.
+- Scope audit: no package/filter management, arbitrary skill paths, helper-script execution, parallel skill catalog, or parallel activation store was added.

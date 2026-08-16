@@ -11,6 +11,7 @@ import type {
   WebSkillFileEntry,
   WebSkillInventory,
   WebSkillResource,
+  WebSkillWriteScope,
 } from "../../shared/contracts.js";
 import {
   opaqueSkillId,
@@ -310,6 +311,28 @@ function agentsSkillPath(skill: Skill): string | undefined {
   return `${prefix}.agents/skills/${normalized.slice(index + marker.length)}`;
 }
 
+export function canonicalSkillScope(
+  skill: Skill,
+  agentDir: string,
+  workspace: string,
+): WebSkillWriteScope | undefined {
+  if (skill.sourceInfo.origin !== "top-level") return undefined;
+  if (skill.sourceInfo.scope !== "user" && skill.sourceInfo.scope !== "project")
+    return undefined;
+  const scope = skill.sourceInfo.scope;
+  const root =
+    scope === "user"
+      ? join(agentDir, "skills")
+      : join(workspace, ".pi", "skills");
+  const canonicalRoot = resolve(root);
+  const filePath = resolve(skill.filePath);
+  if (!isWithin(filePath, canonicalRoot)) return undefined;
+  const segments = relative(canonicalRoot, filePath).split(sep);
+  if (basename(filePath) === "SKILL.md" && segments.length <= 2) return scope;
+  if (segments.length === 1 && basename(filePath).endsWith(".md")) return scope;
+  return undefined;
+}
+
 function logicalSkillPath(
   skill: Skill,
   agentDir: string,
@@ -411,10 +434,24 @@ export class SkillViewer {
   async inventory(
     snapshot: NativeSkillSnapshot,
     projectTrust: WebSkillInventory["projectTrust"],
+    skillCommandsEnabled = true,
+    permissions?: (
+      skill: Skill,
+    ) => Promise<{ editable: boolean; deletable: boolean }>,
   ): Promise<WebSkillInventory> {
     const skills: WebSkillResource[] = [];
     for (const skill of snapshot.skills) {
       const projectedFiles = await listSkillFiles(skill);
+      const scope = canonicalSkillScope(skill, this.agentDir, this.workspace);
+      const trusted =
+        scope === "user" || (scope === "project" && projectTrust.trusted);
+      const entry = projectedFiles.files.find((file) => file.entry);
+      const permission = permissions
+        ? await permissions(skill)
+        : {
+            editable: Boolean(trusted && entry?.kind === "text"),
+            deletable: Boolean(trusted && entry?.kind !== "unavailable"),
+          };
       skills.push({
         id: opaqueSkillId(skill.sourceInfo),
         name: safePromptMetadataText(skill.name).replaceAll("\n", " "),
@@ -433,6 +470,10 @@ export class SkillViewer {
         ),
         files: projectedFiles.files,
         filesTruncated: projectedFiles.truncated,
+        editable: permission.editable,
+        deletable: permission.deletable,
+        commandEnabled: skillCommandsEnabled,
+        modelInvocationEnabled: !skill.disableModelInvocation,
       });
     }
     return {
@@ -443,6 +484,7 @@ export class SkillViewer {
         this.workspace,
       ),
       projectTrust,
+      skillCommandsEnabled,
     };
   }
 

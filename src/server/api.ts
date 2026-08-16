@@ -9,10 +9,15 @@ import {
   apiError,
   CHAT_IMAGE_MIME_TYPES,
   isValidPromptName,
+  isValidSkillDescription,
+  isValidSkillName,
   MAX_CHAT_IMAGE_BASE64_LENGTH,
   MAX_CHAT_IMAGES,
   MAX_PROMPT_NAME_LENGTH,
+  MAX_SKILL_DESCRIPTION_LENGTH,
+  MAX_SKILL_NAME_LENGTH,
   PROMPT_NAME_PATTERN,
+  SKILL_NAME_PATTERN,
   type WebEvent,
 } from "../shared/contracts.js";
 import type { PiService } from "./agent/pi-service.js";
@@ -35,7 +40,10 @@ import {
   type ResourceService,
   ResourceValidationError,
 } from "./resources/service.js";
-import { MAX_SKILL_PATH_LENGTH } from "./resources/skill-viewer.js";
+import {
+  MAX_SKILL_FILE_BYTES,
+  MAX_SKILL_PATH_LENGTH,
+} from "./resources/skill-viewer.js";
 import type { AppStore, WebSessionRecord } from "./storage/types.js";
 import { WorkspaceError } from "./workspace/errors.js";
 import { MAX_WORKSPACE_PATH_LENGTH } from "./workspace/policy.js";
@@ -197,6 +205,29 @@ const SkillFileQuery = Type.Object(
   {
     path: Type.String({ minLength: 1, maxLength: MAX_SKILL_PATH_LENGTH }),
   },
+  { additionalProperties: false },
+);
+const SkillCreateBody = Type.Object(
+  {
+    name: Type.String({
+      minLength: 1,
+      maxLength: MAX_SKILL_NAME_LENGTH,
+      pattern: SKILL_NAME_PATTERN,
+    }),
+    description: Type.String({
+      minLength: 1,
+      maxLength: MAX_SKILL_DESCRIPTION_LENGTH,
+    }),
+    scope: Type.Union([Type.Literal("project"), Type.Literal("user")]),
+  },
+  { additionalProperties: false },
+);
+const SkillUpdateBody = Type.Object(
+  { content: Type.String({ maxLength: MAX_SKILL_FILE_BYTES }) },
+  { additionalProperties: false },
+);
+const SkillSettingsBody = Type.Object(
+  { enableSkillCommands: Type.Boolean() },
   { additionalProperties: false },
 );
 const WorkspaceWriteBody = Type.Object(
@@ -791,6 +822,66 @@ export function registerApi<E extends ApiEnv>(
       ),
     ),
   );
+  app.put(
+    "/api/skill-settings",
+    tbValidator("json", SkillSettingsBody),
+    async (context) => {
+      try {
+        return context.json(
+          await services.pi.setSkillCommandsEnabled(
+            context.req.valid("json").enableSkillCommands,
+          ),
+        );
+      } catch (error) {
+        return errorResponse(context, error);
+      }
+    },
+  );
+  app.post(
+    "/api/skills",
+    tbValidator("json", SkillCreateBody),
+    async (context) => {
+      try {
+        const body = context.req.valid("json");
+        if (
+          !isValidSkillName(body.name) ||
+          !isValidSkillDescription(body.description)
+        )
+          return context.json(apiError("bad_request"), 400);
+        await services.resources.createSkill(
+          body.scope,
+          body.name,
+          body.description,
+        );
+        return context.json({ ok: true }, 201);
+      } catch (error) {
+        return errorResponse(context, error);
+      }
+    },
+  );
+  app.put(
+    "/api/skills/:id",
+    tbValidator("json", SkillUpdateBody),
+    async (context) => {
+      try {
+        await services.resources.updateSkill(
+          context.req.param("id"),
+          context.req.valid("json").content,
+        );
+        return context.json({ ok: true });
+      } catch (error) {
+        return errorResponse(context, error);
+      }
+    },
+  );
+  app.delete("/api/skills/:id", async (context) => {
+    try {
+      await services.resources.deleteSkill(context.req.param("id"));
+      return context.body(null, 204);
+    } catch (error) {
+      return errorResponse(context, error);
+    }
+  });
   app.get(
     "/api/skills/:id/files",
     tbValidator("query", SkillFileQuery),

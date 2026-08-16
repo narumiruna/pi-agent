@@ -289,9 +289,9 @@ The generic Files API excludes `.agents` and `.pi`, so it cannot bypass this res
 
 Library package and MCP controls plus Settings project trust display one persistent trusted-code warning that covers packages, skills, extensions, and MCP servers.
 
-Future Skills and Extensions management surfaces must reuse that warning and retain any stronger acknowledgement gate.
+Skills and future Extensions management surfaces must reuse that warning and retain any stronger acknowledgement gate.
 
-Resource mutations persist through Pi-native files, settings, or package APIs before calling `PiService.reload()`.
+Resource mutations run through `PiService.mutateResources()`, persist through Pi-native files, settings, or package APIs, and then reload the native resources.
 
 That adapter waits for active work and invokes Pi's `AgentSession.reload()` lifecycle for chat and heartbeat sessions.
 
@@ -328,6 +328,20 @@ Skill IDs are opaque and entry locations are logical paths; the browser never re
 The read-only viewer exposes a directory skill’s regular `SKILL.md`, references, scripts, and assets within bounded file/depth/size limits, while a direct Markdown skill exposes only its own entry file.
 
 UTF-8 text can be viewed as plain text; binary, oversized, symlinked, hard-linked, and unavailable assets expose metadata only and are never executed.
+
+The Web can create a user skill at `~/.pi/agent/skills/<name>/SKILL.md` or, after native project trust is effective, a project skill at `.pi/skills/<name>/SKILL.md`.
+
+Creation validates Agent Skills names and descriptions, rejects every discovered name collision or existing destination, and writes a standards-shaped frontmatter skeleton without executing its content or helper scripts.
+
+Only direct, non-symlink, single-link entries under those two canonical roots are editable or deletable.
+
+Untrusted project, `.agents`, package-managed, settings-added, temporary, nested non-entry, symlinked, and hard-linked resources remain read-only.
+
+Entry updates are identity-checked atomic replacements, and deletion first quarantines exactly the selected direct file or skill directory so sibling skills and external symlink targets are not removed.
+
+Every successful mutation runs inside Pi's native maintenance lifecycle and reloads both chat and heartbeat sessions, refreshing the system prompt and discovered `/skill:name` commands.
+
+The slash-command switch persists Pi's native `enableSkillCommands` setting; it does not create a separate Web activation store, and each skill's model-invocation state remains derived from Pi's native metadata.
 
 Library retains package and MCP controls during the remaining resource migration.
 

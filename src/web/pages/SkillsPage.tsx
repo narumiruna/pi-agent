@@ -1,15 +1,34 @@
-import { Button, Flex, Heading, Text } from "@radix-ui/themes";
+import {
+  Button,
+  Flex,
+  Heading,
+  Select,
+  Switch,
+  Text,
+  TextArea,
+  TextField,
+} from "@radix-ui/themes";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
+  isValidSkillDescription,
+  isValidSkillName,
   resourceProvenanceLabel,
   type WebSkillDiagnostic,
   type WebSkillFileDocument,
   type WebSkillFileEntry,
   type WebSkillInventory,
   type WebSkillResource,
+  type WebSkillSettings,
+  type WebSkillWriteScope,
 } from "../../shared/contracts.js";
-import { api } from "../api.js";
+import { api, mutation } from "../api.js";
+import { ConfirmDialog } from "../components/ConfirmDialog.js";
+
+interface Feedback {
+  kind: "error" | "success";
+  message: string;
+}
 
 function formatBytes(bytes: number): string {
   if (bytes < 1_000) return `${bytes} B`;
@@ -49,6 +68,22 @@ function SkillDiagnostics({
   );
 }
 
+function MutationFeedback({ feedback }: { feedback?: Feedback }) {
+  if (!feedback) return null;
+  return (
+    <Text
+      as="p"
+      className="inlineNotice"
+      color={feedback.kind === "error" ? "red" : "green"}
+      highContrast
+      role={feedback.kind === "error" ? "alert" : "status"}
+      size="2"
+    >
+      {feedback.message}
+    </Text>
+  );
+}
+
 function fileKindLabel(
   file: Pick<WebSkillFileEntry, "kind">,
   t: ReturnType<typeof useTranslation>["t"],
@@ -69,34 +104,47 @@ export function SkillsPage({ refresh = 0 }: { refresh?: number }) {
   const { t } = useTranslation();
   const [inventory, setInventory] = useState<WebSkillInventory>();
   const [selectedId, setSelectedId] = useState<string>();
-  const [document, setDocument] = useState<WebSkillFileDocument>();
+  const [fileDocument, setFileDocument] = useState<WebSkillFileDocument>();
+  const [draft, setDraft] = useState("");
   const [loadingFile, setLoadingFile] = useState<string>();
-  const [error, setError] = useState<string>();
+  const [loadError, setLoadError] = useState<string>();
+  const [feedback, setFeedback] = useState<Feedback>();
+  const [pending, setPending] = useState<
+    "create" | "delete" | "save" | "settings"
+  >();
+  const [deleteTarget, setDeleteTarget] = useState<WebSkillResource>();
+  const [name, setName] = useState("");
+  const [description, setDescription] = useState("");
+  const [scope, setScope] = useState<WebSkillWriteScope>("user");
   const inventoryRequest = useRef(0);
   const fileRequest = useRef(0);
   const observedRefresh = useRef(refresh);
   const selectedIdRef = useRef(selectedId);
   selectedIdRef.current = selectedId;
 
-  const loadInventory = useCallback(async () => {
+  const loadInventory = useCallback(async (): Promise<boolean> => {
     const request = ++inventoryRequest.current;
     fileRequest.current += 1;
     setInventory(undefined);
-    setDocument(undefined);
+    setFileDocument(undefined);
+    setDraft("");
     setLoadingFile(undefined);
-    setError(undefined);
+    setLoadError(undefined);
     try {
       const result = await api<WebSkillInventory>("/api/skill-inventory");
-      if (request !== inventoryRequest.current) return;
+      if (request !== inventoryRequest.current) return false;
       setInventory(result);
+      if (!result.projectTrust.trusted) setScope("user");
       const current = selectedIdRef.current;
       if (current && !result.skills.some(({ id }) => id === current)) {
         selectedIdRef.current = undefined;
         setSelectedId(undefined);
       }
+      return true;
     } catch {
-      if (request !== inventoryRequest.current) return;
-      setError(t("skillsLoadFailed"));
+      if (request !== inventoryRequest.current) return false;
+      setLoadError(t("skillsLoadFailed"));
+      return false;
     }
   }, [t]);
 
@@ -107,6 +155,7 @@ export function SkillsPage({ refresh = 0 }: { refresh?: number }) {
   useEffect(() => {
     if (observedRefresh.current === refresh) return;
     observedRefresh.current = refresh;
+    setFeedback(undefined);
     void loadInventory();
   }, [loadInventory, refresh]);
 
@@ -114,17 +163,20 @@ export function SkillsPage({ refresh = 0 }: { refresh?: number }) {
     if (file.kind !== "text") return;
     const request = ++fileRequest.current;
     setLoadingFile(file.path);
-    setDocument(undefined);
-    setError(undefined);
+    setFileDocument(undefined);
+    setDraft("");
+    setLoadError(undefined);
+    setFeedback(undefined);
     try {
       const result = await api<WebSkillFileDocument>(
         `/api/skills/${encodeURIComponent(skill.id)}/files?path=${encodeURIComponent(file.path)}`,
       );
       if (request !== fileRequest.current) return;
-      setDocument(result);
+      setFileDocument(result);
+      setDraft(result.content ?? "");
     } catch {
       if (request !== fileRequest.current) return;
-      setError(t("skillFileLoadFailed"));
+      setLoadError(t("skillFileLoadFailed"));
     } finally {
       if (request === fileRequest.current) setLoadingFile(undefined);
     }
@@ -134,12 +186,112 @@ export function SkillsPage({ refresh = 0 }: { refresh?: number }) {
     fileRequest.current += 1;
     selectedIdRef.current = skill.id;
     setSelectedId(skill.id);
-    setDocument(undefined);
+    setFileDocument(undefined);
+    setDraft("");
     setLoadingFile(undefined);
-    setError(undefined);
+    setLoadError(undefined);
+    setFeedback(undefined);
+  };
+
+  const createSkill = async () => {
+    const normalizedName = name.trim();
+    if (
+      pending ||
+      !isValidSkillName(normalizedName) ||
+      !isValidSkillDescription(description)
+    ) {
+      setFeedback({ kind: "error", message: t("skillMetadataInvalid") });
+      return;
+    }
+    setPending("create");
+    setFeedback(undefined);
+    try {
+      await api(
+        "/api/skills",
+        mutation("POST", {
+          scope,
+          name: normalizedName,
+          description: description.trim(),
+        }),
+      );
+      setName("");
+      setDescription("");
+      if (await loadInventory())
+        setFeedback({ kind: "success", message: t("skillCreated") });
+      else setFeedback({ kind: "error", message: t("skillsRefreshFailed") });
+    } catch {
+      setFeedback({ kind: "error", message: t("skillCreateFailed") });
+    } finally {
+      setPending(undefined);
+    }
+  };
+
+  const updateCommands = async (enabled: boolean) => {
+    if (pending) return;
+    setPending("settings");
+    setFeedback(undefined);
+    try {
+      await api<WebSkillSettings>(
+        "/api/skill-settings",
+        mutation("PUT", { enableSkillCommands: enabled }),
+      );
+      if (await loadInventory())
+        setFeedback({ kind: "success", message: t("skillSettingsSaved") });
+      else setFeedback({ kind: "error", message: t("skillsRefreshFailed") });
+    } catch {
+      setFeedback({ kind: "error", message: t("skillSettingsSaveFailed") });
+    } finally {
+      setPending(undefined);
+    }
   };
 
   const selected = inventory?.skills.find(({ id }) => id === selectedId);
+  const entryPath = selected?.files.find(({ entry }) => entry)?.path;
+  const editableDocument = Boolean(
+    selected?.editable &&
+      fileDocument?.kind === "text" &&
+      fileDocument.path === entryPath,
+  );
+
+  const saveSkill = async () => {
+    if (!selected || !editableDocument || pending) return;
+    setPending("save");
+    setFeedback(undefined);
+    try {
+      await api(
+        `/api/skills/${encodeURIComponent(selected.id)}`,
+        mutation("PUT", { content: draft }),
+      );
+      if (await loadInventory())
+        setFeedback({ kind: "success", message: t("skillSaved") });
+      else setFeedback({ kind: "error", message: t("skillsRefreshFailed") });
+    } catch {
+      setFeedback({ kind: "error", message: t("skillSaveFailed") });
+    } finally {
+      setPending(undefined);
+    }
+  };
+
+  const deleteSkill = async () => {
+    if (!deleteTarget || pending) return;
+    setPending("delete");
+    setFeedback(undefined);
+    try {
+      await api(
+        `/api/skills/${encodeURIComponent(deleteTarget.id)}`,
+        mutation("DELETE"),
+      );
+      setDeleteTarget(undefined);
+      if (await loadInventory())
+        setFeedback({ kind: "success", message: t("skillDeleted") });
+      else setFeedback({ kind: "error", message: t("skillsRefreshFailed") });
+    } catch {
+      setFeedback({ kind: "error", message: t("skillDeleteFailed") });
+    } finally {
+      setPending(undefined);
+    }
+  };
+
   const globalDiagnostics =
     inventory?.diagnostics.filter(({ skillId }) => !skillId) ?? [];
   const selectedDiagnostics = selected
@@ -164,11 +316,12 @@ export function SkillsPage({ refresh = 0 }: { refresh?: number }) {
           {t("skillsProjectTrustRequired")}
         </Text>
       ) : null}
+      <MutationFeedback feedback={feedback} />
       <SkillDiagnostics diagnostics={globalDiagnostics} />
-      {error ? (
+      {loadError ? (
         <div>
           <Text as="p" className="inlineNotice" color="red" role="alert">
-            {error}
+            {loadError}
           </Text>
           {!inventory ? (
             <Button highContrast onClick={() => void loadInventory()}>
@@ -177,11 +330,105 @@ export function SkillsPage({ refresh = 0 }: { refresh?: number }) {
           ) : null}
         </div>
       ) : null}
-      {!inventory && !error ? <Text color="gray">{t("loading")}</Text> : null}
+      {!inventory && !loadError ? (
+        <Text color="gray">{t("loading")}</Text>
+      ) : null}
+
+      {inventory ? (
+        <section
+          className="skillManagement"
+          aria-labelledby="skill-create-title"
+        >
+          <div className="skillSettingRow">
+            <div>
+              <Heading size="3">{t("skillCommandsTitle")}</Heading>
+              <Text as="p" color="gray" size="2">
+                {t("skillCommandsDescription")}
+              </Text>
+            </div>
+            <Switch
+              aria-label={t("skillCommandsTitle")}
+              checked={inventory.skillCommandsEnabled}
+              disabled={Boolean(pending)}
+              onCheckedChange={(checked) => void updateCommands(checked)}
+            />
+          </div>
+
+          <div className="skillCreateForm">
+            <div>
+              <Heading id="skill-create-title" size="3">
+                {t("createSkillTitle")}
+              </Heading>
+              <Text as="p" color="gray" size="2">
+                {t("createSkillDescription")}
+              </Text>
+            </div>
+            <div className="skillField">
+              <Text as="label" htmlFor="skill-name" size="2" weight="medium">
+                {t("skillName")}
+              </Text>
+              <TextField.Root
+                id="skill-name"
+                disabled={Boolean(pending)}
+                maxLength={64}
+                onChange={(event) => setName(event.target.value)}
+                placeholder="review-code"
+                value={name}
+              />
+            </div>
+            <div className="skillField">
+              <Text
+                as="label"
+                htmlFor="skill-description"
+                size="2"
+                weight="medium"
+              >
+                {t("skillDescription")}
+              </Text>
+              <TextArea
+                id="skill-description"
+                disabled={Boolean(pending)}
+                maxLength={1_024}
+                onChange={(event) => setDescription(event.target.value)}
+                rows={3}
+                value={description}
+              />
+            </div>
+            <div className="skillScopeField">
+              <Text id="skill-scope-label" as="span" size="2" weight="medium">
+                {t("skillScope")}
+              </Text>
+              <Select.Root
+                disabled={Boolean(pending)}
+                onValueChange={(value) => setScope(value as WebSkillWriteScope)}
+                value={scope}
+              >
+                <Select.Trigger aria-labelledby="skill-scope-label" />
+                <Select.Content>
+                  <Select.Item value="user">{t("skillScopeUser")}</Select.Item>
+                  <Select.Item
+                    disabled={!inventory.projectTrust.trusted}
+                    value="project"
+                  >
+                    {t("skillScopeProject")}
+                  </Select.Item>
+                </Select.Content>
+              </Select.Root>
+            </div>
+            <Button
+              disabled={Boolean(pending)}
+              highContrast
+              onClick={() => void createSkill()}
+            >
+              {pending === "create" ? t("saving") : t("createSkill")}
+            </Button>
+          </div>
+        </section>
+      ) : null}
+
       {inventory?.skills.length === 0 ? (
         <Text color="gray">{t("noSkills")}</Text>
       ) : null}
-
       {inventory?.skills.map((skill) => {
         const warningCount = inventory.diagnostics.filter(
           ({ skillId }) => skillId === skill.id,
@@ -198,6 +445,15 @@ export function SkillsPage({ refresh = 0 }: { refresh?: number }) {
               </Text>
               <Text as="p" color="gray" size="2">
                 {skill.description}
+              </Text>
+              <Text as="p" color="gray" size="1">
+                {skill.commandEnabled
+                  ? t("skillCommandEnabled")
+                  : t("skillCommandDisabled")}
+                {" · "}
+                {skill.modelInvocationEnabled
+                  ? t("skillModelEnabled")
+                  : t("skillModelDisabled")}
               </Text>
               {warningCount > 0 ? (
                 <Text as="p" color="amber" highContrast size="1">
@@ -234,6 +490,11 @@ export function SkillsPage({ refresh = 0 }: { refresh?: number }) {
             <Text as="p" color="gray" size="1">
               {t("skillEntryFile")}: {selected.path}
             </Text>
+            {!selected.editable ? (
+              <Text as="p" color="gray" size="1">
+                {t("skillReadOnly")}
+              </Text>
+            ) : null}
           </div>
           <SkillDiagnostics diagnostics={selectedDiagnostics} />
           <div>
@@ -259,7 +520,7 @@ export function SkillsPage({ refresh = 0 }: { refresh?: number }) {
                 {file.kind === "text" ? (
                   <Button
                     aria-label={t("viewSkillFile", { path: file.path })}
-                    disabled={Boolean(loadingFile)}
+                    disabled={Boolean(loadingFile || pending)}
                     highContrast
                     onClick={() => void loadFile(selected, file)}
                     variant="soft"
@@ -270,31 +531,64 @@ export function SkillsPage({ refresh = 0 }: { refresh?: number }) {
               </div>
             ))}
           </div>
-          {document ? (
+          {fileDocument ? (
             <section
               className="skillDocument"
               aria-labelledby="skill-document-title"
             >
               <Heading id="skill-document-title" size="3">
-                {document.path}
+                {fileDocument.path}
               </Heading>
               <Text as="p" color="gray" size="1">
-                {fileKindLabel(document, t)} · {formatBytes(document.size)}
+                {fileKindLabel(fileDocument, t)} ·{" "}
+                {formatBytes(fileDocument.size)}
               </Text>
-              {document.kind === "text" ? (
-                <pre>{document.content ?? ""}</pre>
+              {fileDocument.kind === "text" ? (
+                editableDocument ? (
+                  <>
+                    <TextArea
+                      aria-label={t("skillDocumentContent")}
+                      disabled={Boolean(pending)}
+                      onChange={(event) => setDraft(event.target.value)}
+                      rows={18}
+                      value={draft}
+                    />
+                    <Button
+                      disabled={Boolean(pending)}
+                      highContrast
+                      onClick={() => void saveSkill()}
+                    >
+                      {pending === "save" ? t("saving") : t("save")}
+                    </Button>
+                  </>
+                ) : (
+                  <pre>{fileDocument.content ?? ""}</pre>
+                )
               ) : null}
             </section>
           ) : null}
-          <Flex gap="2">
+          <Flex gap="2" wrap="wrap">
+            {selected.deletable ? (
+              <Button
+                color="red"
+                disabled={Boolean(pending)}
+                highContrast
+                onClick={() => setDeleteTarget(selected)}
+                variant="soft"
+              >
+                {t("delete")}
+              </Button>
+            ) : null}
             <Button
               highContrast
               onClick={() => {
                 fileRequest.current += 1;
                 selectedIdRef.current = undefined;
                 setSelectedId(undefined);
-                setDocument(undefined);
-                setError(undefined);
+                setFileDocument(undefined);
+                setDraft("");
+                setLoadError(undefined);
+                setFeedback(undefined);
               }}
               variant="soft"
             >
@@ -303,6 +597,21 @@ export function SkillsPage({ refresh = 0 }: { refresh?: number }) {
           </Flex>
         </section>
       ) : null}
+
+      <ConfirmDialog
+        confirmLabel={pending === "delete" ? t("deleting") : t("delete")}
+        description={t("deleteSkillDescription", {
+          name: deleteTarget?.name ?? "",
+        })}
+        destructive
+        open={Boolean(deleteTarget)}
+        pending={pending === "delete"}
+        title={t("deleteSkill", { name: deleteTarget?.name ?? "" })}
+        onConfirm={() => void deleteSkill()}
+        onOpenChange={(open) => {
+          if (!open && pending !== "delete") setDeleteTarget(undefined);
+        }}
+      />
     </section>
   );
 }

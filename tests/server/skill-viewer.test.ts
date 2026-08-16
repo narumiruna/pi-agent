@@ -288,6 +288,26 @@ describe("SkillViewer", () => {
         path: "temporary/temporary-skill/SKILL.md",
       },
     ]);
+    expect(inventory.skillCommandsEnabled).toBe(true);
+    expect(
+      inventory.skills.map(({ editable, deletable }) => ({
+        editable,
+        deletable,
+      })),
+    ).toEqual([
+      { editable: true, deletable: true },
+      { editable: true, deletable: true },
+      { editable: false, deletable: false },
+      { editable: false, deletable: false },
+      { editable: false, deletable: false },
+      { editable: false, deletable: false },
+    ]);
+    expect(
+      inventory.skills.every(
+        ({ commandEnabled, modelInvocationEnabled }) =>
+          commandEnabled && modelInvocationEnabled,
+      ),
+    ).toBe(true);
     expect(inventory.skills[0]?.files).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
@@ -335,6 +355,20 @@ describe("SkillViewer", () => {
     expect(JSON.stringify(inventory)).not.toContain(agentDir);
     expect(JSON.stringify(inventory)).not.toContain(workspace);
     expect(JSON.stringify(inventory)).not.toContain(external);
+
+    if (skills[0]) skills[0].disableModelInvocation = true;
+    const disabled = await viewer.inventory(
+      { skills, diagnostics },
+      { required: true, trusted: true },
+      false,
+    );
+    expect(disabled.skillCommandsEnabled).toBe(false);
+    expect(disabled.skills[0]).toEqual(
+      expect.objectContaining({
+        commandEnabled: false,
+        modelInvocationEnabled: false,
+      }),
+    );
   });
 
   test("bounds directory traversal without dropping the entry file", async () => {

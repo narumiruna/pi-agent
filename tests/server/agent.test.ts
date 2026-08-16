@@ -275,6 +275,10 @@ describe("Pi resource provenance", () => {
       origin,
     });
     const service = Object.create(PiService.prototype) as PiService;
+    const getEnableSkillCommands = vi.fn(() => true);
+    Object.defineProperty(service, "settingsManager", {
+      value: { getEnableSkillCommands },
+    });
     Object.defineProperty(service, "config", {
       value: {
         agentDir: "/private/agent",
@@ -498,10 +502,74 @@ describe("Pi resource provenance", () => {
     expect(commands[11]).toEqual(
       expect.objectContaining({ sourceLabel: "settings" }),
     );
+
+    getEnableSkillCommands.mockReturnValue(false);
+    expect(
+      service.commands([]).filter(({ source }) => source === "skill"),
+    ).toEqual([]);
     expect(new Set(commands.map((command) => command.id)).size).toBe(
       commands.length,
     );
     expect(JSON.stringify(commands)).not.toMatch(/private|secret|sourceInfo/);
+  });
+
+  test("persists skill command activation through native settings maintenance", async () => {
+    let enabled = true;
+    const setEnableSkillCommands = vi.fn((value: boolean) => {
+      enabled = value;
+    });
+    const flush = vi.fn(async () => undefined);
+    const mutateResources = vi.fn(async (operation: () => Promise<void>) => {
+      await operation();
+    });
+    const service = Object.create(PiService.prototype) as PiService;
+    Object.defineProperties(service, {
+      settingsManager: {
+        value: {
+          getEnableSkillCommands: () => enabled,
+          setEnableSkillCommands,
+          flush,
+        },
+      },
+      mutateResources: { value: mutateResources },
+    });
+
+    await expect(service.setSkillCommandsEnabled(false)).resolves.toEqual({
+      enableSkillCommands: false,
+    });
+    expect(setEnableSkillCommands).toHaveBeenCalledWith(false);
+    expect(flush).toHaveBeenCalledOnce();
+    expect(mutateResources).toHaveBeenCalledOnce();
+
+    await expect(service.setSkillCommandsEnabled(false)).resolves.toEqual({
+      enableSkillCommands: false,
+    });
+    expect(mutateResources).toHaveBeenCalledOnce();
+  });
+
+  test("reloads the persisted native skill command setting", async () => {
+    const agentDir = await mkdtemp(join(tmpdir(), "pi-agent-skill-settings-"));
+    const workspace = await mkdtemp(join(tmpdir(), "pi-agent-skill-cwd-"));
+    temporaryDirectories.push(agentDir, workspace);
+    const settingsManager = SettingsManager.create(workspace, agentDir, {
+      projectTrusted: false,
+    });
+    await settingsManager.reload();
+    const service = Object.create(PiService.prototype) as PiService;
+    Object.defineProperties(service, {
+      settingsManager: { value: settingsManager },
+      mutateResources: {
+        value: async (operation: () => Promise<void>) => operation(),
+      },
+    });
+
+    await service.setSkillCommandsEnabled(false);
+
+    const reloaded = SettingsManager.create(workspace, agentDir, {
+      projectTrusted: false,
+    });
+    await reloaded.reload();
+    expect(reloaded.getEnableSkillCommands()).toBe(false);
   });
 });
 

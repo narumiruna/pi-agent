@@ -65,6 +65,7 @@ async function setup() {
     projectTrust: vi.fn(() => ({ required: false, trusted: false })),
     promptDiagnostics: vi.fn(() => []),
     promptTemplates: vi.fn(() => []),
+    skillCommandsEnabled: vi.fn(() => true),
     skillSnapshot: vi.fn(() => ({ skills: [], diagnostics: [] })),
   };
   return {
@@ -344,6 +345,7 @@ describe("ResourceService", () => {
       projectTrust: () => ({ required: false, trusted: false }),
       promptDiagnostics: () => loader.getPrompts().diagnostics,
       promptTemplates: () => loader.getPrompts().prompts,
+      skillCommandsEnabled: () => true,
       skillSnapshot: () => loader.getSkills(),
     };
     const service = new ResourceService(
@@ -389,6 +391,7 @@ describe("ResourceService", () => {
       projectTrust: () => ({ required: false, trusted: false }),
       promptDiagnostics: () => loader.getPrompts().diagnostics,
       promptTemplates: () => loader.getPrompts().prompts,
+      skillCommandsEnabled: () => true,
       skillSnapshot: () => loader.getSkills(),
     };
     const service = new ResourceService(
@@ -412,6 +415,9 @@ describe("ResourceService", () => {
     const pi = Object.create(PiService.prototype) as PiService;
     Object.defineProperties(pi, {
       config: { value: { agentDir, workspace } },
+      settingsManager: {
+        value: { getEnableSkillCommands: () => true },
+      },
       runtime: {
         value: {
           session: {
@@ -495,6 +501,9 @@ describe("ResourceService", () => {
     const pi = Object.create(PiService.prototype) as PiService;
     Object.defineProperties(pi, {
       config: { value: { agentDir, workspace } },
+      settingsManager: {
+        value: { getEnableSkillCommands: () => true },
+      },
       runtime: {
         value: {
           session: {
@@ -584,6 +593,9 @@ describe("ResourceService", () => {
     const pi = Object.create(PiService.prototype) as PiService;
     Object.defineProperties(pi, {
       config: { value: { agentDir, workspace } },
+      settingsManager: {
+        value: { getEnableSkillCommands: () => true },
+      },
       runtime: {
         value: {
           session: {

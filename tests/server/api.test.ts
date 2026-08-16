@@ -855,10 +855,15 @@ describe("API contracts", () => {
             { path: "SKILL.md", size: 42, kind: "text" as const, entry: true },
           ],
           filesTruncated: false,
+          editable: true,
+          deletable: true,
+          commandEnabled: true,
+          modelInvocationEnabled: true,
         },
       ],
       diagnostics: [],
       projectTrust: { required: false, trusted: false },
+      skillCommandsEnabled: true,
     };
     const document = {
       path: "references/guide.md",
@@ -895,6 +900,157 @@ describe("API contracts", () => {
     );
     expect(invalid.status).toBe(400);
     expect(readResourceSnapshot).toHaveBeenCalledTimes(2);
+  });
+
+  test("validates and forwards skill mutations and native command settings", async () => {
+    const createSkill = vi.fn(async () => undefined);
+    const updateSkill = vi.fn(async () => undefined);
+    const deleteSkill = vi.fn(async () => undefined);
+    const setSkillCommandsEnabled = vi.fn(async (enabled: boolean) => ({
+      enableSkillCommands: enabled,
+    }));
+    const app = appWith({
+      pi: { setSkillCommandsEnabled } as never,
+      resources: { createSkill, updateSkill, deleteSkill } as never,
+    });
+
+    const created = await app.request("/api/skills", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        scope: "project",
+        name: "review-code",
+        description: "Review code safely",
+      }),
+    });
+    const updated = await app.request("/api/skills/skill_safe", {
+      method: "PUT",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ content: "---\nname: review-code\n---\n" }),
+    });
+    const deleted = await app.request("/api/skills/skill_safe", {
+      method: "DELETE",
+    });
+    const settings = await app.request("/api/skill-settings", {
+      method: "PUT",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ enableSkillCommands: false }),
+    });
+
+    expect(created.status).toBe(201);
+    expect(updated.status).toBe(200);
+    expect(deleted.status).toBe(204);
+    expect(settings.status).toBe(200);
+    expect(await settings.json()).toEqual({ enableSkillCommands: false });
+    expect(createSkill).toHaveBeenCalledWith(
+      "project",
+      "review-code",
+      "Review code safely",
+    );
+    expect(updateSkill).toHaveBeenCalledWith(
+      "skill_safe",
+      "---\nname: review-code\n---\n",
+    );
+    expect(deleteSkill).toHaveBeenCalledWith("skill_safe");
+    expect(setSkillCommandsEnabled).toHaveBeenCalledWith(false);
+  });
+
+  test("rejects invalid and unbounded skill mutation bodies", async () => {
+    const createSkill = vi.fn(async () => undefined);
+    const updateSkill = vi.fn(async () => undefined);
+    const setSkillCommandsEnabled = vi.fn(async () => undefined);
+    const app = appWith({
+      pi: { setSkillCommandsEnabled } as never,
+      resources: { createSkill, updateSkill } as never,
+    });
+
+    const invalidName = await app.request("/api/skills", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        scope: "user",
+        name: "../escape",
+        description: "Unsafe",
+      }),
+    });
+    const blankDescription = await app.request("/api/skills", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        scope: "user",
+        name: "safe-name",
+        description: "   ",
+      }),
+    });
+    const extra = await app.request("/api/skills", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        scope: "user",
+        name: "safe-name",
+        description: "Safe",
+        path: "/private/skill",
+      }),
+    });
+    const oversized = await app.request("/api/skills/skill_safe", {
+      method: "PUT",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ content: "x".repeat(500_001) }),
+    });
+    const invalidSetting = await app.request("/api/skill-settings", {
+      method: "PUT",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ enableSkillCommands: "yes" }),
+    });
+
+    expect(invalidName.status).toBe(400);
+    expect(blankDescription.status).toBe(400);
+    expect(extra.status).toBe(400);
+    expect(oversized.status).toBe(400);
+    expect(invalidSetting.status).toBe(400);
+    expect(createSkill).not.toHaveBeenCalled();
+    expect(updateSkill).not.toHaveBeenCalled();
+    expect(setSkillCommandsEnabled).not.toHaveBeenCalled();
+  });
+
+  test("maps skill trust, collision, and stale resource failures", async () => {
+    const createSkill = vi
+      .fn<() => Promise<void>>()
+      .mockRejectedValueOnce(
+        new ResourcePermissionError("Project skills are not trusted"),
+      )
+      .mockRejectedValueOnce(new ResourceConflictError("Skill exists"));
+    const updateSkill = vi.fn(async () => {
+      throw new Error("Skill not found");
+    });
+    const app = appWith({
+      resources: { createSkill, updateSkill } as never,
+    });
+    const body = JSON.stringify({
+      scope: "project",
+      name: "safe-name",
+      description: "Safe",
+    });
+
+    const forbidden = await app.request("/api/skills", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body,
+    });
+    const conflict = await app.request("/api/skills", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body,
+    });
+    const missing = await app.request("/api/skills/stale", {
+      method: "PUT",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ content: "safe" }),
+    });
+
+    expect(forbidden.status).toBe(403);
+    expect(conflict.status).toBe(409);
+    expect(missing.status).toBe(404);
   });
 
   test("returns path-free native provenance for resource commands", async () => {

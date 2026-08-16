@@ -148,6 +148,29 @@ export interface WebPromptResource {
   deletable: boolean;
 }
 
+export const SKILL_NAME_PATTERN = "^(?!-)(?!.*--)[a-z0-9]+(?:-[a-z0-9]+)*$";
+export const MAX_SKILL_NAME_LENGTH = 64;
+export const MAX_SKILL_DESCRIPTION_LENGTH = 1_024;
+const SKILL_NAME = new RegExp(SKILL_NAME_PATTERN);
+
+export function isValidSkillName(name: string): boolean {
+  return (
+    name.length >= 1 &&
+    name.length <= MAX_SKILL_NAME_LENGTH &&
+    SKILL_NAME.test(name)
+  );
+}
+
+export function isValidSkillDescription(description: string): boolean {
+  return (
+    description.trim().length >= 1 &&
+    description.length <= MAX_SKILL_DESCRIPTION_LENGTH &&
+    !description.includes("\0")
+  );
+}
+
+export type WebSkillWriteScope = "project" | "user";
+
 export type WebSkillFileKind = "binary" | "text" | "too_large" | "unavailable";
 
 export interface WebSkillFileEntry {
@@ -166,6 +189,10 @@ export interface WebSkillResource {
   path: string;
   files: WebSkillFileEntry[];
   filesTruncated: boolean;
+  editable: boolean;
+  deletable: boolean;
+  commandEnabled: boolean;
+  modelInvocationEnabled: boolean;
 }
 
 export interface WebSkillDiagnostic {
@@ -179,6 +206,11 @@ export interface WebSkillInventory {
   skills: WebSkillResource[];
   diagnostics: WebSkillDiagnostic[];
   projectTrust: WebProjectTrust;
+  skillCommandsEnabled: boolean;
+}
+
+export interface WebSkillSettings {
+  enableSkillCommands: boolean;
 }
 
 export interface WebSkillFileDocument {
