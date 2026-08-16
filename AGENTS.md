@@ -6,6 +6,8 @@
 - Keep tests under `tests/server/` and `tests/web/`, with reusable data in `tests/fixtures/`.
 - Do not hand-edit generated output in `dist/` or `*.tsbuildinfo` files.
 - Preserve Pi's native sessions, settings, providers, tools, prompts, skills, extensions, and package behavior instead of creating parallel abstractions.
+- Set `PI_CODING_AGENT_DIR` before using native `SessionManager` defaults so conversation discovery stays inside the configured agent directory.
+- Provide a concrete Pi `Theme` such as `createHeadlessTheme()` when binding Web extension UI; terminal themes are not rendered or executed in the browser.
 
 ## Third-Party Dependencies
 
