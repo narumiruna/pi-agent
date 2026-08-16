@@ -210,6 +210,7 @@ Production image 必須繼續以非 root UID `10001` 執行。
   - Validation 與 collision diagnostics 有 matching server、Web 與 E2E coverage。
   - Inventory、viewer 與 provenance projection 有 matching server、Web 與 E2E coverage。
   - CRUD、activation、trust rejection 與 reload 有 matching regression coverage。
+  - Deferred review debt：[PR #55](https://github.com/narumiruna/pi-agent/pull/55#discussion_r3791013275) 的 `enableSkillCommands` no-op 判斷必須與寫入一起放在 maintenance lease 內，並加入相反值並發請求 regression coverage。
   - Package guardrail、diagnostics 與 warning 有 matching regression coverage。
   - Inventory、diagnostics、provenance 與 RPC-safe projection 有 matching server、Web 與 E2E coverage。
   - Management、trust、settings filter、reload、syntax/runtime failure、duplicate command 與 tool provenance 有 matching coverage。
