@@ -67,7 +67,7 @@ Add `/api/skill-inventory` and an opaque-ID plus relative-path file endpoint, th
 - [x] Add focused server/API/Web/route/navigation unit coverage for provenance, trust, diagnostics, direct-file isolation, nested files, binary/size classification, traversal, symlink/hard-link rejection, and viewer behavior.
 - [x] Run directly related unit suites, formatting, and TypeScript/Web build checks; record exact results.
 - [x] Audit scope against this plan and Roadmap milestone, then update evidence and completion checks.
-- [ ] Commit, push, and merge one dedicated signed implementation pull request linking this plan and Roadmap milestone after required checks and blocking feedback are resolved.
+- [ ] Commit, push, and merge dedicated signed implementation pull request [#53](https://github.com/narumiruna/pi-agent/pull/53), which links this plan and Roadmap milestone, after required checks and blocking feedback are resolved.
 - [ ] After merge, check the matching Roadmap milestone and archive this plan through an administrative documentation pull request.
 
 ## Completion Checklist
