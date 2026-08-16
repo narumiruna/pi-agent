@@ -1,6 +1,6 @@
 # Native Prompt Discovery and Permissions Plan
 
-Status: Closeout in progress after implementation merge.
+Status: Completed on 2026-08-16.
 
 ## Goal
 
@@ -81,7 +81,7 @@ Project Chat commands from Pi’s resolved extension invocation list and include
 - [x] Run focused tests, `npm run ci`, full E2E, PostgreSQL storage verification, and production Docker build; record exact results.
 - [x] Audit native source fidelity, precedence/deduplication, trust races, symlink/containment, raw frontmatter, path/source leakage, stale IDs, reload ordering, command expansion, accessibility, responsive layout, and unrelated changes.
 - [x] Commit, push, open dedicated pull request [#47](https://github.com/narumiruna/pi-agent/pull/47), resolve all actionable check and review feedback with regressions, and merge as `f924609`.
-- [ ] After merge, check the matching Roadmap milestone and archive this plan through an administrative documentation pull request.
+- [x] After merge, check the matching Roadmap milestone and archive this plan through administrative documentation pull request [#50](https://github.com/narumiruna/pi-agent/pull/50).
 
 ## Completion Checklist
 
@@ -95,7 +95,7 @@ Project Chat commands from Pi’s resolved extension invocation list and include
 - [x] Desktop/mobile permission, command, keyboard, responsive, and accessibility regressions pass.
 - [x] Focused tests, CI, full E2E, PostgreSQL verification, and Docker build pass.
 - [x] Dedicated implementation pull request [#47](https://github.com/narumiruna/pi-agent/pull/47) merged as `f924609` with CI passing and every submitted review thread resolved.
-- [ ] The Roadmap milestone is checked and this plan is archived only after merge.
+- [x] The Roadmap milestone is checked and this plan is archived after the implementation merge.
 
 ## Progress updates
 
