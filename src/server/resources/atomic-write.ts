@@ -53,7 +53,25 @@ export interface ExpectedFileIdentity {
   dev: number;
   ino: number;
   birthtimeMs: number;
+  ctimeMs: number;
   size: number;
+}
+
+function matchesExpectedFile(
+  current: Awaited<ReturnType<typeof lstat>>,
+  expected: ExpectedFileIdentity,
+  includeChangeTime: boolean,
+): boolean {
+  return (
+    !current.isSymbolicLink() &&
+    current.isFile() &&
+    current.nlink === 1 &&
+    current.dev === expected.dev &&
+    current.ino === expected.ino &&
+    current.birthtimeMs === expected.birthtimeMs &&
+    (!includeChangeTime || current.ctimeMs === expected.ctimeMs) &&
+    current.size === expected.size
+  );
 }
 
 async function restoreMovedFile(
@@ -87,6 +105,13 @@ export async function atomicWrite(
       let moved = false;
       let published = false;
       try {
+        const beforeMove = await lstat(destination).catch((error) => {
+          if ((error as NodeJS.ErrnoException).code === "ENOENT")
+            throw new Error("Resource not found");
+          throw error;
+        });
+        if (!matchesExpectedFile(beforeMove, expectedTarget, true))
+          throw new Error("Resource changed before persistence");
         try {
           await rename(destination, backup);
           moved = true;
@@ -96,15 +121,7 @@ export async function atomicWrite(
           throw error;
         }
         const current = await lstat(backup);
-        if (
-          current.isSymbolicLink() ||
-          !current.isFile() ||
-          current.nlink > 1 ||
-          current.dev !== expectedTarget.dev ||
-          current.ino !== expectedTarget.ino ||
-          current.birthtimeMs !== expectedTarget.birthtimeMs ||
-          current.size !== expectedTarget.size
-        )
+        if (!matchesExpectedFile(current, expectedTarget, false))
           throw new Error("Resource changed before persistence");
         try {
           await link(temporary, destination);

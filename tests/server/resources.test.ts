@@ -93,6 +93,7 @@ describe("ResourceService", () => {
         dev: stat.dev,
         ino: stat.ino,
         birthtimeMs: stat.birthtimeMs + 1,
+        ctimeMs: stat.ctimeMs,
         size: stat.size,
       }),
     ).rejects.toThrow(/changed/i);
@@ -1336,6 +1337,59 @@ describe("ResourceService", () => {
       service.deletePromptResource(resource.id),
     ).rejects.toBeInstanceOf(ResourceConflictError);
     expect(await readFile(path, "utf8")).toBe("Delete replacement\n");
+  });
+
+  test("rejects same-size in-place writes during prompt mutations", async () => {
+    const { agentDir, runtime, service } = await setup();
+    const path = join(agentDir, "prompts", "in-place.md");
+    await mkdir(dirname(path), { recursive: true });
+    await writeFile(path, "Original\n");
+    const prompt: PromptTemplate = {
+      name: "in-place",
+      description: "Original",
+      content: "Original\n",
+      filePath: path,
+      sourceInfo: {
+        path,
+        source: "local",
+        scope: "user",
+        origin: "top-level",
+      },
+    };
+    runtime.promptTemplates.mockReturnValue([prompt]);
+    const [resource] = await service.listPromptResources();
+    if (!resource) throw new Error("In-place prompt was not projected");
+    interface MutationTarget {
+      path: string;
+      parent: string;
+      dev: number;
+      ino: number;
+      ctimeMs: number;
+    }
+    const internal = service as unknown as {
+      assertPromptTarget(target: MutationTarget): Promise<void>;
+    };
+    const assertPromptTarget = internal.assertPromptTarget.bind(service);
+    let replacement = "Changed!\n";
+    internal.assertPromptTarget = async (target) => {
+      await assertPromptTarget(target);
+      await writeFile(path, replacement);
+      if ((await lstat(path)).ctimeMs === target.ctimeMs) {
+        await new Promise((resolve) => setTimeout(resolve, 5));
+        await writeFile(path, replacement);
+      }
+    };
+
+    await expect(
+      service.updatePromptResource(resource.id, "Updated!\n"),
+    ).rejects.toBeInstanceOf(ResourceConflictError);
+    expect(await readFile(path, "utf8")).toBe("Changed!\n");
+
+    replacement = "Deleted!\n";
+    await expect(
+      service.deletePromptResource(resource.id),
+    ).rejects.toBeInstanceOf(ResourceConflictError);
+    expect(await readFile(path, "utf8")).toBe("Deleted!\n");
   });
 
   test("rejects same-path replacements during legacy prompt mutations", async () => {

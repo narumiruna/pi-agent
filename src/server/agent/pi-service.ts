@@ -1255,19 +1255,7 @@ export class PiService {
   }
 
   async readResourceSnapshot<T>(operation: () => Promise<T> | T): Promise<T> {
-    for (;;) {
-      await this.coordinator.waitForIdle();
-      let acquired = false;
-      try {
-        return await this.coordinator.run("maintenance", async () => {
-          acquired = true;
-          return await operation();
-        });
-      } catch (error) {
-        if (!acquired && error instanceof AgentBusyError) continue;
-        throw error;
-      }
-    }
+    return this.coordinator.readSnapshot(operation);
   }
 
   projectTrust(): WebProjectTrust {

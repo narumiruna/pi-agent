@@ -66,6 +66,23 @@ export function noFollowReadFlags(noFollow: number | undefined): number {
   return constants.O_RDONLY | (noFollow ?? 0);
 }
 
+function matchesPromptTarget(
+  current: Awaited<ReturnType<typeof lstat>>,
+  target: PromptMutationTarget,
+  includeChangeTime = true,
+): boolean {
+  return (
+    !current.isSymbolicLink() &&
+    current.isFile() &&
+    current.nlink === 1 &&
+    current.dev === target.dev &&
+    current.ino === target.ino &&
+    current.birthtimeMs === target.birthtimeMs &&
+    (!includeChangeTime || current.ctimeMs === target.ctimeMs) &&
+    current.size === target.size
+  );
+}
+
 function sameFileIdentity(
   left: Awaited<ReturnType<typeof lstat>>,
   right: Awaited<ReturnType<typeof lstat>>,
@@ -609,6 +626,7 @@ export class ResourceService {
       dev: stat.dev,
       ino: stat.ino,
       birthtimeMs: stat.birthtimeMs,
+      ctimeMs: stat.ctimeMs,
       size: stat.size,
     };
   }
@@ -624,15 +642,7 @@ export class ResourceService {
         throw new Error("Prompt not found");
       throw error;
     }
-    if (
-      current.isSymbolicLink() ||
-      !current.isFile() ||
-      current.nlink > 1 ||
-      current.dev !== target.dev ||
-      current.ino !== target.ino ||
-      current.birthtimeMs !== target.birthtimeMs ||
-      current.size !== target.size
-    )
+    if (!matchesPromptTarget(current, target))
       throw new ResourceConflictError("Prompt changed during mutation");
   }
 
@@ -661,6 +671,13 @@ export class ResourceService {
       target.parent,
       `.${basename(target.path)}.${crypto.randomUUID()}.delete`,
     );
+    const beforeMove = await lstat(target.path).catch((error) => {
+      if ((error as NodeJS.ErrnoException).code === "ENOENT")
+        throw new Error("Prompt not found");
+      throw error;
+    });
+    if (!matchesPromptTarget(beforeMove, target))
+      throw new ResourceConflictError("Prompt changed during deletion");
     try {
       await rename(target.path, quarantine);
     } catch (error) {
@@ -671,15 +688,7 @@ export class ResourceService {
     let deleted = false;
     try {
       const moved = await lstat(quarantine);
-      if (
-        moved.isSymbolicLink() ||
-        !moved.isFile() ||
-        moved.nlink > 1 ||
-        moved.dev !== target.dev ||
-        moved.ino !== target.ino ||
-        moved.birthtimeMs !== target.birthtimeMs ||
-        moved.size !== target.size
-      )
+      if (!matchesPromptTarget(moved, target, false))
         throw new ResourceConflictError("Prompt changed during deletion");
       await rm(quarantine);
       deleted = true;

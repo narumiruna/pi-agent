@@ -54,6 +54,54 @@ describe("RunCoordinator", () => {
     ).resolves.toBeUndefined();
   });
 
+  test("serves snapshots during active agent runs", async () => {
+    const coordinator = new RunCoordinator();
+    let releaseRun: (() => void) | undefined;
+    const run = coordinator.run(
+      "chat",
+      () =>
+        new Promise<void>((resolve) => {
+          releaseRun = resolve;
+        }),
+    );
+    await vi.waitFor(() => expect(releaseRun).toBeDefined());
+
+    await expect(coordinator.readSnapshot(() => "live snapshot")).resolves.toBe(
+      "live snapshot",
+    );
+
+    releaseRun?.();
+    await run;
+  });
+
+  test("gives maintenance exclusive access to snapshots", async () => {
+    const coordinator = new RunCoordinator();
+    let releaseSnapshot: (() => void) | undefined;
+    const snapshot = coordinator.readSnapshot(
+      () =>
+        new Promise<void>((resolve) => {
+          releaseSnapshot = resolve;
+        }),
+    );
+    await vi.waitFor(() => expect(releaseSnapshot).toBeDefined());
+    const maintenanceTask = vi.fn(async () => undefined);
+    const laterSnapshotTask = vi.fn(() => "later snapshot");
+
+    const maintenance = coordinator.run("maintenance", maintenanceTask);
+    const laterSnapshot = coordinator.readSnapshot(laterSnapshotTask);
+    await Promise.resolve();
+    expect(coordinator.isIdle).toBe(false);
+    expect(maintenanceTask).not.toHaveBeenCalled();
+    expect(laterSnapshotTask).not.toHaveBeenCalled();
+
+    releaseSnapshot?.();
+    await snapshot;
+    await maintenance;
+    await expect(laterSnapshot).resolves.toBe("later snapshot");
+    expect(maintenanceTask).toHaveBeenCalledOnce();
+    expect(laterSnapshotTask).toHaveBeenCalledOnce();
+  });
+
   test("aborts the current run through its registered abort function", async () => {
     const abort = vi.fn(async () => undefined);
     const coordinator = new RunCoordinator();
