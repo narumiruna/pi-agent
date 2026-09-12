@@ -54,7 +54,7 @@ test("uses native search, named-only, and sort controls without changing a hidde
   await page.getByRole("button", { name: "New conversation" }).click();
   const unpersistedId = await activeConversationId(page);
   expect([alphaId, betaId]).not.toContain(unpersistedId);
-  await expect(page.getByText("Start with a clear request.")).toBeVisible();
+  await expect(page.getByText("What would you like to build?")).toBeVisible();
 
   const apiSearch = await page.request.get(
     `/api/conversations?q=${encodeURIComponent(`DISCOVERY_ALPHA_${marker}`)}&sort=relevance`,
@@ -79,7 +79,7 @@ test("uses native search, named-only, and sort controls without changing a hidde
   await expect(
     page.getByRole("button", { name: unpersistedId, exact: true }),
   ).toHaveCount(0);
-  await expect(page.getByText("Start with a clear request.")).toBeVisible();
+  await expect(page.getByText("What would you like to build?")).toBeVisible();
   await expect(
     page.getByRole("button", { name: "New conversation" }),
   ).toBeEnabled();

@@ -1,4 +1,5 @@
 import {
+  ChatBubbleIcon,
   Cross2Icon,
   ImageIcon,
   PaperPlaneIcon,
@@ -29,6 +30,7 @@ import {
   type WebResourceCommand,
 } from "../../shared/contracts.js";
 import { api, mutation } from "../api.js";
+import { ChatWelcome } from "../components/ChatWelcome.js";
 import { ConversationPanel } from "../components/ConversationPanel.js";
 import type {
   AgentActivity,
@@ -253,6 +255,7 @@ export function ChatPage({
   const draftSync = useRef<Promise<unknown>>(Promise.resolve());
   const end = useRef<HTMLDivElement>(null);
   const imageInput = useRef<HTMLInputElement>(null);
+  const composerInput = useRef<HTMLTextAreaElement>(null);
   useEffect(() => {
     void resourceRefresh;
     const abort = new AbortController();
@@ -406,8 +409,7 @@ export function ChatPage({
   ]);
 
   useEffect(() => {
-    void messages;
-    void delta;
+    if (messages.length === 0 && !delta) return;
     if (!followingOutput.current) return;
     end.current?.scrollIntoView({
       behavior: window.matchMedia?.("(prefers-reduced-motion: reduce)").matches
@@ -569,6 +571,13 @@ export function ChatPage({
 
   return (
     <section className="chatPage" aria-label={t("chat")}>
+      <header className="chatHeader">
+        <div className="chatHeading">
+          <ChatBubbleIcon aria-hidden="true" />
+          <h1>{t("chat")}</h1>
+        </div>
+        <span className="chatHeaderHint">{t("workspaceTagline")}</span>
+      </header>
       <ScrollArea
         className="messageScroll"
         tabIndex={0}
@@ -580,12 +589,18 @@ export function ChatPage({
       >
         <div className="messageColumn">
           {messages.length === 0 && !delta ? (
-            <div className="emptyState">
-              <span className="emptyGlyph">π</span>
-              <Text size="5" weight="medium">
-                {conversationId ? t("emptyConversation") : t("newConversation")}
-              </Text>
-            </div>
+            <ChatWelcome
+              disabled={
+                !conversationId || inputDisabled || !eventsConnected || running
+              }
+              onSelect={(prompt) => {
+                setDraft((current) =>
+                  current ? `${current}\n\n${prompt}` : prompt,
+                );
+                setHistoryIndex(-1);
+                composerInput.current?.focus();
+              }}
+            />
           ) : (
             messages.map((message) => (
               <article className={`message ${message.role}`} key={message.id}>
@@ -778,6 +793,7 @@ export function ChatPage({
             </Text>
           )}
           <TextArea
+            ref={composerInput}
             aria-label={t("messagePlaceholder")}
             placeholder={
               running ? t("steerPlaceholder") : t("messagePlaceholder")
@@ -908,7 +924,12 @@ export function ChatPage({
               if (files.length > 0) void addImages(files);
             }}
           />
-          <Flex align="center" justify="between" mt="2">
+          <Flex
+            className="composerToolbar"
+            align="center"
+            justify="between"
+            mt="2"
+          >
             <Flex align="center" gap="1">
               <Tooltip content={t("attachImage")}>
                 <IconButton
@@ -1004,6 +1025,7 @@ export function ChatPage({
             </div>
           )}
         </div>
+        <p className="composerHint">{t("composerHint")}</p>
       </div>
     </section>
   );

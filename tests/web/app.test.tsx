@@ -169,6 +169,7 @@ describe("web application", () => {
     expect(
       await screen.findByRole("button", { name: /Pocket ID/i }),
     ).toBeVisible();
+    expect(screen.getByText("Your AI workspace")).toBeVisible();
     expect(screen.queryByText("Heartbeat")).not.toBeInTheDocument();
   });
 
