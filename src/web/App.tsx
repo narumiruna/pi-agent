@@ -725,12 +725,15 @@ export function App() {
     <Theme
       accentColor="teal"
       grayColor="slate"
-      radius="small"
+      radius="medium"
       appearance={dark ? "dark" : "light"}
     >
       {signedOut ? (
         <main className="loginPage">
-          <div className="loginMark">π</div>
+          <div className="loginMark" aria-hidden="true">
+            π
+          </div>
+          <span className="welcomeEyebrow">{t("workspaceTagline")}</span>
           <h1>{t("appName")}</h1>
           <p>{t("signedOut")}</p>
           <Button

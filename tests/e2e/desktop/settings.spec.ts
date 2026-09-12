@@ -80,9 +80,7 @@ test("cancels and applies a full-row model selection", async ({
   const initialResponse = await page.request.get("/api/models");
   const initial = (await initialResponse.json()) as ModelData;
   const target = initial.models.find(
-    (model) =>
-      model.provider !== initial.current.provider ||
-      model.id !== initial.current.id,
+    (model) => model.provider === "e2e" && model.id === "e2e-secondary",
   );
   expect(target).toBeDefined();
 

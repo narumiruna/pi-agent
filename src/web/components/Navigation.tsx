@@ -7,6 +7,7 @@ import {
   GearIcon,
   HamburgerMenuIcon,
   HeartIcon,
+  MagnifyingGlassIcon,
   Pencil2Icon,
   PlusIcon,
   ReaderIcon,
@@ -73,9 +74,25 @@ function NavContent(props: NavContentProps) {
   return (
     <div className="navContent">
       <div className="brand">
-        <span className="brandMark">π</span>
-        <Text weight="bold">{t("appName")}</Text>
+        <span className="brandMark" aria-hidden="true">
+          π
+        </span>
+        <div className="brandText">
+          <Text weight="bold">{t("appName")}</Text>
+          <span>{t("workspaceTagline")}</span>
+        </div>
       </div>
+      <Button
+        className="newConversationButton"
+        disabled={props.newPending}
+        onClick={() => {
+          props.onNew();
+          props.onMobileOpen(false);
+        }}
+      >
+        <PlusIcon aria-hidden="true" />
+        {t("newConversation")}
+      </Button>
       <nav className="primaryNav" aria-label={t("primaryNavigation")}>
         {props.items.map(({ page, labelKey, icon, pulse }) => {
           const Icon = NAVIGATION_ICONS[icon];
@@ -99,22 +116,11 @@ function NavContent(props: NavContentProps) {
       </nav>
       <div className="conversationHeader">
         <Text size="1" color="gray">
-          {t("chat")}
+          {t("recentConversations")}
         </Text>
-        <Tooltip content={t("newConversation")}>
-          <IconButton
-            size="1"
-            variant="ghost"
-            aria-label={t("newConversation")}
-            disabled={props.newPending}
-            onClick={() => {
-              props.onNew();
-              props.onMobileOpen(false);
-            }}
-          >
-            <PlusIcon />
-          </IconButton>
-        </Tooltip>
+        <span className="conversationCount" aria-hidden="true">
+          {props.conversations.length}
+        </span>
       </div>
       <search
         className="conversationDiscovery"
@@ -122,6 +128,7 @@ function NavContent(props: NavContentProps) {
       >
         <label className="conversationSearch">
           <span className="srOnly">{t("conversationSearch")}</span>
+          <MagnifyingGlassIcon aria-hidden="true" />
           <input
             type="search"
             value={props.conversationFilters.search}
@@ -209,7 +216,8 @@ function NavContent(props: NavContentProps) {
                       props.onMobileOpen(false);
                     }}
                   >
-                    {label}
+                    <ChatBubbleIcon aria-hidden="true" />
+                    <span>{label}</span>
                   </button>
                   <Tooltip content={t("manageConversation")}>
                     <IconButton

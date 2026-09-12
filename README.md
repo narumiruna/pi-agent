@@ -174,6 +174,8 @@ Current destinations use canonical paths at `/chats`, `/files`, `/prompts`, `/he
 
 The Chats destination retains the Pi-backed conversation list, active selection, and New conversation action.
 
+An empty conversation offers localized starter cards that append to any existing draft and focus the composer without sending it.
+
 Conversation discovery follows Pi’s resume selector with fuzzy terms, quoted exact phrases, `re:<pattern>` regular expressions, All or Named-only filtering, and Threaded, Recent, or Fuzzy sorting.
 
 Search runs over native session metadata and user/assistant text on the server; message text, cwd, JSONL paths, parent paths, and scores never enter the list response.
